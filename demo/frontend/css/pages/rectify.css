@@ -1,0 +1,23 @@
+.ledger-note {
+  margin: 0 0 16px;
+  color: var(--app-text-secondary);
+  font-size: var(--font-size-min);
+}
+
+.rectify-thumb {
+  width: 56px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-border);
+  vertical-align: middle;
+}
+
+.rectify-detail-img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: var(--app-radius);
+  margin-top: 8px;
+  border: 1px solid var(--app-border);
+}

@@ -1,0 +1,167 @@
+/* 日期范围选择器（对齐 PFF supermarket #rp-v1-trigger） */
+.hsf-range-picker {
+  width: 100%;
+  position: relative;
+}
+
+.hsf-range-picker .input-box {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.hsf-range-picker .input-box:hover {
+  border-color: var(--app-primary, #015cbb);
+}
+
+.hsf-range-picker .input-box.active {
+  border-color: var(--app-primary, #015cbb);
+  box-shadow: 0 0 0 2px rgba(1, 92, 187, 0.2);
+}
+
+.hsf-range-picker .input-text {
+  color: #333;
+  font-size: 14px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hsf-range-picker .input-text:empty::before {
+  content: '开始日期 ⇀ 结束日期';
+  color: #bfbfbf;
+}
+
+.hsf-range-picker .icon-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.hsf-range-picker .calendar-icon {
+  width: 14px;
+  height: 14px;
+  fill: #999;
+}
+
+.hsf-range-picker .clear-btn {
+  width: 14px;
+  height: 14px;
+  fill: #ccc;
+  cursor: pointer;
+  display: none;
+}
+
+.hsf-range-picker.has-val .clear-btn {
+  display: block;
+}
+
+.hsf-range-picker .rp-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.08);
+  display: none;
+  z-index: 1000;
+  min-width: 560px;
+  overflow: hidden;
+}
+
+.hsf-range-picker .rp-dropdown.show {
+  display: flex;
+}
+
+.hsf-range-picker .rp-panel {
+  flex: 1;
+  padding: 12px;
+}
+
+.hsf-range-picker .rp-panel:first-child {
+  border-right: 1px solid #f0f0f0;
+}
+
+.hsf-range-picker .rp-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  font-weight: bold;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.hsf-range-picker .rp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.hsf-range-picker .rp-cell {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.1s, color 0.1s;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.hsf-range-picker .rp-cell:hover:not(.disabled) {
+  background: #f3f4f6;
+  color: var(--app-primary, #015cbb);
+}
+
+.hsf-range-picker .rp-cell.disabled {
+  color: #ccc;
+  cursor: not-allowed;
+  background: #f5f5f5;
+}
+
+.hsf-range-picker .rp-cell.selected-point {
+  background: var(--app-primary, #015cbb) !important;
+  color: #fff !important;
+}
+
+.hsf-range-picker .rp-cell.in-range {
+  background: rgba(1, 92, 187, 0.12);
+  border-radius: 0;
+}
+
+.hsf-range-picker .rp-cell.selecting-range {
+  border-top: 1px dashed var(--app-primary, #015cbb);
+  border-bottom: 1px dashed var(--app-primary, #015cbb);
+  border-radius: 0;
+}
+
+.hsf-range-picker .rp-cell.selecting-range-start {
+  border-left: 1px dashed var(--app-primary, #015cbb);
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.hsf-range-picker .rp-cell.selecting-range-end {
+  border-right: 1px dashed var(--app-primary, #015cbb);
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}

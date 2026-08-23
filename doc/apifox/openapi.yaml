@@ -1,0 +1,765 @@
+openapi: 3.0.3
+info:
+  title: 高标农田专项整治后台 API
+  description: |
+    Go 1.27 · Gin + Zap + MySQL + JWT。
+    统一响应：`{ code, data, message, cost_ms, trace_id }`，成功 `code=0`。
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:8080
+    description: 本地开发
+tags:
+  - name: 健康检查
+  - name: 鉴权
+  - name: 工作台
+  - name: 专项整改
+  - name: 台账
+  - name: 组织
+  - name: 人员
+  - name: 角色
+  - name: 字典
+  - name: 操作日志
+  - name: 附件
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdPath:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, format: int64 }
+    UuidPath:
+      in: path
+      name: uuid
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        data: {}
+        message: { type: string, example: ok }
+        cost_ms: { type: integer, example: 12 }
+        trace_id: { type: string }
+    LoginReq:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: admin }
+        password: { type: string, example: "123456" }
+    IssueInput:
+      type: object
+      properties:
+        type: { type: string, enum: [well, road, bridge, forest, transformer] }
+        street: { type: string }
+        village: { type: string }
+        project_name: { type: string }
+        code: { type: string }
+        location_text: { type: string }
+        address: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        description: { type: string }
+        measures: { type: string }
+        plan_date: { type: string, example: "2026-09-01" }
+        reporter_name: { type: string }
+        reporter_phone: { type: string }
+        assignee_name: { type: string }
+        assignee_phone: { type: string }
+        photo_uuids:
+          type: array
+          items: { type: string, format: uuid }
+        type_ext: { type: object }
+    AttachInitReq:
+      type: object
+      required: [file_name, size]
+      properties:
+        file_name: { type: string }
+        size: { type: integer, format: int64 }
+        content_type: { type: string }
+        md5: { type: string }
+    Org:
+      type: object
+      properties:
+        org_key: { type: string }
+        parent_id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        remark: { type: string }
+        sort: { type: integer }
+    UserInput:
+      type: object
+      properties:
+        username: { type: string }
+        password: { type: string }
+        name: { type: string }
+        phone: { type: string }
+        org_id: { type: string }
+        role: { type: string }
+        status: { type: integer }
+security:
+  - bearerAuth: []
+paths:
+  /api/health:
+    get:
+      tags: [健康检查]
+      summary: 健康检查
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/auth/login:
+    post:
+      tags: [鉴权]
+      summary: 登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginReq" }
+      responses:
+        "200":
+          description: 返回 token 与用户信息
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/auth/me:
+    get:
+      tags: [鉴权]
+      summary: 当前用户
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/workbench/stats:
+    get:
+      tags: [工作台]
+      summary: 工作台统计
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues:
+    get:
+      tags: [专项整改]
+      summary: 问题列表
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string, enum: [pending, done] }
+        - in: query
+          name: street
+          schema: { type: string }
+        - in: query
+          name: village
+          schema: { type: string }
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    post:
+      tags: [专项整改]
+      summary: 新增问题（提交即待整改）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues/{id}:
+    get:
+      tags: [专项整改]
+      summary: 问题详情
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    put:
+      tags: [专项整改]
+      summary: 更新问题
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    delete:
+      tags: [专项整改]
+      summary: 删除问题
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues/{id}/rectify:
+    post:
+      tags: [专项整改]
+      summary: 提交整改结果
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photo_uuids]
+              properties:
+                note: { type: string }
+                photo_uuids:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues/import:
+    post:
+      tags: [专项整改]
+      summary: 批量导入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rows]
+              properties:
+                rows:
+                  type: array
+                  items: { $ref: "#/components/schemas/IssueInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/ledger/street:
+    get:
+      tags: [台账]
+      summary: 街道台账聚合
+      parameters:
+        - in: query
+          name: street
+          schema: { type: string }
+        - in: query
+          name: date_from
+          schema: { type: string, example: "2026-01-01" }
+        - in: query
+          name: date_to
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/ledger/survey:
+    get:
+      tags: [台账]
+      summary: 街道排查汇总
+      parameters:
+        - in: query
+          name: street
+          schema: { type: string }
+        - in: query
+          name: date_from
+          schema: { type: string }
+        - in: query
+          name: date_to
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/orgs:
+    get:
+      tags: [组织]
+      summary: 组织列表
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    post:
+      tags: [组织]
+      summary: 新增组织
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Org" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/orgs/{id}:
+    put:
+      tags: [组织]
+      summary: 更新组织
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Org" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    delete:
+      tags: [组织]
+      summary: 删除组织
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/users:
+    get:
+      tags: [人员]
+      summary: 人员列表
+      parameters:
+        - in: query
+          name: org_id
+          schema: { type: string }
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    post:
+      tags: [人员]
+      summary: 新增人员
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/users/{id}:
+    put:
+      tags: [人员]
+      summary: 更新人员
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserInput" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    delete:
+      tags: [人员]
+      summary: 删除人员
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/roles:
+    get:
+      tags: [角色]
+      summary: 角色列表
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    post:
+      tags: [角色]
+      summary: 新增角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                name: { type: string }
+                desc: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/roles/{id}:
+    put:
+      tags: [角色]
+      summary: 更新角色
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                desc: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    delete:
+      tags: [角色]
+      summary: 删除角色
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/roles/{code}/perms:
+    get:
+      tags: [角色]
+      summary: 角色权限
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    put:
+      tags: [角色]
+      summary: 覆盖角色权限
+      parameters:
+        - in: path
+          name: code
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                perms:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      path: { type: string }
+                      action: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/dict/types:
+    get:
+      tags: [字典]
+      summary: 字典类型
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/dict/fields:
+    get:
+      tags: [字典]
+      summary: 字典字段
+      parameters:
+        - in: query
+          name: type_code
+          schema: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/dict/items:
+    get:
+      tags: [字典]
+      summary: 字典选项
+      parameters:
+        - in: query
+          name: field_id
+          schema: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    post:
+      tags: [字典]
+      summary: 新增选项
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                field_id: { type: integer }
+                label: { type: string }
+                value: { type: string }
+                sort: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/dict/items/{id}:
+    put:
+      tags: [字典]
+      summary: 更新选项
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string }
+                value: { type: string }
+                sort: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+    delete:
+      tags: [字典]
+      summary: 删除选项
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/op-logs:
+    get:
+      tags: [操作日志]
+      summary: 操作日志列表
+      parameters:
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/init:
+    post:
+      tags: [附件]
+      summary: 初始化上传（返回 uuid）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttachInitReq" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/batch-init:
+    post:
+      tags: [附件]
+      summary: 批量初始化
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { $ref: "#/components/schemas/AttachInitReq" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/{uuid}/status:
+    get:
+      tags: [附件]
+      summary: 上传进度与缺失分片
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/{uuid}/chunks/{index}:
+    put:
+      tags: [附件]
+      summary: 上传分片（body 为二进制）
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+        - in: path
+          name: index
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/{uuid}/complete:
+    post:
+      tags: [附件]
+      summary: 合并分片完成上传
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/{uuid}:
+    get:
+      tags: [附件]
+      summary: 附件元数据
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/{uuid}/download:
+    get:
+      tags: [附件]
+      summary: 下载附件
+      parameters:
+        - $ref: "#/components/parameters/UuidPath"
+      responses:
+        "200":
+          description: 文件流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary

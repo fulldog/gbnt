@@ -1,0 +1,496 @@
+/**
+ * HSF 移动端 · 公共外壳（背景宿主 + phone.png 贴图 + 状态栏）
+ * 业务样式写在各页 <head>，viewport 内布局见 base.css / components.css
+ */
+
+:root {
+  --device-aspect: 644 / 1324;
+  --device-shell-h: 98dvh;
+  --screen-inset-top: 2.27%;
+  --screen-inset-left: 4.81%;
+  --screen-inset-right: 4.66%;
+  --screen-inset-bottom: 2.04%;
+  --screen-radius: 8.4%;
+}
+
+html:has(body.app-host) {
+  height: 100%;
+  overflow: hidden;
+  background: #ebebeb;
+}
+
+/* 首屏：壳未挂好前先隐藏，避免裸内容闪一下 */
+html.hsf-mp:not(.hsf-shell-ready) body {
+  visibility: hidden;
+}
+
+html.hsf-mp.hsf-shell-ready body {
+  visibility: visible;
+}
+
+.app-host {
+  margin: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  /* 与流体背景色板接近，WebGL 未就绪时也不闪白 */
+  background: #e8f0fa;
+}
+
+.app-host #colorbgcanvas {
+  pointer-events: none;
+}
+
+.app-device {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  height: var(--device-shell-h);
+  max-height: var(--device-shell-h);
+  width: auto;
+  aspect-ratio: var(--device-aspect);
+  /* [开发规范 §6.3.3 异型界面例外] 手机壳立体感 */
+  filter: drop-shadow(0 28px 56px rgba(0, 0, 0, 0.45));
+}
+
+.app-device__screen {
+  position: absolute;
+  top: var(--screen-inset-top);
+  left: var(--screen-inset-left);
+  right: var(--screen-inset-right);
+  bottom: var(--screen-inset-bottom);
+  border-radius: var(--screen-radius);
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+  --app-toast-top: 100px;
+}
+
+.app-device__shell {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  z-index: 2;
+}
+
+/*
+ * 小程序顶栏（对照微信截图两行）：
+ * 1) 系统行：时间 | 灵动岛占位 | 信号 5G 电量
+ * 2) 导航行：标题位（可空）| 胶囊
+ *
+ * 变体（由 device-shell.js 根据 data-mp-status 挂上）：
+ *   .app-device__status--solid       白底（子界面默认）
+ *   .app-device__status--transparent 无底色、绝对叠层（登录 / 主界面全屏背景）
+ */
+.app-device__status {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 100px;
+  padding: 0 10px 6px;
+  color: #111111;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.app-device__status--solid {
+  background: #ffffff;
+}
+
+/* 透明顶栏：叠在内容之上，不占行高，也不铺底色，便于登录等全屏背景 */
+.app-device__status--transparent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: none;
+  pointer-events: none;
+}
+
+.app-device__status--transparent a,
+.app-device__status--transparent button {
+  pointer-events: auto;
+}
+
+.app-device__status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-device__status-row--sys {
+  height: 54px;
+  padding: 14px 8px 0 18px;
+}
+
+.app-device__time {
+  line-height: 1;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.app-device__status-row--nav {
+  height: 44px;
+  padding: 0 6px 0 16px;
+  gap: 2px;
+}
+
+.app-device__nav-left {
+  flex-shrink: 0;
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.app-device__nav-left:empty,
+.app-device__nav-left.is-empty,
+.app-device__nav-left[hidden] {
+  display: none;
+  width: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-device__nav-back {
+  width: 28px;
+  height: 32px;
+  margin-left: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: #111111;
+  border-radius: 6px;
+}
+
+.app-device__nav-back:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.app-device__nav-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111111;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-device__sys {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #111111;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.app-device__signal {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 11px;
+}
+
+.app-device__signal i {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: #111111;
+}
+
+.app-device__signal i:nth-child(1) { height: 3px; }
+.app-device__signal i:nth-child(2) { height: 5px; }
+.app-device__signal i:nth-child(3) { height: 7px; }
+.app-device__signal i:nth-child(4) { height: 10px; }
+
+.app-device__net {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.app-device__battery {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.app-device__battery-body {
+  width: 27px;
+  height: 13px;
+  border: 1.5px solid #111111;
+  border-radius: 3px;
+  box-sizing: border-box;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-device__battery-cap {
+  width: 2px;
+  height: 5px;
+  margin-left: 1px;
+  border-radius: 0 1px 1px 0;
+  background: #111111;
+}
+
+.app-device__battery-num {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #111111;
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-capsule {
+  display: flex;
+  align-items: center;
+  width: 88px;
+  height: 32px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mp-capsule__item {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mp-capsule__divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.mp-capsule__dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.mp-capsule__dots i {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #181818;
+}
+
+.mp-capsule__close {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #181818;
+  border-radius: 50%;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.mp-capsule__close::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #181818;
+}
+
+.app-device__viewport {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-surface);
+}
+
+.app-device__viewport.hsf-viewport--navigating {
+  opacity: 0.92;
+  transition: opacity 0.12s ease;
+}
+
+.app-device__viewport.amp-viewport--navigating {
+  opacity: 0.92;
+  transition: opacity 0.12s ease;
+}
+
+.app-device__viewport > * {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 叠在 viewport 底部，不占独立行，避免露出 screen 白底 */
+.app-device__home-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.app-device__home-indicator::after {
+  content: '';
+  width: 120px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* 轻提示：挂在手机屏内（勿挂 body，否则落在壳外看不见） */
+.app-toast-host {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.app-toast-host--in-device {
+  position: absolute;
+  top: var(--app-toast-top, 100px);
+  left: 12px;
+  right: 12px;
+  transform: none;
+  z-index: 80;
+}
+
+.app-toast {
+  min-width: 160px;
+  max-width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--app-radius, 6px);
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+  transition: opacity 0.2s ease;
+  box-sizing: border-box;
+}
+
+.app-toast--error {
+  background: rgba(192, 57, 43, 0.92);
+}
+
+.app-toast--success {
+  background: rgba(26, 127, 75, 0.92);
+}
+
+.app-toast.is-out {
+  opacity: 0;
+}
+
+.app-host .app-tabbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  border-top: 1px solid var(--app-border);
+}
+
+.app-host .app-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 480px), (max-height: 500px) {
+  html:has(body.app-host) {
+    overflow: auto;
+  }
+
+  .app-host {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
+    background: var(--app-bg);
+  }
+
+  .app-device {
+    height: auto;
+    max-height: none;
+    width: 100%;
+    aspect-ratio: auto;
+    filter: none;
+  }
+
+  .app-device__shell {
+    display: none;
+  }
+
+  .app-device__screen {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+    --app-toast-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .app-device__status,
+  .app-device__home-indicator {
+    display: none;
+  }
+
+  .app-host .app-tabbar {
+    position: fixed;
+  }
+}

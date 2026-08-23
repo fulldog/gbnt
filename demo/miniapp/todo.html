@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>待办 · 移动端</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
+  </head>
+  <body>
+    <div id="app-viewport" data-mp-status="transparent" data-mp-title="高标农田专项整治">
+      <div class="m-page m-todo m-todo--select">
+        <div class="m-todo__toolbar">
+          <div class="m-todo__search">
+            <span class="m-todo__search-icon" data-icon="search" aria-hidden="true"></span>
+            <input
+              type="search"
+              id="mTodoSearch"
+              class="m-todo__search-input"
+              placeholder="搜索编号、村名、问题描述"
+              aria-label="搜索待办"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="m-todo__filters" aria-label="筛选条件">
+            <button type="button" class="m-todo-filter" id="mTodoStats" data-filter="type" aria-haspopup="listbox" aria-label="类型">
+              <span class="m-todo-filter__value">全部</span>
+              <span class="m-todo-filter__caret" data-icon="chevronDown" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="m-todo-filter" id="mTodoRegion" data-filter="region" aria-haspopup="listbox" aria-label="行政区划">
+              <span class="m-todo-filter__value">全部</span>
+              <span class="m-todo-filter__caret" data-icon="chevronDown" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="m-todo-filter" id="mTodoStatus" data-filter="status" aria-haspopup="listbox" aria-label="状态">
+              <span class="m-todo-filter__value">全部</span>
+              <span class="m-todo-filter__caret" data-icon="chevronDown" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="m-list m-todo__list" id="mTodoList"></div>
+
+        <nav class="m-tabbar">
+          <a class="m-tab is-active" href="./todo.html"><span data-icon="list"></span><span>待办</span></a>
+          <a class="m-tab" href="./report.html"><span data-icon="camera"></span><span>上报</span></a>
+          <a class="m-tab" href="./mine.html"><span data-icon="user"></span><span>我的</span></a>
+        </nav>
+      </div>
+    </div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/watermark.js"></script>
+    <script src="../frontend/js/pages/m-todo.js"></script>
+  </body>
+</html>

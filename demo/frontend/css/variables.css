@@ -1,0 +1,36 @@
+:root {
+  --app-sidebar-width: 248px;
+  --app-sidebar-collapsed: 64px;
+  --app-header-height: 56px;
+  --app-bg: #eef3f8;
+  --app-surface: #ffffff;
+  --app-primary: #015cbb;
+  --app-primary-hover: #014a96;
+  --app-primary-soft: #e8f1fb;
+  --app-accent: #1a7f4b;
+  --app-accent-soft: #e8f6ee;
+  --app-success: #1a7f4b;
+  --app-warning: #c47a06;
+  --app-danger: #c0392b;
+  --app-text: #152033;
+  --app-text-secondary: #6b7a90;
+  --app-border: #e2e8f0;
+  --app-radius: 6px;
+  --app-radius-sm: 2px;
+  --app-radius-md: 4px;
+  --app-radius-lg: 8px;
+  --font-sans: "Source Han Sans SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-size-min: 12px;
+  --font-size-base: 14px;
+  --font-size-title-sm: 14px;
+  --font-size-title: 16px;
+  --font-weight-regular: 400;
+  --font-weight-bold: 600;
+  --device-aspect: 644 / 1324;
+  --device-shell-h: 98dvh;
+  --screen-inset-top: 2.27%;
+  --screen-inset-left: 4.81%;
+  --screen-inset-right: 4.66%;
+  --screen-inset-bottom: 2.04%;
+  --screen-radius: 8.4%;
+}

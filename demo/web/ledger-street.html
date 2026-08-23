@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>街道台账 · 高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/layout.css" />
+    <link rel="stylesheet" href="../frontend/css/vben-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/rectify-hub.css" />
+    <link rel="stylesheet" href="../frontend/css/atomic-select.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/ledger-hub.css" />
+    <link rel="stylesheet" href="../frontend/css/range-picker.css" />
+  </head>
+  <body>
+    <script>
+      window.HSF_BASE = '../';
+      window.HSF_VBEN_DEFAULT_TAG = { title: '街道台账', path: '/web/ledger-street.html' };
+    </script>
+    <div class="app-container">
+      <vben-sidebar></vben-sidebar>
+      <div class="main-wrapper">
+        <vben-header></vben-header>
+        <div class="content-container split-page ld-page" id="pageContent">
+          <div class="query-card" id="query-group-ld">
+            <div class="query-grid">
+              <div class="query-item">
+                <label class="query-label">街道：</label>
+                <div class="comp-wrap">
+                  <div id="ld-filter-street" class="atomic-select-box"></div>
+                </div>
+              </div>
+              <div class="query-item">
+                <label class="query-label">起止日期：</label>
+                <div class="comp-wrap">
+                  <div id="ld-filter-date-range"></div>
+                </div>
+              </div>
+              <div class="query-item query-item--actions">
+                <span class="query-label query-label--empty" aria-hidden="true"></span>
+                <div class="comp-wrap">
+                  <div class="query-actions">
+                    <button type="button" class="btn-ghost" id="ld-btn-reset">重 置</button>
+                    <button type="button" class="btn-primary" id="ld-btn-search">查 询</button>
+                    <div class="toggle-link" id="ld-toggle-btn">
+                      <span class="text">展开</span>
+                      <div class="arrow-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" /></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="vben-split-layout" id="ld-split">
+            <div class="split-left">
+              <div class="table-combined-box" id="combined-table-ld">
+                <div id="section-table-header">
+                  <div id="table-tools-ld">
+                    <div class="tools-left-head">
+                      <span class="tools-left-title">街道台账</span>
+                    </div>
+                    <div class="tools-right-ops">
+                      <button type="button" class="btn-ghost" id="ld-btn-export">导 出</button>
+                      <div class="tool-icon-btn" id="ld-btn-toggle-query" title="隐藏/显示查询">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                      </div>
+                      <div class="tool-icon-btn" id="ld-btn-refresh" title="刷新">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                      </div>
+                      <div class="tool-icon-btn" id="ld-btn-fullscreen" title="全屏查看">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div id="section-table-body">
+                  <div class="fixed-table-container" id="ld-scroll-wrap">
+                    <div class="ld-table-scroll-inner">
+                      <table class="ledger-sheet-table ledger-sheet-table--street" id="ld-main-table" aria-label="街道台账"></table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <vben-footer></vben-footer>
+      </div>
+    </div>
+
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/nav.js"></script>
+    <script src="../frontend/js/nav-config.js"></script>
+    <script src="../frontend/js/vben/icons-bridge.js"></script>
+    <script src="../frontend/js/vben-bridge.js"></script>
+    <script src="../frontend/js/vben/sidebar.js"></script>
+    <script src="../frontend/js/vben/header.js"></script>
+    <script src="../frontend/js/vben/footer.js"></script>
+    <script src="../frontend/js/vben/layout.js"></script>
+    <script src="../frontend/js/layout.js"></script>
+    <script src="../frontend/libs/xlsx/xlsx.full.min.js"></script>
+    <script src="../frontend/js/atomic-select.js"></script>
+    <script src="../frontend/js/range-picker.js"></script>
+    <script src="../frontend/js/ledger-data.js"></script>
+    <script src="../frontend/js/ledger-xlsx.js"></script>
+    <script src="../frontend/js/pages/ledger-common.js"></script>
+    <script src="../frontend/js/pages/ledger-street.js"></script>
+  </body>
+</html>

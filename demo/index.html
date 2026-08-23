@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="./media/favicon.png" />
+    <link rel="stylesheet" href="./frontend/css/variables.css" />
+    <link rel="stylesheet" href="./frontend/css/pages/gateway.css" />
+  </head>
+  <body class="gateway">
+    <div class="gateway__atmosphere" aria-hidden="true">
+      <div class="gateway__glow gateway__glow--a"></div>
+      <div class="gateway__glow gateway__glow--b"></div>
+      <div class="gateway__grid"></div>
+      <div class="gateway__field"></div>
+    </div>
+
+    <main class="gateway__main">
+      <p class="gateway__brand">高标农田专项整治平台</p>
+      <h1 class="gateway__headline">选择工作端口</h1>
+      <p class="gateway__lead">聊城经济技术开发区 · 排查上报与整改闭环</p>
+
+      <div class="gateway__ports">
+        <a class="gateway__port gateway__port--web" href="./web/login.html" target="_blank" rel="noopener noreferrer">
+          <span class="gateway__port-kicker">Web</span>
+          <span class="gateway__port-name">管理后台</span>
+          <span class="gateway__port-desc">工作台、专项整改、汇总管理与组织配置</span>
+          <span class="gateway__port-go" aria-hidden="true">
+            <span data-icon="chevronRight"></span>
+          </span>
+        </a>
+        <a class="gateway__port gateway__port--mini" href="./miniapp/login.html" target="_blank" rel="noopener noreferrer">
+          <span class="gateway__port-kicker">MiniApp</span>
+          <span class="gateway__port-name">小程序端</span>
+          <span class="gateway__port-desc">现场上报、待办整改、水印拍照回传</span>
+          <span class="gateway__port-go" aria-hidden="true">
+            <span data-icon="chevronRight"></span>
+          </span>
+        </a>
+      </div>
+    </main>
+
+    <script src="./frontend/js/icons.js"></script>
+    <script>
+      AppIcons.injectAll(document);
+    </script>
+  </body>
+</html>

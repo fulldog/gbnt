@@ -1,0 +1,15 @@
+/* org / sys 共用轻量页样式占位 */
+.org-form-tip,
+.sys-block-title {
+  margin: 0 0 12px;
+  font-size: var(--font-size-title-sm);
+  font-weight: 600;
+}
+
+.sys-dict-block {
+  margin-bottom: 20px;
+}
+
+.sys-dict-block:last-child {
+  margin-bottom: 0;
+}

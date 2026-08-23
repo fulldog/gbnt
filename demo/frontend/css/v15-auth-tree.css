@@ -1,0 +1,178 @@
+/* PFF v15 授权树（supermarket.html #v15-tree-root）— TZTT 主题色 */
+#auth-tree-v15 .tree-container {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 12px 20px 12px 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: #fff;
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#auth-tree-v15 {
+  width: max-content;
+  max-width: 100%;
+}
+
+#auth-tree-v15 ul {
+  list-style: none;
+  padding: 0;
+  margin-left: 20px;
+}
+
+#auth-tree-v15 > .tree-container > ul {
+  margin-left: 0;
+}
+
+#auth-tree-v15 li {
+  margin: 4px 0;
+}
+
+#auth-tree-v15 .auth-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  transition: background 0.2s;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 8px;
+}
+
+#auth-tree-v15 .auth-node:hover {
+  background-color: #f5f7fa;
+}
+
+#auth-tree-v15 .auth-arrow {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  fill: #999;
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+#auth-tree-v15 .auth-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+#auth-tree-v15 .auth-arrow.hidden {
+  visibility: hidden;
+}
+
+#auth-tree-v15 .auth-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+#auth-tree-v15 .auth-checkbox:hover {
+  border-color: var(--primary-color, #24585a);
+}
+
+#auth-tree-v15 .auth-checkbox.checked,
+#auth-tree-v15 .auth-checkbox.indeterminate {
+  background: var(--primary-color, #24585a);
+  border-color: var(--primary-color, #24585a);
+  color: #fff;
+}
+
+#auth-tree-v15 .auth-checkbox svg {
+  width: 10px;
+  height: 10px;
+  display: none;
+}
+
+#auth-tree-v15 .auth-checkbox.checked svg,
+#auth-tree-v15 .auth-checkbox.indeterminate svg {
+  display: block;
+}
+
+#auth-tree-v15 .auth-sub-list {
+  padding-left: 24px;
+  display: block;
+  transform-origin: top;
+}
+
+#auth-tree-v15 .auth-sub-list.collapsed {
+  display: none !important;
+}
+
+/* 菜单行：名称与增删改查等同排 */
+#auth-tree-v15 .auth-node--row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 32px;
+  width: max-content;
+  max-width: 100%;
+  padding-right: 0;
+}
+
+#auth-tree-v15 .auth-label--menu {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+  white-space: nowrap;
+}
+
+#auth-tree-v15 .auth-actions-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 12px 14px;
+  flex: 0 0 auto;
+}
+
+#auth-tree-v15 .auth-node--action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+#auth-tree-v15 .auth-node--action .auth-label {
+  flex: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+#auth-tree-v15 .auth-sub-list > li > .auth-node--row {
+  margin-left: 0;
+}
+
+#auth-tree-v15 .auth-label {
+  font-size: 14px;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#auth-tree-v15 .auth-node:not(.auth-node--row):not(.auth-node--action) .auth-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

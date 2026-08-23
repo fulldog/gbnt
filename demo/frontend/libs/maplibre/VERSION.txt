@@ -1,0 +1,3 @@
+maplibre-gl 5.16.0
+source: https://cdn.jsdelivr.net/npm/maplibre-gl@5.16.0/dist/
+files: maplibre-gl.js, maplibre-gl.css, maplibre-gl.js.map

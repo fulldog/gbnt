@@ -1,0 +1,8 @@
+logs/
+storage/uploads/
+*.log
+.env
+.idea/
+.vscode/
+*.exe
+*.test

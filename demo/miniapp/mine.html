@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>我的 · 移动端</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
+  </head>
+  <body>
+    <div id="app-viewport" data-mp-status="transparent">
+      <div class="m-page m-mine">
+        <div class="m-mine__body">
+          <section class="m-mine__id" aria-label="个人信息">
+            <div class="m-mine__avatar" id="mAvatar">管</div>
+            <div class="m-mine__id-main">
+              <div class="m-mine__name-row">
+                <span class="m-mine__name" id="mName">—</span>
+                <span class="m-mine__role" id="mRole">工作人员</span>
+              </div>
+              <div class="m-mine__org" id="mOrg">—</div>
+            </div>
+          </section>
+
+          <section class="m-mine__stats" id="mMineStats" aria-label="工作概览"></section>
+
+          <section class="m-mine__list" aria-label="设置">
+            <a class="m-mine__row" href="./agreement.html">
+              <span class="m-mine__row-icon" data-icon="ledger" aria-hidden="true"></span>
+              <span class="m-mine__row-label">用户协议</span>
+              <span class="m-mine__row-caret" data-icon="chevronRight" aria-hidden="true"></span>
+            </a>
+            <a class="m-mine__row" href="./privacy.html">
+              <span class="m-mine__row-icon" data-icon="shield" aria-hidden="true"></span>
+              <span class="m-mine__row-label">隐私政策</span>
+              <span class="m-mine__row-caret" data-icon="chevronRight" aria-hidden="true"></span>
+            </a>
+            <button type="button" class="m-mine__row m-mine__row--danger" id="btnLogoutMobile">
+              <span class="m-mine__row-label">退出登录</span>
+            </button>
+          </section>
+        </div>
+
+        <nav class="m-tabbar">
+          <a class="m-tab" href="./todo.html"><span data-icon="list"></span><span>待办</span></a>
+          <a class="m-tab" href="./report.html"><span data-icon="camera"></span><span>上报</span></a>
+          <a class="m-tab is-active" href="./mine.html"><span data-icon="user"></span><span>我的</span></a>
+        </nav>
+      </div>
+    </div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/pages/m-mine.js"></script>
+  </body>
+</html>

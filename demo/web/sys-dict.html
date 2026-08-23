@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数据字典 · 高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/layout.css" />
+    <link rel="stylesheet" href="../frontend/css/vben-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/sys-components.css" />
+    <link rel="stylesheet" href="../frontend/css/sys-form.css" />
+    <link rel="stylesheet" href="../frontend/css/system-admin.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/sys-admin/dict-page.css" />
+  </head>
+  <body>
+    <script>
+      window.HSF_BASE = '../';
+      window.HSF_VBEN_DEFAULT_TAG = { title: '数据字典', path: '/web/sys-dict.html' };
+    </script>
+    <div class="app-container sys-admin-scope sys-dict-page">
+      <vben-sidebar></vben-sidebar>
+      <div class="main-wrapper">
+        <vben-header></vben-header>
+        <div class="content-container sd-page" id="sdPageRoot">
+          <div id="sys-admin-root" data-module="sysDict"></div>
+        </div>
+        <vben-footer></vben-footer>
+      </div>
+    </div>
+
+    <div class="v52-modal-overlay" id="modalDictTypeEdit" onclick="if(event.target===this)closeModal('modalDictTypeEdit')">
+      <div class="v52-modal-box" style="width:560px;max-width:96vw;">
+        <div class="v52-modal-header">
+          <div class="v52-modal-title" id="modalDictTypeEditTitle">新增字典类型</div>
+          <div class="v52-header-ops">
+            <div class="v52-op-icon" onclick="closeModal('modalDictTypeEdit')" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="v52-modal-body">
+          <form id="formDictTypeEdit" class="crm-form-section" onsubmit="return false;">
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>字典名称</label>
+              <input type="text" class="form-control" id="sdt-name" placeholder="请输入" />
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>字典编码</label>
+              <input type="text" class="form-control" id="sdt-code" placeholder="请输入，如 asset_type" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">排序号</label>
+              <input type="number" class="form-control" id="sdt-sort" step="1" value="99" />
+            </div>
+            <p id="sdt-form-error" class="text-danger" style="display:none;margin:0;font-size:14px;"></p>
+          </form>
+        </div>
+        <div class="v52-modal-footer">
+          <button type="button" class="v52-btn-std" onclick="closeModal('modalDictTypeEdit')">取消</button>
+          <button type="button" class="v52-btn-primary" id="sdTypeSaveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="v52-modal-overlay" id="modalDictItemEdit" onclick="if(event.target===this)closeModal('modalDictItemEdit')">
+      <div class="v52-modal-box" style="width:560px;max-width:96vw;">
+        <div class="v52-modal-header">
+          <div class="v52-modal-title" id="modalDictItemEditTitle">新增选项</div>
+          <div class="v52-header-ops">
+            <div class="v52-op-icon" onclick="closeModal('modalDictItemEdit')" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="v52-modal-body">
+          <form id="formDictItemEdit" class="crm-form-section" onsubmit="return false;">
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>选项名称</label>
+              <input type="text" class="form-control" id="sdi-label" placeholder="请输入显示文案" />
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>选项值</label>
+              <input type="text" class="form-control" id="sdi-value" placeholder="请输入英文编码，如 yes / new" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">排序号</label>
+              <input type="number" class="form-control" id="sdi-sort" step="1" value="1" />
+            </div>
+            <p id="sdi-form-error" class="text-danger" style="display:none;margin:0;font-size:14px;"></p>
+          </form>
+        </div>
+        <div class="v52-modal-footer">
+          <button type="button" class="v52-btn-std" onclick="closeModal('modalDictItemEdit')">取消</button>
+          <button type="button" class="v52-btn-primary" id="sdItemSaveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/nav.js"></script>
+    <script src="../frontend/js/nav-config.js"></script>
+    <script src="../frontend/js/vben/icons-bridge.js"></script>
+    <script src="../frontend/js/vben-bridge.js"></script>
+    <script src="../frontend/js/vben/sidebar.js"></script>
+    <script src="../frontend/js/vben/header.js"></script>
+    <script src="../frontend/js/vben/footer.js"></script>
+    <script src="../frontend/js/vben/layout.js"></script>
+    <script src="../frontend/js/layout.js"></script>
+    <script src="../frontend/js/system-admin/hsf-sys-seed.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-storage.js"></script>
+    <script src="../frontend/js/system-admin/core/event-bus.js"></script>
+    <script src="../frontend/js/system-admin/core/ui-kit.js"></script>
+    <script src="../frontend/js/system-admin/core/filter-bar.js"></script>
+    <script src="../frontend/js/components/modal.js"></script>
+    <script src="../frontend/js/components/table-skeleton.js"></script>
+    <script src="../frontend/js/components/fixed-column.js"></script>
+    <script src="../frontend/js/tztt-admin-list.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-pagination.js"></script>
+    <script src="../frontend/js/components/toast.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-bootstrap.js"></script>
+    <script src="../frontend/js/system-admin/dict.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-mount.js"></script>
+  </body>
+</html>

@@ -1,0 +1,129 @@
+/* 左右分栏 + 拖拽条（台账类业务页复用） */
+.split-page.content-container,
+.sz-page.content-container,
+.bb-page.content-container,
+.lr-page.content-container,
+.pn-page.content-container,
+.bu-page.content-container,
+.ct-page.content-container,
+.fn-page.content-container,
+.cu-page.content-container {
+  padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.vben-split-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  gap: 0;
+  position: relative;
+}
+
+.split-left {
+  flex: 0 0 50%;
+  width: 50%;
+  min-width: 320px;
+  max-width: 75%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #f0f0f0;
+}
+
+.split-resizer {
+  width: 12px;
+  margin: 0 -4px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.split-resizer:hover,
+.split-resizer.active {
+  background: rgba(0, 78, 163, 0.08);
+}
+
+.resizer-line {
+  width: 2px;
+  height: 24px;
+  background: #ddd;
+  border-radius: 2px;
+}
+
+.split-resizer:hover .resizer-line,
+.split-resizer.active .resizer-line {
+  background: var(--primary-color, #004ea3);
+}
+
+.split-right {
+  flex: 1;
+  min-width: 280px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #f0f0f0;
+}
+
+.split-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.split-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  cursor: col-resize;
+  display: none;
+}
+
+body.is-resizing .split-mask {
+  display: block;
+}
+
+.split-cesium-map,
+#sz-cesium-map,
+#bb-cesium-map,
+#lr-cesium-map,
+#pn-cesium-map,
+#bu-cesium-map,
+#ct-cesium-map {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.split-cesium-map .cesium-viewer,
+.split-cesium-map .cesium-widget,
+.split-cesium-map .cesium-viewer-cesiumWidgetContainer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+

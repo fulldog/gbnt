@@ -1,0 +1,1105 @@
+/* 专项整改列表页 — 对齐 finance hub showcase */
+
+.rf-page.content-container {
+  padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#rf-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+#rf-split .split-left {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 表体滚动区 1px 外描边（仅专项整改，勿与汇总台账共用） */
+#combined-table-rf #rf-scroll-wrap.fixed-table-container {
+  box-sizing: border-box;
+  border: 1px solid #e8e8e8;
+}
+
+#combined-table-rf .vben-table-std {
+  min-width: 1480px;
+}
+
+#rf-form-overlay .v50-modal-box {
+  width: min(1100px, 96vw);
+}
+
+.rf-fp-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  max-height: calc(88vh - 118px);
+}
+
+.rf-fp-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.rf-fp-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rf-fp-field--full {
+  grid-column: 1 / -1;
+}
+
+.rf-fp-label {
+  width: 96px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 14px;
+  color: var(--app-text);
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+}
+
+.rf-fp-req {
+  color: var(--app-danger);
+  margin-right: 2px;
+}
+
+.rf-fp-ctrl {
+  flex: 1;
+  min-width: 0;
+}
+
+.rf-fp-input,
+.rf-fp-select,
+.rf-fp-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.rf-fp-textarea {
+  height: 72px;
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.rf-fp-input:focus,
+.rf-fp-select:focus,
+.rf-fp-textarea:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 2px rgba(1, 92, 187, 0.12);
+}
+
+.rf-fp-field.is-error .rf-fp-input,
+.rf-fp-field.is-error .rf-fp-select,
+.rf-fp-field.is-error .rf-fp-textarea {
+  border-color: var(--app-danger);
+}
+
+.v50-btn-primary {
+  background: var(--app-primary);
+  color: #fff;
+  border: none !important;
+}
+
+.v50-btn-primary:hover {
+  background: var(--app-primary-hover);
+}
+
+#rf-form-overlay .v50-op-icon:hover {
+  color: var(--app-primary);
+}
+
+@media (max-width: 720px) {
+  .rf-fp-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 财务管理：showcase 查询区 */
+
+                        /* --- 局部隔离样式 --- */
+                        #query-group-rf {
+                            background: #fff;
+                            border-radius: 8px 8px 0 0;
+                            border: none;
+                            padding: 24px;
+                            transition: all 0.3s ease;
+                            overflow: visible;
+                            flex-shrink: 0;
+                        }
+
+                        /* 3列响应式栅格 */
+                        #query-group-rf .query-grid {
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                            gap: 16px 40px;
+                            width: 100%;
+                            transition: grid-template-rows 0.3s;
+                        }
+
+                        @media screen and (max-width: 1200px) {
+                            #query-group-rf .query-grid {
+                                grid-template-columns: repeat(2, 1fr);
+                            }
+                        }
+
+                        @media screen and (max-width: 768px) {
+                            #query-group-rf .query-grid {
+                                grid-template-columns: 1fr;
+                            }
+                        }
+
+                        /* 需求：标题与选项在一排 */
+                        #query-group-rf .query-item {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            width: 100%;
+                            min-width: 0;
+                        }
+
+                        /* 需求：标题右对齐 90px */
+                        #query-group-rf .query-label {
+                            width: 90px;
+                            text-align: right;
+                            font-size: 14px;
+                            color: #333;
+                            flex-shrink: 0;
+                            white-space: nowrap;
+                        }
+
+                        /* 组件容器占满剩余空间 */
+                        #query-group-rf .comp-wrap {
+                            flex: 1;
+                            min-width: 0;
+                        }
+
+                        /* 折叠控制 */
+                        #query-group-rf.collapsed .is-fold {
+                            display: none;
+                        }
+
+                        /* 操作区作为筛选项，紧跟最后一个可见筛选项 */
+                        #query-group-rf .query-item--actions .query-label--empty {
+                            width: 90px;
+                            flex-shrink: 0;
+                        }
+
+                        #query-group-rf .query-item--actions .query-actions {
+                            width: 100%;
+                        }
+
+                        /* 按钮组样式 */
+                        #query-group-rf .query-actions {
+                            display: flex;
+                            align-items: center;
+                            justify-content: flex-end;
+                            gap: 12px;
+                            height: 32px;
+                        }
+
+                        /* 按钮细节 */
+                        #query-group-rf .btn-ghost {
+                            background: #fff;
+                            border: 1px solid #d9d9d9;
+                            padding: 0 16px;
+                            height: 32px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            color: #666;
+                            font-size: 14px;
+                        }
+
+                        #query-group-rf .btn-primary {
+                            background: var(--app-primary, #015cbb);
+                            border: none;
+                            padding: 0 20px;
+                            height: 32px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            color: #fff;
+                            font-size: 14px;
+                        }
+
+                        /* 展开收起链接 */
+                        #query-group-rf .toggle-link {
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                            color: var(--app-primary, #015cbb);
+                            font-size: 14px;
+                            cursor: pointer;
+                        }
+
+                        #query-group-rf .toggle-link .arrow-icon {
+                            width: 14px;
+                            height: 14px;
+                            fill: var(--app-primary, #015cbb);
+                            transition: transform 0.3s;
+                            margin-left: 0;
+                        }
+
+                        #query-group-rf:not(.collapsed) .toggle-link .arrow-icon {
+                            transform: rotate(180deg);
+                        }
+
+                        /* ============================================================
+                        [超市零件 ➔ 查询表单] 自动兼容层
+                        ============================================================ */
+
+                        /* 1. 强制让超市零件在格子里变成“透明”且“横向” */
+                        .query-grid .market-card {
+                            display: flex !important;
+                            /* 强制横向排列 */
+                            align-items: center !important;
+                            background: transparent !important;
+                            /* 去掉重复的白色背景 */
+                            box-shadow: none !important;
+                            /* 去掉重复的阴影 */
+                            padding: 0 !important;
+                            /* 核心：去掉 40px 内边距，释放空间 */
+                            margin: 0 !important;
+                            width: 100% !important;
+                            min-height: auto !important;
+                            border: none !important;
+                        }
+
+                        /* 2. 统一超市零件的标题宽度，确保对齐 */
+                        .query-grid .market-label {
+                            width: 80px !important;
+                            /* 💡 统一查询栏标题宽度为 80px */
+                            min-width: 80px !important;
+                            text-align: right !important;
+                            font-size: 14px !important;
+                            color: #333 !important;
+                            margin-right: 12px !important;
+                            flex-shrink: 0 !important;
+                            white-space: nowrap !important;
+                        }
+
+                        /* 3. 让超市组件占据剩余空间 */
+                        .query-grid .market-component {
+                            flex: 1 !important;
+                            min-width: 0 !important;
+                        }
+
+                        /* 4. 特殊处理：如果是必填项，确保星号不换行 */
+                        .query-grid .market-label span {
+                            display: inline-block !important;
+                        }
+                    
+
+/* 财务管理：showcase 组合表格 */
+
+                        /* --- 1. 顶层容器布局：锁定高度并实现内胆拉伸 --- */
+                        #combined-table-rf.table-combined-box {
+                            display: flex;
+                            flex-direction: column;
+                            flex: 1;
+                            min-height: 0;
+                            height: auto;
+                            background: #fff;
+                            border-radius: 0 0 8px 8px;
+                            border: none;
+                            overflow: hidden;
+                            position: relative;
+                            width: 100%;
+                            box-sizing: border-box;
+                        }
+
+                        /* --- 2. 区域骨架：移除所有间隙 --- */
+                        #combined-table-rf #section-table-header {
+                            flex-shrink: 0;
+                            z-index: 100;
+                            position: relative;
+                        }
+
+                        #combined-table-rf #section-table-body {
+                            flex: 1;
+                            min-height: 0;
+                            overflow: hidden;
+                            /* 裁剪表格溢出，滚动由 container 接管 */
+                            display: flex;
+                            flex-direction: column;
+                            position: relative;
+                            z-index: 10;
+                        }
+
+                        #combined-table-rf #section-pagination {
+                            flex-shrink: 0;
+                            z-index: 30;
+                            border-radius: 0 0 8px 8px;
+                            overflow: hidden;
+                        }
+
+                        /* --- 3. 工具栏：无缝化处理 --- */
+                        #table-tools-rf {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            background: #fff;
+                            padding: 12px 10px;
+                            border: none;
+                            border-radius: 0;
+                        }
+
+                        .tools-left-title {
+                            font-size: 16px;
+                            font-weight: bold;
+                            color: #333;
+                        }
+
+                        .tools-right-ops {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            position: relative;
+                        }
+
+                        #table-tools-rf .btn-ghost {
+                            background: #fff;
+                            border: 1px solid #d9d9d9;
+                            padding: 0 16px;
+                            height: 32px;
+                            border-radius: 8px;
+                            cursor: pointer;
+                            color: #666;
+                            font-size: 14px;
+                            white-space: nowrap;
+                        }
+
+                        #table-tools-rf .btn-ghost:hover {
+                            color: var(--app-primary, #015cbb);
+                            border-color: var(--app-primary, #015cbb);
+                        }
+
+                        .tool-btn-primary {
+                            background: var(--app-primary, #015cbb);
+                            color: #fff;
+                            border: none;
+                            padding: 0 15px;
+                            height: 32px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                            font-size: 14px;
+                            transition: all 0.2s;
+                        }
+
+                        .tool-btn-primary:hover {
+                            background: var(--app-primary-hover, #014a96);
+                        }
+
+                        .tool-icon-btn {
+                            width: 32px;
+                            height: 32px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 50%;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            color: #666;
+                        }
+
+                        .tool-icon-btn:hover {
+                            background: #f3f4f6;
+                            color: var(--app-primary, #015cbb);
+                        }
+
+                        .tool-icon-btn svg {
+                            width: 16px;
+                            height: 16px;
+                            fill: none;
+                            stroke: currentColor;
+                            stroke-width: 2;
+                        }
+
+                        /* --- 4. 列设置面板：提升层级 --- */
+                        .col-settings-panel {
+                            position: absolute;
+                            top: 40px;
+                            right: 0;
+                            width: 220px;
+                            background: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+                            border: 1px solid #eee;
+                            display: none;
+                            z-index: 2000;
+                            padding: 12px 0;
+                        }
+
+                        .col-settings-panel.show {
+                            display: block;
+                        }
+
+                        .col-settings-title {
+                            padding: 0 16px 8px;
+                            border-bottom: 1px solid #f0f0f0;
+                            font-size: 12px;
+                            font-weight: bold;
+                            color: #999;
+                            margin-bottom: 8px;
+                            text-transform: uppercase;
+                        }
+
+                        .col-list-item {
+                            padding: 8px 16px;
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            font-size: 14px;
+                            color: #333;
+                            cursor: pointer;
+                        }
+
+                        .col-list-item:hover {
+                            background: #f5f5f6;
+                        }
+
+                        .col-list-item input {
+                            accent-color: var(--app-primary, #015cbb);
+                            cursor: pointer;
+                        }
+
+                        /* --- 5. 表格主体：自适应、截断与智能阴影 --- */
+                        .fixed-table-container {
+                            flex: 1;
+                            overflow: auto;
+                            min-height: 0;
+                            position: relative;
+                            /* padding: 0 8px; */
+                            border-radius: 8px;
+                            margin: 0 8px;
+                        }
+
+                        .vben-table-std {
+                            width: 100%;
+                            min-width: 1200px; /* 固定最小宽度，防止内容溢出 */
+                            border-collapse: collapse;
+                            border-spacing: 0;
+                            font-size: 14px;
+                            color: #333;
+                            table-layout: fixed;
+                            /* 必须 fixed 才能实现列隐藏后的自动平分 */
+                        }
+
+                        .vben-table-std th.col-countdown,
+                        .vben-table-std td.col-countdown {
+                            width: 180px;
+                            min-width: 180px;
+                            max-width: none;
+                            white-space: nowrap;
+                            overflow: visible;
+                            text-overflow: clip;
+                        }
+
+                        .vben-table-std th,
+                        .vben-table-std td {
+                            padding: 0 12px;
+                            height: 44px;
+                            border-bottom: 1px solid #f0f0f0;
+                            box-sizing: border-box;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            vertical-align: middle;
+                            background: #fff;
+                            /* 必须给背景，否则固定列重叠时透明 */
+                            display: table-cell;
+                            text-align: center;
+                        }
+
+                        .vben-table-std thead th {
+                            background: #fafafa;
+                            position: sticky;
+                            top: 0;
+                            z-index: 20;
+                            font-weight: 600;
+                            color: #666;
+                            border-bottom: 1px solid #e8e8e8;
+                            display: table-cell;
+                        }
+
+                        /* 表头内容容器 */
+                        .th-flex-container { 
+                            display: flex; 
+                            align-items: center; 
+                            width: 100%; 
+                            height: 44px; /* 与行高一致 */
+                            margin: 0;
+                            padding: 0;
+                        }
+
+                        .th-title { 
+                            flex: 1; 
+                            padding: 0 12px; /* 与 td 的 padding 保持一致 */
+                            font-weight: 600; 
+                            color: #666; 
+                            white-space: nowrap; 
+                        }
+
+                        /* 序号和操作的标题也要左右间距一致 */
+                        .col-fixed-left .th-title,
+                        .col-fixed-right .th-title {
+                            padding: 0 12px; 
+                            text-align: center;
+                        }
+
+                        .th-divider { 
+                            width: 1px; /* 缩窄容器，只留线宽 */
+                            height: 20px; 
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center;
+                            position: relative;
+                            right: 0; /* 贴紧右侧 */
+                        }
+
+                        .th-divider::after { 
+                            content: ""; 
+                            width: 1px; 
+                            height: 20px; 
+                            background: #E2E6E7; 
+                        }
+
+                        /* 核心逻辑：显示边框时，隐藏分割线，防止重叠变粗 */
+                        #combined-table-rf.show-border .th-divider { visibility: hidden; }
+
+                        /* 固定列基础 */
+                        .col-fixed-left {
+                            position: sticky;
+                            left: 0;
+                            z-index: 21;
+                            background: #fff !important;
+                        }
+
+                        .col-fixed-right {
+                            position: sticky;
+                            right: 0;
+                            z-index: 21;
+                            background: #fff !important;
+                            white-space: nowrap;
+                            overflow: visible;
+                            width: auto;
+                            min-width: 150px;
+                        }
+
+                        /* 固定列在 Head 层的特殊 z-index */
+                        .vben-table-std thead th.col-fixed-left {
+                            z-index: 22;
+                            background: #fafafa !important;
+                        }
+
+                        .vben-table-std thead th.col-fixed-right {
+                            z-index: 22;
+                            background: #fafafa !important;
+                        }
+
+                        /* 固定列阴影遮罩 */
+                        .col-fixed-left::after {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            right: 0;
+                            bottom: 0;
+                            width: 10px;
+                            pointer-events: none;
+                            transition: box-shadow .3s;
+                            z-index: 10;
+                        }
+
+                        #rf-scroll-wrap.is-scrolling-left .col-fixed-left::after {
+                            box-shadow: inset 5px 0 5px -4px rgba(0, 0, 0, 0.2);
+                        }
+
+                        .col-fixed-right::before {
+                            content: "";
+                            position: absolute;
+                            top: 0;
+                            left: 0;
+                            bottom: 0;
+                            width: 10px;
+                            pointer-events: none;
+                            transition: box-shadow .3s;
+                            z-index: 10;
+                        }
+
+                        #rf-scroll-wrap.is-scrolling-right .col-fixed-right::before {
+                            box-shadow: inset -5px 0 5px -4px rgba(0, 0, 0, 0.2);
+                        }
+
+                        .vben-table-std tbody tr:hover td {
+                            background-color: #e8f2fc !important;
+                        }
+
+                        .op-link {
+                            color: var(--app-primary, #015cbb);
+                            cursor: pointer;
+                            margin: 0 4px;
+                            text-decoration: none;
+                            font-size: 14px;
+                        }
+
+                        .op-link.del {
+                            color: #ff4d4f;
+                        }
+
+                        /* 全屏与加载状态 */
+                        .vben-table-fullscreen {
+                            position: fixed !important;
+                            inset: 0 !important;
+                            z-index: 999999 !important;
+                            width: 100vw !important;
+                            height: 100vh !important;
+                            margin: 0 !important;
+                            background: #f0f2f5 !important;
+                            padding: 20px;
+                            box-sizing: border-box;
+                        }
+
+                        .table-loading-mask {
+                            position: absolute;
+                            inset: 0;
+                            background: rgba(255, 255, 255, 0.6);
+                            z-index: 1000;
+                            display: none;
+                            align-items: center;
+                            justify-content: center;
+                        }
+
+                        .table-loading-mask.show {
+                            display: flex;
+                        }
+
+                        @keyframes spin {
+                            to {
+                                transform: rotate(360deg);
+                            }
+                        }
+
+                        .spinner {
+                            width: 32px;
+                            height: 32px;
+                            border: 3px solid #e6f0fa;
+                            border-top-color: var(--app-primary, #015cbb);
+                            border-radius: 50%;
+                            animation: spin 0.8s linear infinite;
+                        }
+                    
+
+/* 财务管理：showcase 分页 */
+
+                        /* --- 103. 分页器样式 Start --- */
+                        #rf-pagination-ct {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            background: #fff;
+                            border-top: none;
+                            width: 100%;
+                            box-sizing: border-box;
+                            padding: 12px 10px;
+                            border-radius: 0 0 8px 8px;
+                            overflow: visible;
+                        }
+
+                        /* 左侧区 */
+                        .pagi-left {
+                            display: flex;
+                            align-items: center;
+                            gap: 12px;
+                            font-size: 14px;
+                            color: #666;
+                        }
+
+                        /* 自定义下拉选择器样式 */
+                        .pagi-custom-select {
+                            position: relative;
+                            width: 100px;
+                            height: 28px;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 4px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            padding: 0 8px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            background: #fff;
+                            font-size: 14px;
+                        }
+
+                        .pagi-custom-select:hover {
+                            border-color: var(--app-primary, #015cbb);
+                        }
+
+                        .pagi-custom-select.active {
+                            border-color: var(--app-primary, #015cbb);
+                            box-shadow: 0 0 0 2px rgba(1, 92, 187, 0.1);
+                        }
+
+                        .pagi-custom-select svg {
+                            width: 12px;
+                            height: 12px;
+                            fill: #999;
+                            transition: transform 0.3s;
+                        }
+
+                        .pagi-custom-select.active svg {
+                            transform: rotate(180deg);
+                        }
+
+                        /* 下拉选项面板 */
+                        .pagi-dropdown {
+                            position: absolute;
+                            bottom: calc(100% + 4px);
+                            left: 0;
+                            width: 100%;
+                            background: #fff;
+                            border-radius: 8px;
+                            border: 1px solid #eee;
+                            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+                            display: none;
+                            z-index: 2000;
+                            padding: 4px;
+                        }
+
+                        .pagi-dropdown.show {
+                            display: block;
+                        }
+
+                        .pagi-option {
+                            padding: 5px 12px;
+                            font-size: 12px;
+                            color: #333;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            margin-bottom: 2px;
+                        }
+
+                        .pagi-option:hover {
+                            background: #f5f5f6;
+                            color: var(--app-primary, #015cbb);
+                        }
+
+                        .pagi-option.selected {
+                            background: #e8f2fc;
+                            color: var(--app-primary, #015cbb);
+                            font-weight: bold;
+                        }
+
+                        /* 右侧翻页按钮组 */
+                        .pagi-right {
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                        }
+
+                        .pagi-btn {
+                            width: 28px;
+                            height: 28px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            background: #fff;
+                            color: #666;
+                            font-size: 12px;
+                        }
+
+                        .pagi-btn:hover:not(.disabled) {
+                            border-color: var(--app-primary, #015cbb);
+                            color: var(--app-primary, #015cbb);
+                        }
+
+                        .pagi-btn svg {
+                            width: 14px;
+                            height: 14px;
+                            fill: currentColor;
+                        }
+
+                        .pagi-btn.active {
+                            background: var(--app-primary, #015cbb);
+                            color: #fff;
+                            border-color: var(--app-primary, #015cbb);
+                            font-weight: bold;
+                        }
+
+                        /* 激活状态下悬停时，文字保持白色 */
+                        .pagi-btn.active:hover {
+                            color: #fff;
+                            background: var(--app-primary, #015cbb);
+                            border-color: var(--app-primary, #015cbb);
+                        }
+
+                        .pagi-btn.disabled {
+                            cursor: not-allowed;
+                            color: #ccc;
+                            border-color: #f0f0f0;
+                            background: #fafafa;
+                        }
+
+                        /* 页码按钮特殊处理 */
+                        .pagi-num {
+                            min-width: 28px;
+                            padding: 0 4px;
+                        }
+
+                        /* --- 103. 分页器样式 End --- */
+                    
+
+#query-group-rf .comp-wrap .vben-input {
+  width: 100%; height: 32px; padding: 0 12px;
+  border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px;
+  outline: none; box-sizing: border-box;
+}
+#query-group-rf .comp-wrap .vben-input:focus {
+  border-color: var(--app-primary, #015cbb); box-shadow: 0 0 0 2px rgba(1, 92, 187, 0.15);
+}
+#combined-table-rf .vben-table-std tbody tr.is-active td {
+  background-color: #d6e8f8 !important;
+}
+
+#combined-table-rf .vben-table-std tbody tr.is-overdue td {
+  background-color: #fff1f0 !important;
+}
+
+#combined-table-rf .vben-table-std tbody tr.is-overdue.is-active td {
+  background-color: #ffe7e6 !important;
+}
+
+#combined-table-rf .vben-table-std td.col-countdown--overdue {
+  color: #cf1322;
+  font-weight: 600;
+}
+
+/* 行政区划树形下拉（对齐物资智管 su-f-unit-trigger） */
+#query-group-rf .hsf-tree-select {
+  --ats-placeholder: '请选择行政区划';
+}
+
+#query-group-rf .atomic-tree-select {
+  width: 100%;
+  position: relative;
+}
+
+#query-group-rf .atomic-tree-select .select-trigger {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+#query-group-rf .atomic-tree-select .select-trigger:hover,
+#query-group-rf .atomic-tree-select .select-trigger.active {
+  border-color: var(--app-primary, #015cbb);
+}
+
+#query-group-rf .atomic-tree-select .select-trigger.active {
+  box-shadow: 0 0 0 2px rgba(1, 92, 187, 0.15);
+}
+
+#query-group-rf .atomic-tree-select .select-text {
+  color: #333;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+#query-group-rf .atomic-tree-select .select-text:empty::before {
+  content: var(--ats-placeholder, '请选择行政区划');
+  color: #bfbfbf;
+}
+
+#query-group-rf .atomic-tree-select .select-trigger__icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+#query-group-rf .atomic-tree-select .select-trigger .arrow-icon {
+  width: 12px;
+  height: 12px;
+  fill: #999;
+  margin-left: 0;
+  transition: transform 0.3s;
+}
+
+#query-group-rf .atomic-tree-select .select-trigger.active .arrow-icon {
+  transform: rotate(180deg);
+}
+
+#query-group-rf .atomic-tree-select .clear-btn {
+  width: 14px;
+  height: 14px;
+  fill: #ccc;
+  cursor: pointer;
+  display: none;
+}
+
+#query-group-rf .atomic-tree-select:hover.has-val .clear-btn {
+  display: block;
+}
+
+#query-group-rf .atomic-tree-select:hover.has-val .arrow-icon {
+  display: none;
+}
+
+#query-group-rf .atomic-tree-select .tree-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+  display: none;
+  z-index: 10050;
+}
+
+#query-group-rf .atomic-tree-select .tree-dropdown.is-fixed {
+  position: fixed;
+  top: auto;
+  left: auto;
+  bottom: auto;
+}
+
+#query-group-rf .atomic-tree-select .tree-dropdown.show {
+  display: block;
+}
+
+#query-group-rf .atomic-tree-select .search-bar {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+#query-group-rf .atomic-tree-select .search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+#query-group-rf .atomic-tree-select .search-input:focus {
+  border-color: var(--app-primary, #015cbb);
+}
+
+#query-group-rf .atomic-tree-select .tree-list {
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  height: auto;
+}
+
+#query-group-rf .atomic-tree-select .tree-node {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+}
+
+#query-group-rf .atomic-tree-select .tree-node:hover {
+  background-color: #f5f5f6;
+}
+
+#query-group-rf .atomic-tree-select .tree-node.selected {
+  background-color: #e6f0fa !important;
+  font-weight: 600;
+  color: var(--app-primary, #015cbb);
+}
+
+#query-group-rf .atomic-tree-select .tree-node.level-1 {
+  padding-left: 8px;
+}
+
+#query-group-rf .atomic-tree-select .tree-node.level-2 {
+  padding-left: 26px;
+}
+
+#query-group-rf .atomic-tree-select .node-arrow {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+#query-group-rf .atomic-tree-select .node-arrow svg {
+  width: 14px;
+  height: 14px;
+  fill: #999;
+}
+
+#query-group-rf .atomic-tree-select .node-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+#query-group-rf .atomic-tree-select .node-arrow.hidden {
+  visibility: hidden;
+}
+
+#query-group-rf .atomic-tree-select .no-result {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}

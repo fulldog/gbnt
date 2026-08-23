@@ -1,0 +1,8 @@
+# 运行产物与编辑器
+.logs/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

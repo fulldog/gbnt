@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>位置 · 移动端</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/libs/maplibre/maplibre-gl.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/m-issue-map.css" />
+  </head>
+  <body>
+    <div id="app-viewport" data-mp-status="solid" data-mp-title="位置" data-mp-back="./todo.html">
+      <div class="m-page m-issue-map">
+        <div id="mIssueMap" class="m-issue-map__canvas" role="application" aria-label="地图"></div>
+        <div class="m-issue-map__panel" id="mIssueMapPanel">
+          <div class="m-issue-map__line">
+            <span class="m-issue-map__addr" id="mIssueMapAddr">—</span>
+            <span class="m-issue-map__dist" id="mIssueMapDist">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/libs/maplibre/maplibre-gl.js"></script>
+    <script src="../frontend/js/pages/m-issue-map.js"></script>
+  </body>
+</html>

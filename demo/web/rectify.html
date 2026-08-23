@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>专项整改 · 高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/layout.css" />
+    <link rel="stylesheet" href="../frontend/css/vben-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/rectify-hub.css" />
+    <link rel="stylesheet" href="../frontend/css/atomic-select.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/rectify-modal.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/rf-form-report.css" />
+  </head>
+  <body>
+    <script>
+      window.HSF_BASE = '../';
+      window.HSF_VBEN_DEFAULT_TAG = { title: '专项整改', path: '/web/rectify.html' };
+    </script>
+    <div class="app-container">
+      <vben-sidebar></vben-sidebar>
+      <div class="main-wrapper">
+        <vben-header></vben-header>
+        <div class="content-container split-page rf-page" id="pageContent">
+
+          <div class="query-card collapsed" id="query-group-rf">
+            <div class="query-grid">
+              <div class="query-item">
+                <label class="query-label">问题类型：</label>
+                <div class="comp-wrap">
+                  <div id="rf-filter-type" class="atomic-select-box"></div>
+                </div>
+              </div>
+              <div class="query-item">
+                <label class="query-label">整改状态：</label>
+                <div class="comp-wrap">
+                  <div id="rf-filter-status" class="atomic-select-box"></div>
+                </div>
+              </div>
+              <div class="query-item is-fold">
+                <label class="query-label" for="rf-filter-keyword">关键词：</label>
+                <div class="comp-wrap">
+                  <input id="rf-filter-keyword" class="vben-input" type="text" placeholder="编号 / 村 / 责任人 / 描述" autocomplete="off" />
+                </div>
+              </div>
+              <div class="query-item is-fold">
+                <label class="query-label" for="rf-filter-region">行政区划：</label>
+                <div class="comp-wrap">
+                  <div id="rf-filter-region" class="atomic-tree-select"></div>
+                </div>
+              </div>
+              <div class="query-item query-item--actions">
+                <span class="query-label query-label--empty" aria-hidden="true"></span>
+                <div class="comp-wrap">
+                  <div class="query-actions">
+                    <button type="button" class="btn-ghost" id="rf-btn-reset">重 置</button>
+                    <button type="button" class="btn-primary" id="rf-btn-search">查 询</button>
+                    <div class="toggle-link" id="rf-toggle-btn">
+                      <span class="text">展开</span>
+                      <div class="arrow-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" /></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="vben-split-layout" id="rf-split">
+            <div class="split-left">
+              <div class="table-combined-box" id="combined-table-rf">
+                <div id="section-table-header">
+                  <div id="table-tools-rf">
+                    <div class="tools-left-head">
+                      <span class="tools-left-title">待整改清单</span>
+                    </div>
+                    <div class="tools-right-ops">
+                      <button type="button" class="btn-ghost" id="rf-btn-export">导 出</button>
+                      <button type="button" class="btn-ghost" id="rf-btn-import">导 入</button>
+                      <input type="file" id="rf-import-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden />
+                      <button type="button" class="tool-btn-primary" id="rf-btn-add">
+                        <svg viewBox="0 0 24 24" style="width:14px;stroke:#fff;" aria-hidden="true">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        新增
+                      </button>
+                      <div class="tool-icon-btn" id="rf-btn-toggle-query" title="搜索/隐藏查询">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="11" cy="11" r="8"></circle>
+                          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                      </div>
+                      <div class="tool-icon-btn" id="btn-refresh" title="刷新表格">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <polyline points="23 4 23 10 17 10"></polyline>
+                          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                      </div>
+                      <div class="tool-icon-btn" id="rf-btn-fullscreen" title="全屏查看">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                        </svg>
+                      </div>
+                      <div class="tool-icon-btn" id="btn-col-settings" title="列设置">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="12" r="3"></circle>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                      </div>
+                      <div class="col-settings-panel" id="rf-col-panel">
+                        <div class="col-settings-title">可展示字段</div>
+                        <div id="rf-col-list-container"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="section-table-body">
+                  <div class="table-loading-mask" id="rf-loader">
+                    <div class="spinner"></div>
+                  </div>
+                  <div class="fixed-table-container" id="rf-scroll-wrap">
+                    <table class="vben-table-std" id="rf-main-table">
+                      <thead>
+                        <tr>
+                          <th class="col-fixed-left" style="width:60px">
+                            <div class="th-flex-container"><div class="th-title">序号</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:90px">
+                            <div class="th-flex-container"><div class="th-title">类型</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:120px">
+                            <div class="th-flex-container"><div class="th-title">编号</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:110px">
+                            <div class="th-flex-container"><div class="th-title">街道</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:110px">
+                            <div class="th-flex-container"><div class="th-title">村/社区</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:100px">
+                            <div class="th-flex-container"><div class="th-title">整改责任人</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:120px">
+                            <div class="th-flex-container"><div class="th-title">联系电话</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:110px">
+                            <div class="th-flex-container"><div class="th-title">计划完成</div><div class="th-divider"></div></div>
+                          </th>
+                          <th class="col-countdown" style="width:180px">
+                            <div class="th-flex-container"><div class="th-title">倒计时</div><div class="th-divider"></div></div>
+                          </th>
+                          <th style="width:90px">
+                            <div class="th-flex-container"><div class="th-title">状态</div><div class="th-divider"></div></div>
+                          </th>
+                          <th class="col-fixed-right" style="width:200px">
+                            <div class="th-flex-container"><div class="th-title">操作</div></div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody id="rf-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div id="section-pagination">
+                  <div class="vben-card" id="rf-pagination-ct">
+                    <div class="pagi-left">
+                      <span id="rf-pagi-total">共 0 条记录</span>
+                      <div class="pagi-custom-select" id="rf-pagi-select-trigger">
+                        <span id="rf-pagi-current-size">20条/页</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5H7z" /></svg>
+                        <div class="pagi-dropdown" id="rf-pagi-dropdown">
+                          <div class="pagi-option" data-val="10">10条/页</div>
+                          <div class="pagi-option selected" data-val="20">20条/页</div>
+                          <div class="pagi-option" data-val="50">50条/页</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="pagi-right" id="rf-pagi-right"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <vben-footer></vben-footer>
+      </div>
+    </div>
+
+    <!-- 新增/编辑 -->
+    <div class="v50-modal-overlay" id="rf-form-overlay" aria-hidden="true">
+      <div class="v50-modal-box" id="rf-form-box">
+        <div class="v50-modal-header">
+          <div class="v50-modal-title" id="rf-form-title">新增问题</div>
+          <div class="v50-header-ops">
+            <div class="v50-op-icon" id="rf-form-btn-close" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+                <div class="v50-modal-body rf-form-modal-body">
+<form class="m-report rf-form-report m-report__body" id="rf-form" novalidate>
+          <div class="rf-form-grid">
+            <div class="rf-form-field" data-field="region">
+              <label class="rf-form-field__label" for="rf-f-region-trigger"><span class="rf-fp-req">*</span>行政区划</label>
+              <div class="rf-form-field__ctrl"><div id="rf-f-region" class="atomic-tree-select"></div></div>
+            </div>
+            <div class="rf-form-field" data-field="projectName">
+              <label class="rf-form-field__label" for="rf-rProjectName"><span class="rf-fp-req">*</span>项目名称</label>
+              <div class="rf-form-field__ctrl">
+                <input
+                  id="rf-rProjectName"
+                  class="rf-form-input"
+                  type="text"
+                  placeholder="如：高标农田建设项目"
+                  aria-label="项目名称"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="rf-form-grid">
+            <div class="rf-form-field" data-field="code">
+              <label class="rf-form-field__label" for="rf-rCode">编号</label>
+              <div class="rf-form-field__ctrl"><input id="rf-rCode" class="rf-form-input" type="text" placeholder="选填" aria-label="设施编号（选填）" autocomplete="off" /></div>
+            </div>
+          </div>
+
+          <div class="rf-form-grid">
+            <div class="rf-form-field" data-field="reporterName">
+              <label class="rf-form-field__label" for="rf-rReporterName">上报人</label>
+              <div class="rf-form-field__ctrl">
+                <input
+                  id="rf-rReporterName"
+                  class="rf-form-input"
+                  type="text"
+                  placeholder="请输入上报人"
+                  aria-label="上报人"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+            <div class="rf-form-field" data-field="reporterPhone">
+              <label class="rf-form-field__label" for="rf-rReporterPhone">联系电话</label>
+              <div class="rf-form-field__ctrl">
+                <input
+                  id="rf-rReporterPhone"
+                  class="rf-form-input"
+                  type="tel"
+                  placeholder="请输入联系电话"
+                  aria-label="上报联系电话"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="rf-form-field rf-form-field--full" data-field="type">
+            <label class="rf-form-field__label"><span class="rf-fp-req">*</span>问题类型</label>
+            <div class="rf-form-field__ctrl"><div class="vben-segmented-box" id="rf-v86-controller" role="listbox"></div></div>
+          </div>
+
+          <div class="rf-form-field rf-form-field--full rf-form-field--top" data-field="description">
+            <label class="rf-form-field__label" for="rf-rDesc"><span class="rf-fp-req">*</span>问题描述</label>
+            <div class="rf-form-field__ctrl">
+            <textarea
+              id="rf-rDesc"
+              class="rf-form-textarea"
+              rows="3"
+              placeholder="发现了什么问题？"
+              aria-label="问题描述"
+              required
+            ></textarea>
+            </div>
+          </div>
+
+          <div class="rf-form-field rf-form-field--photos" data-field="photos">
+            <div class="rf-form-photos-block">
+              <label class="rf-form-field__label"><span class="rf-fp-req">*</span>现场照片</label>
+              <p class="rf-form-photos-hint">请上传 JPG、PNG 格式图片，单张不超过 20MB，最多支持 6 张</p>
+              <div class="m-report__photos" id="rf-rPhotos" aria-label="现场照片"></div>
+            </div>
+          </div>
+
+          <div class="rf-form-grid">
+            <div class="rf-form-field" data-field="address">
+              <label class="rf-form-field__label" for="rf-rAddress"><span class="rf-fp-req">*</span>地址</label>
+              <div class="rf-form-field__ctrl"><input id="rf-rAddress" class="rf-form-input" type="text" placeholder="请输入现场地址" aria-label="现场地址" autocomplete="off" required /></div>
+            </div>
+            <div class="rf-form-field" data-field="planDate">
+              <label class="rf-form-field__label"><span class="rf-fp-req">*</span>计划完成</label>
+              <div class="rf-form-field__ctrl">
+              <button type="button" class="rf-form-trigger" id="rf-rWellPlanDateRow" data-meta="planDate">
+                <span class="rf-form-trigger__text is-placeholder" id="rf-rWellPlanDateLabel">请选择</span>
+                <span class="rf-form-trigger__caret" data-icon="chevronRight" aria-hidden="true"></span>
+              </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="rf-form-split" aria-hidden="true"></div>
+
+          <div id="rf-type-fields" class="rf-type-fields">
+          <div class="m-report__type-block" id="rf-rWellBlock" hidden>
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">新建 / 配套</span>
+              <div class="m-yn-group" data-field="buildKind">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellBuild" value="new" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">新建</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellBuild" value="match" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">配套</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">机井是否出水<span class="m-report__yn-hint">（≥5分钟）</span></span>
+              <div class="m-yn-group" data-field="waterOut">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellWater" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellWater" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">管道是否按要求连接</span>
+              <div class="m-yn-group" data-field="pipeOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellPipe" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellPipe" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">走线是否规范</span>
+              <div class="m-yn-group" data-field="wiringOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellWiring" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellWiring" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">配电箱是否完好</span>
+              <div class="m-yn-group" data-field="boxOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellBox" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellBox" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">井台、井盖是否完整</span>
+              <div class="m-yn-group" data-field="coverOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellCover" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rWellCover" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">出水口总数</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rWellOutletTotal" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="出水口总数"
+              />
+              <span class="m-report__row-unit">个</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">出水口损坏</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rWellOutletDamaged" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="出水口损坏数量"
+              />
+              <span class="m-report__row-unit">个</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">护筒总数</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rWellCasingTotal" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="护筒总数"
+              />
+              <span class="m-report__row-unit">个</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">护筒损坏</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rWellCasingDamaged" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="护筒损坏数量"
+              />
+              <span class="m-report__row-unit">个</span>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">井长及分管负责人</span>
+              <input
+                id="rf-rWellKeeper"
+                class="m-report__row-input"
+                placeholder="请输入井长及分管负责人"
+                autocomplete="off"
+              />
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">联系电话</span>
+              <input
+                id="rf-rWellKeeperPhone"
+                class="m-report__row-input"
+                type="tel"
+                placeholder="请输入联系电话"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="m-report__type-block" id="rf-rRoadBlock" hidden>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">长度</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rRoadLength" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="道路长度"
+              />
+              <span class="m-report__row-unit">km</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">宽度</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rRoadWidth" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="道路宽度"
+              />
+              <span class="m-report__row-unit">m</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">厚度</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rRoadThickness" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="道路厚度"
+              />
+              <span class="m-report__row-unit">m</span>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否有路肩</span>
+              <div class="m-yn-group" data-field="hasShoulder">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rRoadShoulder" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rRoadShoulder" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否有灰土层</span>
+              <div class="m-yn-group" data-field="hasAsh">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rRoadAsh" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rRoadAsh" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">林网存活率</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rRoadTreeSurvive" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="护林林网树木存活率"
+              />
+              <span class="m-report__row-unit">棵</span>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">负责人</span>
+              <input
+                id="rf-rRoadKeeper"
+                class="m-report__row-input"
+                placeholder="请输入负责人"
+                autocomplete="off"
+              />
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">电话</span>
+              <input
+                id="rf-rRoadKeeperPhone"
+                class="m-report__row-input"
+                type="tel"
+                placeholder="请输入电话"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="m-report__type-block" id="rf-rBridgeBlock" hidden>
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">设施类型</span>
+              <div class="m-yn-group" data-field="kind">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rBridgeKind" value="bridge" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">桥</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rBridgeKind" value="culvert" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">涵</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rBridgeKind" value="gate" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">闸</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">长度</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rBridgeLength" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="桥涵闸长度"
+              />
+              <span class="m-report__row-unit">m</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">宽度</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rBridgeWidth" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="桥涵闸宽度"
+              />
+              <span class="m-report__row-unit">m</span>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">负责人</span>
+              <input
+                id="rf-rBridgeKeeper"
+                class="m-report__row-input"
+                placeholder="请输入负责人"
+                autocomplete="off"
+              />
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">电话</span>
+              <input
+                id="rf-rBridgeKeeperPhone"
+                class="m-report__row-input"
+                type="tel"
+                placeholder="请输入电话"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="m-report__type-block" id="rf-rForestBlock" hidden>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">移交株数</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rForestHandover" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="移交株数"
+              />
+              <span class="m-report__row-unit">株</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">现有株数</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rForestExisting" class="m-report__row-input"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="请输入"
+                aria-label="现有株数"
+              />
+              <span class="m-report__row-unit">株</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">存活率</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rForestSurviveRate" class="m-report__row-input"
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="存活率"
+              />
+              <span class="m-report__row-unit">%</span>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">林带是否断带</span>
+              <div class="m-yn-group" data-field="brokenBelt">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestBroken" value="yes" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestBroken" value="no" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否有枯死木</span>
+              <div class="m-yn-group" data-field="deadTrees">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestDead" value="yes" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestDead" value="no" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否发现病虫害</span>
+              <div class="m-yn-group" data-field="pest">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestPest" value="yes" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rForestPest" value="no" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">负责人</span>
+              <input
+                id="rf-rForestKeeper"
+                class="m-report__row-input"
+                placeholder="请输入负责人"
+                autocomplete="off"
+              />
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">电话</span>
+              <input
+                id="rf-rForestKeeperPhone"
+                class="m-report__row-input"
+                type="tel"
+                placeholder="请输入电话"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="m-report__type-block" id="rf-rTransformerBlock" hidden>
+            <div class="m-report__row m-report__row--input m-report__row--unit">
+              <span class="m-report__row-label">容量</span>
+              <div class="m-report__row-ctrl rf-form-input-unit">
+              <input id="rf-rTfCapacity" class="m-report__row-input"
+                type="number"
+                min="0"
+                step="any"
+                inputmode="decimal"
+                placeholder="请输入"
+                aria-label="变压器容量"
+              />
+              <span class="m-report__row-unit">kVA</span>
+              </div>
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">型号</span>
+              <input
+                id="rf-rTfModel"
+                class="m-report__row-input"
+                placeholder="请输入型号"
+                autocomplete="off"
+                aria-label="变压器型号"
+              />
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">电压等级</span>
+              <div class="m-yn-group" data-field="voltage">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfVoltage" value="10kv" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">10kV</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfVoltage" value="0.4kv" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">0.4kV</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否通电</span>
+              <div class="m-yn-group" data-field="powered">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfPowered" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfPowered" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">设备是否完好</span>
+              <div class="m-yn-group" data-field="deviceOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfDevice" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfDevice" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">配电设施是否完好</span>
+              <div class="m-yn-group" data-field="cabinetOk">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfCabinet" value="yes" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfCabinet" value="no" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--yn">
+              <span class="m-report__yn-label">是否私拉乱接</span>
+              <div class="m-yn-group" data-field="illegalWire">
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfIllegal" value="yes" />
+                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
+                  <span class="m-yn-text">是</span>
+                </label>
+                <label class="m-yn-item">
+                  <input type="radio" name="rf-rTfIllegal" value="no" />
+                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                  <span class="m-yn-text">否</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">负责人</span>
+              <input
+                id="rf-rTfKeeper"
+                class="m-report__row-input"
+                placeholder="请输入负责人"
+                autocomplete="off"
+              />
+            </div>
+            <div class="m-report__row m-report__row--input">
+              <span class="m-report__row-label">电话</span>
+              <input
+                id="rf-rTfKeeperPhone"
+                class="m-report__row-input"
+                type="tel"
+                placeholder="请输入电话"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+          </div>
+
+          <div class="rf-form-field rf-form-field--full rf-form-field--top" data-field="measures">
+            <label class="rf-form-field__label" for="rf-rWellMeasure">整改措施</label>
+            <div class="rf-form-field__ctrl">
+            <textarea
+              id="rf-rWellMeasure"
+              class="rf-form-textarea rf-form-textarea--sm"
+              rows="2"
+              placeholder="请输入整改措施"
+              aria-label="整改措施"
+            ></textarea>
+            </div>
+          </div>
+
+          <div class="rf-form-grid" id="rf-rAssignBlock">
+            <div class="rf-form-field" data-field="assigneeName">
+              <label class="rf-form-field__label" for="rf-rAssigneeName"><span class="rf-fp-req">*</span>整改责任人</label>
+              <div class="rf-form-field__ctrl">
+                <input
+                  id="rf-rAssigneeName"
+                  class="rf-form-input"
+                  type="text"
+                  placeholder="请输入整改责任人"
+                autocomplete="off"
+                required
+              />
+              </div>
+            </div>
+            <div class="rf-form-field" data-field="assigneePhone">
+              <label class="rf-form-field__label" for="rf-rAssigneePhone"><span class="rf-fp-req">*</span>联系电话</label>
+              <div class="rf-form-field__ctrl">
+              <input
+                id="rf-rAssigneePhone"
+                class="rf-form-input"
+                type="tel"
+                placeholder="请输入联系电话"
+                autocomplete="off"
+                required
+              />
+              </div>
+            </div>
+          </div>
+        </form>
+        </div>
+        <div class="v50-modal-footer">
+          <button type="button" class="v50-btn-std" id="rf-form-cancel">取消</button>
+          <button type="button" class="v50-btn-std v50-btn-primary" id="rf-form-confirm">确认提交</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 详情 -->
+    <div class="v50-modal-overlay" id="rf-detail-overlay" aria-hidden="true">
+      <div class="v50-modal-box rf-detail-box" id="rf-detail-box">
+        <div class="v50-modal-header">
+          <div class="v50-modal-title">问题详情</div>
+          <div class="v50-header-ops">
+            <div class="v50-op-icon" id="rf-detail-btn-close" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="v50-modal-body rf-detail-body">
+          <div class="rf-detail-panels" id="rf-detail-panels"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除确认 -->
+    <div class="v62-overlay v62-overlay-top" id="modalDelete" aria-hidden="true">
+      <div class="v62-modal-box" style="width:512px;">
+        <div class="v62-header">
+          <div class="v62-title-area">
+            <span class="v62-icon v62-icon-info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </span>
+            <span>提示</span>
+          </div>
+          <div class="v62-close-x" id="rf-delete-close-x" title="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </div>
+        </div>
+        <div class="v62-body" id="deleteModalBody"></div>
+        <div class="v62-footer">
+          <button type="button" class="v62-btn" id="rf-delete-cancel">取消</button>
+          <button type="button" class="v62-btn v62-btn-primary" id="rf-delete-confirm">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/nav.js"></script>
+    <script src="../frontend/js/nav-config.js"></script>
+    <script src="../frontend/js/vben/icons-bridge.js"></script>
+    <script src="../frontend/js/vben-bridge.js"></script>
+    <script src="../frontend/js/vben/sidebar.js"></script>
+    <script src="../frontend/js/vben/header.js"></script>
+    <script src="../frontend/js/vben/footer.js"></script>
+    <script src="../frontend/js/vben/layout.js"></script>
+    <script src="../frontend/js/layout.js"></script>
+    <script src="../frontend/libs/xlsx/xlsx.full.min.js"></script>
+    <script src="../frontend/js/rectify-xlsx.js"></script>
+    <script src="../frontend/js/atomic-select.js"></script>
+    <script src="../frontend/js/region-tree-select.js"></script>
+    <script src="../frontend/js/watermark.js"></script>
+    <script src="../frontend/js/mp-photos.js"></script>
+    <script src="../frontend/js/report-form-engine.js"></script>
+    <script src="../frontend/js/pages/rectify-detail.js"></script>
+    <script src="../frontend/js/pages/rectify-form.js"></script>
+    <script src="../frontend/js/pages/rectify.js"></script>
+  </body>
+</html>

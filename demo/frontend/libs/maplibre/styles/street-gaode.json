@@ -1,0 +1,27 @@
+{
+  "version": 8,
+  "name": "HSF Street (Gaode)",
+  "sources": {
+    "gaode-street": {
+      "type": "raster",
+      "tiles": [
+        "https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}"
+      ],
+      "tileSize": 256,
+      "attribution": "Gaode",
+      "maxzoom": 18
+    }
+  },
+  "layers": [
+    {
+      "id": "gaode-street",
+      "type": "raster",
+      "source": "gaode-street",
+      "minzoom": 0,
+      "maxzoom": 22
+    }
+  ]
+}

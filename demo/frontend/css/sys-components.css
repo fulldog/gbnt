@@ -1,0 +1,1697 @@
+/* TZTT 样式约定：
+ * 禁止 11px、13px 字号；禁止奇数像素（字号、圆角、间距等优先用偶数）。
+ * 默认正文 14px、字重常规。后续 Agent 修改本文件时请遵守。 */
+
+/* --- 1. Logo与菜单 --- */
+.logo-area {
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 18px;
+    color: var(--primary-color);
+    overflow: hidden;
+    transition: all var(--transition-speed);
+}
+
+.logo-area img,
+.logo-area svg {
+    height: 28px;
+    margin-right: 8px;
+    width: auto;
+    transition: margin 0.3s;
+}
+
+.logo-area .sidebar-logo-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 16px;
+    text-decoration: none;
+}
+
+.logo-area .sidebar-logo-img {
+    height: 36px;
+    width: auto;
+    max-width: 100%;
+    margin: 0;
+    object-fit: contain;
+}
+
+.menu-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 10px;
+    padding-bottom: 60px;
+}
+
+/* 菜单项基础样式 */
+.menu-item {
+    margin: 4px 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: var(--text-main);
+    transition: all 0.2s;
+    user-select: none;
+    position: relative;
+    border-radius: 8px;
+    font-size: 14px;
+    height: 40px;
+    /* 固定高度，方便计算 */
+}
+
+/* 悬停 */
+.menu-item:hover {
+    background-color: #f3f4f6;
+    color: var(--primary-color);
+}
+
+.menu-item:hover .menu-icon:not(.menu-icon--outline) svg {
+    fill: var(--primary-color);
+}
+
+.menu-item:hover .arrow-icon svg {
+    fill: var(--primary-color);
+}
+
+/* 选中状态 (去掉 border-right) */
+.menu-item.active {
+    background-color: #e6f0fa;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.menu-item.active .menu-icon:not(.menu-icon--outline) svg {
+    fill: var(--primary-color);
+}
+
+/* 图标容器 */
+.menu-icon {
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: #646a73;
+}
+
+/* 面型图标（折叠箭头等） */
+.menu-icon:not(.menu-icon--outline) svg {
+    width: 18px;
+    height: 18px;
+    fill: #555;
+    transition: fill 0.2s;
+}
+
+/* 线框导航图标：仅描边，禁止 fill */
+.menu-icon--outline {
+    color: #646a73;
+}
+
+.menu-icon--outline svg {
+    width: 18px;
+    height: 18px;
+    fill: none !important;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    transition: stroke 0.2s, color 0.2s;
+}
+
+.menu-icon--outline svg path,
+.menu-icon--outline svg line,
+.menu-icon--outline svg polyline,
+.menu-icon--outline svg rect,
+.menu-icon--outline svg circle {
+    fill: none !important;
+}
+
+.menu-item:hover .menu-icon--outline,
+.menu-item.active .menu-icon--outline {
+    color: var(--primary-color);
+}
+
+.menu-item:hover .menu-icon--outline svg,
+.menu-item.active .menu-icon--outline svg {
+    fill: none !important;
+    stroke: currentColor;
+}
+
+/* 资产管理等二级菜单：实心 SVG（images 目录图标） */
+.menu-icon--filled {
+    color: #646a73;
+}
+
+.menu-icon--filled svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+    stroke: none;
+}
+
+.menu-icon--filled svg path {
+    fill: currentColor;
+}
+
+.menu-item:hover .menu-icon--filled,
+.menu-item.active .menu-icon--filled {
+    color: var(--primary-color);
+}
+
+/* 箭头图标 (使用 V 型) */
+.arrow-icon {
+    margin-left: auto;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+}
+
+.arrow-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: #999;
+    transition: transform 0.2s;
+}
+
+.menu-item.expanded .arrow-icon svg {
+    transform: rotate(180deg);
+}
+
+/* 子菜单 */
+/* --- 修复：二级菜单丝滑展开样式 Start --- */
+.submenu {
+    display: grid;
+    grid-template-rows: 0fr;
+    /* 默认闭合状态 */
+    transition: grid-template-rows 0.3s ease-in-out;
+    /* 300ms 丝滑过渡 */
+    overflow: hidden;
+    background-color: transparent;
+    /* 去掉背景色，保持干净 */
+}
+
+.submenu.open {
+    grid-template-rows: 1fr;
+    /* 展开状态 */
+}
+
+/* 必须有一个内部容器，Grid 才能计算高度 */
+.submenu>div {
+    min-height: 0;
+}
+
+/* 二级菜单缩进保持不变 */
+.submenu .menu-item {
+    padding-left: 20px;
+}
+
+.submenu .submenu .menu-item {
+    padding-left: 68px;
+}
+
+/* --- 修复 End --- */
+.submenu.open {
+    display: block;
+}
+
+.submenu .menu-item {
+    padding-left: 20px;
+}
+
+/* 需求4: 三级菜单缩进 68px (padding-left: 12 + 56?) 
+   因为父级 padding 12, menu-icon 18+10=28, 加上缩进
+   这里直接按你要求的 68px 写 */
+.submenu .submenu .menu-item {
+    padding-left: 68px;
+}
+
+/* --- 底部折叠按钮样式 --- */
+.sidebar-collapse-btn {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    /* 图标靠右 */
+    padding-right: 20px;
+    border-top: 1px solid #eee;
+    background: #fff;
+    cursor: pointer;
+    z-index: 20;
+}
+
+/* 那个 24x24 的灰色小方块 */
+.collapse-icon-box {
+    width: 24px;
+    height: 24px;
+    background: #F3F4F6;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.collapse-icon-box:hover {
+    background: #e5e7eb;
+}
+
+.collapse-icon-box svg {
+    width: 16px;
+    height: 16px;
+    fill: #666;
+}
+
+/* --- 核心：折叠状态 (Collapsed) --- */
+
+/* 1. 宽度变 64px (在 layout.css 配合下) */
+.sidebar-container.collapsed {
+    width: 64px !important;
+}
+
+/* 2. Logo 区域调整 */
+.sidebar-container.collapsed .logo-area {
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar-container.collapsed .logo-area span {
+    display: none;
+}
+
+/* 隐藏文字 */
+.sidebar-container.collapsed .logo-area img {
+    margin: 0;
+}
+
+/* 3. 菜单项调整 (48x48 居中) */
+.sidebar-container.collapsed .menu-item {
+    width: 48px;
+    height: 48px;
+    margin: 4px auto;
+    /* 居中 */
+    padding: 0;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.sidebar-container.collapsed .menu-item span {
+    display: none;
+}
+
+/* 隐藏文字 */
+.sidebar-container.collapsed .arrow-icon {
+    display: none;
+}
+
+/* 隐藏箭头 */
+.sidebar-container.collapsed .menu-icon {
+    margin: 0;
+    width: 20px;
+    height: 20px;
+}
+
+/* 4. 隐藏子菜单 (暂不支持悬浮菜单，直接隐藏) */
+.sidebar-container.collapsed .submenu {
+    display: none !important;
+}
+
+/* 5. 底部按钮调整 */
+.sidebar-container.collapsed .sidebar-collapse-btn {
+    justify-content: center;
+    padding: 0;
+}
+
+.logo-area img,
+.logo-area svg {
+    height: 28px;
+    margin-right: 8px;
+    width: auto;
+}
+
+.menu-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 10px;
+}
+
+/* 菜单项基础样式 */
+.menu-item {
+    /* 需求2: 左右各12px间距 */
+    margin: 4px 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: var(--text-main);
+    transition: all 0.2s;
+    user-select: none;
+    position: relative;
+    /* 需求3: 圆角 */
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+/* 需求3: 鼠标悬停 -> 灰色背景 + 主色文字 */
+.menu-item:hover {
+    background-color: #f3f4f6;
+    color: var(--primary-color);
+}
+
+/* 悬停时，面型图标变色（线框图标走 currentColor） */
+.menu-item:hover .menu-icon:not(.menu-icon--outline) svg {
+    fill: var(--primary-color);
+}
+
+.menu-item:hover .arrow-icon svg {
+    fill: var(--primary-color);
+}
+
+/* 需求8: 选中状态 (Active) -> 浅蓝背景 + 主色文字 */
+.menu-item.active {
+    background-color: #e6f0fa;
+    color: var(--primary-color);
+    border-right: none;
+    font-weight: 500;
+}
+
+.menu-item.active .menu-icon:not(.menu-icon--outline) svg {
+    fill: var(--primary-color);
+}
+
+/* 箭头图标 (右侧) */
+.arrow-icon {
+    margin-left: auto;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+}
+
+.arrow-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: #999;
+    transition: transform 0.2s, fill 0.2s;
+}
+
+/* 展开状态下，箭头旋转 (CSS辅助，虽然我们也会换图标) */
+.menu-item.expanded .arrow-icon svg {
+    transform: rotate(180deg);
+}
+
+/* 子菜单容器 */
+.submenu {
+    display: none;
+}
+
+/* 去掉背景色，保持透明 */
+.submenu.open {
+    display: block;
+}
+
+/* 层级缩进处理 */
+/* 二级菜单 */
+.submenu .menu-item {
+    padding-left: 20px;
+}
+
+/* 基础padding + 缩进 */
+/* 三级菜单 */
+.submenu .submenu .menu-item {
+    padding-left: 68px;
+}
+
+/* 需求4: 二级菜单线框图 icon 样式 */
+.sub-node-icon {
+    width: 12px;
+    height: 12px;
+    fill: #999;
+    transition: fill 0.2s;
+}
+
+.menu-item:hover .sub-node-icon {
+    fill: var(--primary-color);
+}
+
+.menu-item.active .sub-node-icon {
+    fill: var(--primary-color);
+}
+
+.logo-area img {
+    height: 24px;
+    margin-right: 8px;
+}
+
+.menu-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 10px;
+}
+
+.menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: var(--text-main);
+    transition: all 0.2s;
+    user-select: none;
+    position: relative;
+}
+
+.menu-item:hover {
+    color: var(--primary-color);
+}
+
+.menu-item.active {
+    background-color: #effaff;
+    color: var(--primary-color);
+    /* border-right: 3px solid var(--primary-color); */
+}
+
+.menu-icon {
+    margin-right: 10px;
+    display: flex;
+    align-items: center;
+}
+
+.arrow-icon {
+    margin-left: auto;
+    width: 12px;
+    height: 12px;
+    fill: #999;
+}
+
+.submenu {
+    display: none;
+    background-color: #fcfcfc;
+}
+
+.submenu.open {
+    display: block;
+}
+
+.submenu .menu-item {
+    padding-left: 42px;
+}
+
+/* --- 2. 顶部栏组件 --- */
+/* 搜索胶囊 */
+.search-btn {
+    display: flex;
+    align-items: center;
+    background: #f4f4f5;
+    border-radius: 18px;
+    padding: 6px 12px;
+    cursor: pointer;
+    margin-right: 16px;
+    transition: all 0.2s;
+}
+
+.search-btn:hover {
+    background: #eaeaec;
+}
+
+.search-btn .icon {
+    width: 14px;
+    height: 14px;
+    fill: #666;
+    margin-right: 8px;
+}
+
+.search-btn .text {
+    font-size: 12px;
+    color: #909399;
+    margin-right: 8px;
+}
+
+.search-btn .key {
+    background: #fff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: #909399;
+}
+
+/* 图标按钮 */
+.action-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    margin-right: 8px;
+    transition: background 0.2s;
+    position: relative;
+}
+
+.action-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.action-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: #555;
+}
+
+.dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 6px;
+    height: 6px;
+    background: #ff4d4f;
+    border-radius: 50%;
+    border: 1px solid #fff;
+}
+
+/* 用户下拉 */
+.user-dropdown {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    margin-left: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.user-dropdown:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.user-avatar-box {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+}
+
+.user-avatar-box img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+}
+
+.user-status {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 8px;
+    height: 8px;
+    background: #31c48d;
+    border-radius: 50%;
+    border: 2px solid #fff;
+}
+
+/* --- 3. 多页签 (Tags View) --- */
+.tags-view-container {
+    height: var(--tags-height);
+    background: #fff;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow-card);
+    /* 核心修改：Flex 布局，左右分栏 */
+    display: flex;
+    justify-content: space-between;
+}
+
+/* 标签列表滚动区 */
+#tags-container {
+    flex: 1;
+    overflow-x: auto;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    /* 隐藏滚动条但允许滚动 */
+    scrollbar-width: none;
+}
+
+#tags-container::-webkit-scrollbar {
+    display: none;
+}
+
+.tag-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-right: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    /* border: 1px solid var(--border-color); */
+    color: var(--text-sub);
+    background: #fff;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    /* 防止挤压 */
+
+    background: #f3f4f6;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.tag-item:hover {
+    color: var(--primary-color);
+}
+
+.tag-item.active {
+    background: #effaff;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.tag-item .tag-icon {
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    fill: currentColor;
+}
+
+/* 修复了垂直居中的关闭按钮 */
+.tag-item .tag-close {
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    fill: #999;
+    visibility: hidden;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.tag-item .tag-close svg {
+    width: 10px;
+    height: 10px;
+}
+
+.tag-item:hover .tag-close,
+.tag-item.active .tag-close {
+    visibility: visible;
+    opacity: 1;
+}
+
+.tag-item .tag-close:hover {
+    background: #ccc;
+    fill: #fff;
+}
+
+/* 右侧更多操作按钮 */
+.tags-more-btn {
+    width: 40px;
+    height: 100%;
+    border-left: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: #fff;
+    position: relative;
+    /* 下拉菜单以此为基准 */
+    color: #666;
+}
+
+.tags-more-btn:hover {
+    color: var(--primary-color);
+    background: #fcfcfc;
+}
+
+.tags-more-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* 右侧下拉菜单 */
+.tags-dropdown-menu {
+    position: absolute;
+    top: 34px;
+    right: 0;
+    width: 140px;
+    background: #fff;
+    border: 1px solid #eee;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    z-index: 999;
+    display: none;
+    padding: 5px 0;
+}
+
+.tags-dropdown-menu.show {
+    display: block;
+}
+
+.tags-dropdown-item {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.tags-dropdown-item:hover {
+    background: #f5f5f5;
+    color: var(--primary-color);
+}
+
+.tags-dropdown-item svg {
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+    fill: currentColor;
+}
+
+.tag-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 4px 4px 12px;
+    border-radius: 8px;
+    margin-right: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-sub);
+    background: #fff;
+    transition: all 0.2s;
+}
+
+.tag-item:hover {
+    color: var(--primary-color);
+    background-color: #F3F4F6;
+}
+
+.tag-item.active {
+    background: #e6f0fa;
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.tag-item .tag-icon {
+    width: 12px;
+    height: 12px;
+    margin-right: 6px;
+    fill: currentColor;
+}
+
+/* 找到 .tag-item .tag-close 修改为： */
+.tag-item .tag-close {
+    width: 16px;
+    /* 固定宽度 */
+    height: 16px;
+    /* 固定高度 */
+    margin-left: 8px;
+    border-radius: 50%;
+
+    /* --- 核心修改：Flex 绝对居中 --- */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    /* 去掉 padding */
+
+    fill: #999;
+    visibility: hidden;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+/* 同时调整一下里面的 svg 大小，让它看着协调点 */
+.tag-item .tag-close svg {
+    width: 10px;
+    height: 10px;
+}
+
+.tag-item:hover .tag-close,
+.tag-item.active .tag-close {
+    visibility: visible;
+    opacity: 1;
+}
+
+.tag-item .tag-close:hover {
+    background: #ccc;
+    fill: #fff;
+}
+
+/* --- 4. 弹窗与悬浮层 --- */
+/* 搜索蒙层 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(2px);
+    z-index: 1000;
+    display: none;
+    justify-content: center;
+    padding-top: 100px;
+}
+
+.modal-overlay.open {
+    display: flex;
+    animation: fadeIn 0.2s;
+}
+
+.search-modal-box {
+    width: 600px;
+
+    /* 1. 固定高度 600px */
+    height: 380px;
+
+    background: #fff;
+
+    /* 2. 四个角都是 8px 圆角 */
+    border-radius: 8px;
+
+    /* 3. 关键属性：防止内部直角元素溢出遮挡圆角 */
+    overflow: hidden;
+
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+}
+
+.search-input-group {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.search-input-group input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    margin-left: 10px;
+    height: 30px;
+}
+
+.search-history {
+    padding: 20px;
+    /* min-height: 200px;  <-- 删除这行，不要强制撑开 */
+
+    /* --- 核心修改：让它占据剩余空间并可滚动 --- */
+    flex: 1;
+    overflow-y: auto;
+    /* 内容多了出滚动条 */
+}
+
+.search-item {
+    background: var(--primary-color);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 4px 6px -1px rgba(0, 78, 163, 0.5);
+}
+
+.modal-footer {
+    padding: 10px 20px;
+    background: #f9fafb;
+    border-top: 1px solid #eee;
+    color: #999;
+    font-size: 12px;
+    display: flex;
+    gap: 15px;
+}
+
+/* 通用 Popover */
+.popover-container {
+    position: relative;
+}
+
+.popover-body {
+    position: absolute;
+    top: 45px;
+    right: -10px;
+    width: 300px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: var(--shadow-float);
+    border: 1px solid #eee;
+    display: none;
+    z-index: 900;
+    animation: slideDown 0.2s;
+}
+
+.popover-body.show {
+    display: block;
+}
+
+/* --- 消息列表容器 --- */
+.msg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.msg-header .action-btn {
+    cursor: pointer;
+    color: #666;
+    width: 16px;
+    height: 16px;
+}
+
+.msg-header .action-btn:hover {
+    color: var(--primary-color);
+}
+
+.msg-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* --- 消息单行 Item --- */
+.msg-item {
+    display: flex;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f5;
+    cursor: pointer;
+    transition: background 0.2s;
+    position: relative;
+    /* 为了定位未读蓝点 */
+}
+
+.msg-item:hover {
+    background: #f9fafb;
+}
+
+/* 1. 左侧头像区 */
+.msg-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    margin-right: 12px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* 头像颜色变种 */
+.avatar-green {
+    background: linear-gradient(135deg, #6ee7b7 0%, #3b82f6 100%);
+}
+
+/* VB 那个 */
+.avatar-blue {
+    background: #3b82f6;
+}
+
+.avatar-purple {
+    background: #004ea3;
+}
+
+.avatar-gradient {
+    background: linear-gradient(135deg, #fca5a5 0%, #ef4444 100%);
+}
+
+/* 2. 中间内容区 */
+.msg-content {
+    flex: 1;
+    min-width: 0;
+    /* 防止文本溢出撑开 */
+}
+
+.msg-title {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.msg-desc {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 4px;
+    /* 单行省略 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.msg-time {
+    font-size: 12px;
+    color: #bdbdbd;
+}
+
+/* 3. 右侧状态图标区 */
+.msg-action {
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+}
+
+.icon-delete {
+    width: 16px;
+    fill: #ef4444;
+}
+
+/* 红叉 */
+.icon-check {
+    width: 16px;
+    fill: #333;
+}
+
+/* 黑勾 */
+
+/* 4. 未读小蓝点 (右上角) */
+.unread-dot-item {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 6px;
+    height: 6px;
+    background: #3b82f6;
+    /* 蓝色 */
+    border-radius: 50%;
+}
+
+/* 左边的清空按钮：保持简洁文字 */
+#btn-clear-msg {
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+}
+
+#btn-clear-msg:hover {
+    color: var(--primary-color);
+}
+
+/* 右边的查看全部按钮：定制样式 */
+#btn-view-all {
+    width: 88px;
+    height: 32px;
+
+    /* 核心样式 */
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 4px;
+    /* 小圆角 */
+
+    /* 文字居中 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#btn-view-all:hover {
+    background: var(--primary-hover);
+}
+
+.msg-btn {
+    flex: 1;
+    text-align: center;
+    padding: 12px 0;
+    font-size: 14px;
+    cursor: pointer;
+    color: #666;
+}
+
+.msg-btn:hover {
+    background: #fcfcfc;
+    color: var(--primary-color);
+}
+
+/* 用户菜单 */
+.user-menu {
+    width: 140px;
+    padding: 5px;
+}
+
+.user-menu-item {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #333;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.user-menu-item:hover {
+    background: #f5f5f5;
+    color: var(--primary-color);
+}
+
+/* 卡片基础 */
+.vben-card {
+    background: var(--bg-white);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: block;
+}
+
+/* 动画定义 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* =========================================
+   以下是新增的 侧边栏折叠(Mini) 与 隐藏(Hidden) 样式
+   请粘贴到文件末尾
+   ========================================= */
+
+/* 1. 底部左对齐的折叠按钮区域 */
+.sidebar-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    z-index: 20;
+}
+
+/* 2. 那个 24x24 的灰色小方块 */
+.collapse-btn-box {
+    width: 24px;
+    height: 24px;
+    background: #F3F4F6;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    /* 核心：和一级菜单一样左对齐 (margin-left: 12px) */
+    margin-left: 12px;
+}
+
+.collapse-btn-box:hover {
+    background: #e5e7eb;
+    color: var(--primary-color);
+}
+
+.collapse-btn-box svg {
+    width: 16px;
+    height: 16px;
+    fill: #666;
+}
+
+/* 3. Mini 模式 (点击底部按钮触发，宽度变 64px) */
+.sidebar-container.mini {
+    width: 64px !important;
+}
+
+/* Mini 模式下 Logo 调整 */
+.sidebar-container.mini .logo-area {
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar-container.mini .logo-area span {
+    display: none;
+}
+
+.sidebar-container.mini .logo-area img {
+    margin: 0;
+}
+
+/* Mini 模式下 菜单项居中 */
+.sidebar-container.mini .menu-item {
+    width: 48px;
+    height: 48px;
+    margin: 4px auto;
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar-container.mini .menu-item span {
+    display: none;
+}
+
+/* 藏文字 */
+.sidebar-container.mini .arrow-icon {
+    display: none;
+}
+
+/* 藏箭头 */
+.sidebar-container.mini .menu-icon {
+    margin: 0;
+    width: 20px;
+    height: 20px;
+}
+
+/* 图标居中 */
+.sidebar-container.mini .submenu {
+    display: none !important;
+}
+
+/* 藏子菜单 */
+
+/* 4. Hidden 模式 (点击顶部 Header 按钮触发，宽度变 0) */
+.sidebar-container.hidden {
+    width: 0 !important;
+    border: none;
+}
+
+/* --- 补回消息底部样式 --- */
+.msg-footer {
+    display: flex;
+    /* 必须有 Flex */
+    align-items: center;
+    /* 垂直居中 */
+    justify-content: space-between;
+    /* 左右两端对齐 */
+    padding: 10px 16px;
+    border-top: 1px solid #eee;
+    background-color: #fff;
+}
+
+/* 确保这两个按钮的样式也在 (如果在上面已经有就不重复加，没有就加上) */
+#btn-clear-msg {
+    font-size: 14px;
+    color: #666;
+    cursor: pointer;
+}
+
+#btn-clear-msg:hover {
+    color: var(--primary-color);
+}
+
+#btn-view-all {
+    width: 88px;
+    height: 32px;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#btn-view-all:hover {
+    background: var(--primary-hover);
+}
+
+/* --- 钉子图标样式 --- */
+.tag-pin {
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    /* 和关闭按钮保持一致的左间距 */
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    fill: #ccc;
+    /* 浅灰色，不要太抢眼 */
+    transform: rotate(30deg);
+    /* 稍微歪一点，更有感觉 */
+}
+
+/* 选中状态下，钉子也可以稍微变色（可选） */
+.tag-item.active .tag-pin {
+    fill: var(--primary-color);
+    opacity: 0.6;
+    /* 稍微淡一点 */
+}
+
+/* 统一调整一下 SVG 大小 */
+.tag-pin svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* 箭头顺滑旋转 */
+.menu-item .arrow-icon svg {
+    transition: transform 0.3s ease-in-out !important;
+}
+
+/* 当父级处于 expanded 状态时，箭头旋转 180 度 */
+.menu-item.expanded .arrow-icon svg {
+    transform: rotate(180deg);
+}
+
+/* 筛选卡片（qg-grid，与 TZTT 列表页一致） */
+.query-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.query-card .qg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 40px;
+}
+
+.query-card .qg-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.query-card .qg-label {
+  width: 90px;
+  text-align: right;
+  font-size: 14px;
+  color: #333;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.query-card .qg-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.query-card .qg-wrap .vben-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.query-card .qg-wrap .vben-input:focus {
+  border-color: #004ea3;
+  box-shadow: 0 0 0 2px rgba(0, 78, 163, 0.15);
+}
+
+.query-card.collapsed .is-fold {
+  display: none;
+}
+
+.query-card .qg-item.qg-span-2 {
+  grid-column: span 2;
+}
+
+.query-card .qg-ghost {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 0 16px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #666;
+  font-size: 14px;
+}
+
+.query-card .qg-primary {
+  background: #004ea3;
+  border: none;
+  padding: 0 20px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 14px;
+}
+
+.query-card .qg-primary:hover {
+  background: #1b6cbb;
+}
+
+.query-card .qg-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #004ea3;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.query-card .qg-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: #004ea3;
+  transition: transform 0.3s;
+}
+
+.query-card:not(.collapsed) .qg-toggle svg {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 1200px) {
+  .query-card .qg-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .query-card .qg-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .query-card .qg-item.qg-span-2 {
+    grid-column: span 1;
+  }
+}
+
+/* --- 列表分页（table-skeleton renderPagination / section-pagination）--- */
+.table-combined-box #section-pagination,
+.table-combined-box .section-pagination {
+  flex-shrink: 0;
+  z-index: 30;
+  overflow: visible;
+}
+
+#section-pagination .pagination-bar,
+.section-pagination .pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  border-top: 1px solid #f0f0f0;
+  border-radius: 0 0 8px 8px;
+  overflow: visible;
+}
+
+.pagi-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: #666;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pagi-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pagi-custom-select {
+  position: relative;
+  width: 100px;
+  height: 28px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fff;
+  font-size: 14px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.pagi-custom-select > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.pagi-custom-select:hover {
+  border-color: var(--primary-color, #004ea3);
+}
+
+.pagi-custom-select.active {
+  border-color: var(--primary-color, #004ea3);
+  box-shadow: 0 0 0 2px rgba(0, 78, 163, 0.1);
+}
+
+.pagi-custom-select svg {
+  width: 12px;
+  height: 12px;
+  fill: #999;
+  flex-shrink: 0;
+  transition: transform 0.3s;
+}
+
+.pagi-custom-select.active svg {
+  transform: rotate(180deg);
+}
+
+.pagi-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+  display: none;
+  z-index: 2000;
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.pagi-dropdown.show {
+  display: block;
+}
+
+.pagi-option {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #333;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-bottom: 2px;
+}
+
+.pagi-option:last-child {
+  margin-bottom: 0;
+}
+
+.pagi-option:hover {
+  background: #f5f5f6;
+  color: var(--primary-color, #004ea3);
+}
+
+.pagi-option.selected {
+  background: #e8f2fc;
+  color: var(--primary-color, #004ea3);
+  font-weight: 600;
+}
+
+.pagi-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+  color: #666;
+  font-size: 12px;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.pagi-btn.pagi-num {
+  min-width: 28px;
+  width: auto;
+  padding: 0 4px;
+}
+
+.pagi-btn:hover:not(.disabled) {
+  border-color: var(--primary-color, #004ea3);
+  color: var(--primary-color, #004ea3);
+}
+
+.pagi-btn.active {
+  background: var(--primary-color, #004ea3);
+  color: #fff;
+  border-color: var(--primary-color, #004ea3);
+  font-weight: 600;
+}
+
+.pagi-btn.active:hover {
+  color: #fff;
+  background: var(--primary-color, #004ea3);
+  border-color: var(--primary-color, #004ea3);
+}
+
+.pagi-btn.disabled {
+  cursor: not-allowed;
+  color: #ccc;
+  border-color: #f0f0f0;
+  background: #fafafa;
+  opacity: 1;
+}
+
+.pagi-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}

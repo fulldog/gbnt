@@ -1,0 +1,363 @@
+/* 汇总管理 · 对齐专项整改列表壳 + 台账合并表头 */
+
+.ld-page.content-container {
+  padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+#ld-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+#ld-split .split-left {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#combined-table-ld.table-combined-box {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  border: none;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#combined-table-ld #section-table-header {
+  flex-shrink: 0;
+  z-index: 100;
+  position: relative;
+  padding: 0;
+  border-bottom: none;
+}
+
+#combined-table-ld #section-table-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+/* 对齐 rectify #rf-scroll-wrap：左右 8px 间距 + 圆角；外层裁切圆角、内层滚动 */
+#combined-table-ld #ld-scroll-wrap.fixed-table-container {
+  margin: 0 8px 8px;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  box-sizing: border-box;
+  position: relative;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+/* 左右描边固定于视口边缘，叠在滚动白底之上（inset box-shadow / 单元格 border 会被盖住） */
+#combined-table-ld #ld-scroll-wrap.fixed-table-container::before,
+#combined-table-ld #ld-scroll-wrap.fixed-table-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #e8e8e8;
+  z-index: 6;
+  pointer-events: none;
+}
+
+#combined-table-ld #ld-scroll-wrap.fixed-table-container::before {
+  left: 0;
+}
+
+#combined-table-ld #ld-scroll-wrap.fixed-table-container::after {
+  right: 0;
+}
+
+#combined-table-ld .ld-table-scroll-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#combined-table-ld .ledger-sheet-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 13px;
+  color: #333;
+}
+
+#combined-table-ld .ledger-sheet-table--street {
+  min-width: 1200px;
+}
+
+#combined-table-ld .ledger-sheet-table--survey {
+  min-width: 2000px;
+}
+
+#combined-table-ld .ledger-sheet-table th,
+#combined-table-ld .ledger-sheet-table td {
+  border: 0;
+  border-right: 1px solid #e8e8e8;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #333;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.45;
+  word-break: break-word;
+  background: #fff;
+  box-sizing: border-box;
+  height: auto;
+  min-height: 36px;
+  white-space: normal;
+  overflow: visible;
+}
+
+#combined-table-ld .ledger-sheet-table tr > :first-child {
+  border-left: 1px solid #e8e8e8;
+}
+
+#combined-table-ld .ledger-sheet-table thead tr:first-child > * {
+  border-top: 1px solid #e8e8e8;
+}
+
+#combined-table-ld .ledger-sheet-table thead th {
+  background: #fafafa;
+  font-weight: 600;
+}
+
+#combined-table-ld .ledger-sheet-table .ledger-title-row th {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 12px;
+  background: #fff;
+  white-space: nowrap;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+#combined-table-ld .ledger-sheet-table .ledger-foot-row td {
+  text-align: left;
+  padding: 12px 14px;
+  color: #666;
+  font-size: 13px;
+  white-space: normal;
+}
+
+#combined-table-ld .ledger-empty td {
+  padding: 48px 16px;
+  color: #999;
+  text-align: center;
+}
+
+/* 街道排查汇总：固定左 3 列（街道 / 村 / 是否完成排查） */
+#combined-table-ld .ledger-sheet-table--survey .ld-sticky-col {
+  position: sticky;
+  background: #fff;
+  z-index: 2;
+}
+
+#combined-table-ld .ledger-sheet-table--survey thead .ld-sticky-col {
+  background: #fafafa;
+  z-index: 4;
+}
+
+#combined-table-ld #ld-scroll-wrap.is-scrolling-h .ledger-sheet-table--survey .ld-sticky-last {
+  box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.1);
+}
+
+#query-group-ld {
+  background: #fff;
+  padding: 24px;
+  transition: all 0.3s ease;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+#query-group-ld .comp-wrap {
+  overflow: visible;
+}
+
+#query-group-ld.query-card {
+  border-radius: 8px 8px 0 0;
+  border: none;
+}
+
+#query-group-ld.collapsed .is-fold {
+  display: none;
+}
+
+#query-group-ld .query-item--actions .query-actions {
+  width: 100%;
+}
+
+#query-group-ld .query-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 40px;
+  width: 100%;
+}
+
+@media screen and (max-width: 1200px) {
+  #query-group-ld .query-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  #query-group-ld .query-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+#query-group-ld .query-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+#query-group-ld .query-label {
+  width: 90px;
+  text-align: right;
+  font-size: 14px;
+  color: #333;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+#query-group-ld .comp-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+#query-group-ld .query-item--actions .query-label--empty {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+#query-group-ld .query-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  height: 32px;
+  width: 100%;
+}
+
+#query-group-ld .btn-ghost {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 0 16px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #666;
+  font-size: 14px;
+}
+
+#query-group-ld .btn-primary {
+  background: var(--app-primary, #015cbb);
+  border: none;
+  padding: 0 20px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 14px;
+}
+
+#query-group-ld .toggle-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--app-primary, #015cbb);
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#query-group-ld .toggle-link .arrow-icon {
+  width: 14px;
+  height: 14px;
+  fill: var(--app-primary, #015cbb);
+  transition: transform 0.3s;
+}
+
+#query-group-ld:not(.collapsed) .toggle-link .arrow-icon {
+  transform: rotate(180deg);
+}
+
+#table-tools-ld {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  padding: 12px 10px;
+  border: none;
+  border-radius: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#table-tools-ld .tools-left-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+#table-tools-ld .tools-right-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+#table-tools-ld .btn-ghost {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  padding: 0 16px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #666;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+#table-tools-ld .btn-ghost:hover {
+  color: var(--app-primary, #015cbb);
+  border-color: var(--app-primary, #015cbb);
+}

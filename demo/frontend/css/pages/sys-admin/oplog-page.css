@@ -1,0 +1,168 @@
+/* 全屏（对齐角色权限） */
+.ol-page.content-container.vben-table-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 999999 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  background: #f0f2f5 !important;
+  padding: 20px !important;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+/* 操作日志页：通栏列表（对齐财务管理常规模式） */
+.ol-page.content-container {
+  padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.split-left {
+  padding: 0;
+}
+
+.split-left #combined-table-ol.table-combined-box {
+  border: none;
+  box-shadow: none;
+  border-radius: 0 0 8px 8px;
+  height: 100%;
+}
+
+#combined-table-ol .vben-table-std {
+  min-width: 1480px;
+}
+
+#table-tools-ol .tools-left-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+#table-tools-ol .tools-left-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+  flex-shrink: 0;
+}
+
+#ol-split.ol-mode-regular .split-resizer,
+#ol-split.ol-mode-regular .split-right,
+.ol-page #ol-split .split-resizer,
+.ol-page #ol-split .split-right {
+  display: none !important;
+}
+
+#ol-split.ol-mode-regular .split-left,
+.ol-page #ol-split .split-left {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ol-page #query-group-ol.query-card,
+.ol-page #query-group-ol {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+#query-group-ol .query-item--range .ol-time-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+#query-group-ol .query-item--range .ol-time-range > span {
+  color: #999;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sys-oplog-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #52c41a;
+}
+
+.sys-oplog-status--bad {
+  background: #fff2f0;
+  border-color: #ffccc7;
+  color: #ff4d4f;
+}
+
+/* 操作日志 · 详情弹窗（对齐审计详情表格布局） */
+.ol-detail-modal-box {
+  width: 920px !important;
+  max-width: 96vw !important;
+  margin-top: 8vh !important;
+}
+
+.ol-detail-modal-body {
+  padding: 20px 24px 28px !important;
+}
+
+.ol-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid #e8e8e8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ol-detail-table th {
+  width: 110px;
+  padding: 11px 14px;
+  text-align: right;
+  font-weight: 500;
+  color: #666;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ol-detail-table td {
+  padding: 11px 14px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  vertical-align: middle;
+  word-break: break-word;
+}
+
+.ol-detail-table td.ol-detail-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  color: #444;
+  line-height: 1.6;
+}
+
+.ol-detail-table .sys-oplog-status,
+.ol-detail-table .sys-oplog-status--bad {
+  vertical-align: middle;
+}

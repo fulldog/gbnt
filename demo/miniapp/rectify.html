@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>整改 · 移动端</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
+  </head>
+  <body>
+    <div id="app-viewport" data-mp-status="solid" data-mp-title="提交整改" data-mp-back="./todo.html">
+      <div class="m-page">
+        <form class="m-form" id="rectifyForm">
+          <div class="m-form__section">问题信息</div>
+          <div class="m-card" id="rectifyInfo"></div>
+
+          <div class="m-form__section">整改情况</div>
+          <div class="m-field">
+            <label for="fixNote">整改说明</label>
+            <textarea id="fixNote" rows="3" placeholder="简述整改措施"></textarea>
+          </div>
+          <div class="m-field">
+            <label>整改后照片</label>
+            <label class="m-upload__box" for="fixFile">
+              <span class="m-upload__icon" data-icon="camera"></span>
+              <span class="m-upload__text" id="fixUploadText">拍照或从相册选择</span>
+            </label>
+            <input type="file" id="fixFile" accept="image/*" capture="environment" hidden />
+            <img class="m-photo-preview" id="fixPreview" alt="" hidden />
+            <button type="button" class="m-btn m-btn--ghost" id="btnFixDemo">
+              <span data-icon="image"></span>使用预置图
+            </button>
+          </div>
+          <button type="submit" class="m-btn m-btn--primary">提交整改</button>
+        </form>
+      </div>
+    </div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/watermark.js"></script>
+    <script src="../frontend/js/pages/m-rectify.js"></script>
+  </body>
+</html>

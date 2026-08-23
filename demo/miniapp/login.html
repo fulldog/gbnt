@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>登录 · 移动端</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
+  </head>
+  <body>
+    <div id="app-viewport" data-mp-status="transparent">
+      <div class="m-page m-login">
+        <header class="m-login__hero">
+          <div class="m-login__logo">
+            <img src="../media/favicon.png" alt="" width="72" height="72" />
+          </div>
+          <h1 class="m-login__title">高标农田专项整治</h1>
+        </header>
+
+        <div class="m-login__card">
+          <form class="m-login__form" id="mLoginForm" autocomplete="on">
+            <div class="m-field m-field--icon">
+              <span class="m-field__icon" data-icon="user" aria-hidden="true"></span>
+              <input id="mUsername" name="username" value="admin" placeholder="请输入账号" aria-label="账号" required />
+            </div>
+            <div class="m-field m-field--icon m-field--password">
+              <span class="m-field__icon" data-icon="lock" aria-hidden="true"></span>
+              <input id="mPassword" name="password" type="password" value="123456" placeholder="请输入密码" aria-label="密码" required />
+              <button type="button" class="m-field__toggle" id="mPwdToggle" aria-label="显示密码" aria-pressed="false">
+                <span data-icon="eyeOff" aria-hidden="true"></span>
+              </button>
+            </div>
+            <div class="m-field">
+              <div class="vben-captcha-slider" id="v40-slider-container" aria-label="滑动验证">
+                <div class="captcha-text" id="v40-text">请按住滑块拖动</div>
+                <div class="slider-progress" id="v40-progress"></div>
+                <div class="slider-handle" id="v40-handle">
+                  <span id="v40-icon" class="v40-icon" data-icon="chevronRight" aria-hidden="true"></span>
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="m-btn m-btn--primary m-login__submit" id="mLoginBtn" disabled>登录</button>
+            <div class="m-login__agree">
+              <label class="m-login__agree-check" for="mAgree">
+                <input type="checkbox" id="mAgree" class="m-login__agree-input" />
+                <span class="m-login__agree-mark" aria-hidden="true"></span>
+              </label>
+              <p class="m-login__agree-text">
+                我已阅读并同意
+                <a href="./agreement.html">《用户协议》</a>
+                和
+                <a href="./privacy.html">《隐私政策》</a>
+              </p>
+            </div>
+          </form>
+        </div>
+
+        <footer class="m-login__footer">聊城经济技术开发区管委会</footer>
+      </div>
+    </div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/pages/m-login.js"></script>
+  </body>
+</html>

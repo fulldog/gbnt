@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>工作人员 · 高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/layout.css" />
+    <link rel="stylesheet" href="../frontend/css/vben-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/sys-components.css" />
+    <link rel="stylesheet" href="../frontend/css/sys-form.css" />
+    <link rel="stylesheet" href="../frontend/css/system-admin.css" />
+    <link rel="stylesheet" href="../frontend/css/atomic-select.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/sys-admin/users-page.css" />
+  </head>
+  <body>
+    <script>
+      window.HSF_BASE = '../';
+      window.HSF_VBEN_DEFAULT_TAG = { title: '工作人员', path: '/web/sys-staff.html' };
+    </script>
+    <div class="app-container sys-admin-scope sys-users-page">
+      <vben-sidebar></vben-sidebar>
+      <div class="main-wrapper">
+        <vben-header></vben-header>
+        <div class="content-container su-page" id="suPageRoot">
+          <div id="sys-admin-root" data-module="sysUsers"></div>
+        </div>
+        <vben-footer></vben-footer>
+      </div>
+    </div>
+
+    <div class="v52-modal-overlay" id="modalUserEdit" onclick="if(event.target===this)closeModal('modalUserEdit')">
+      <div class="v52-modal-box" style="width:560px;max-width:96vw;">
+        <div class="v52-modal-header">
+          <div class="v52-modal-title" id="modalUserEditTitle">新增人员</div>
+          <div class="v52-header-ops">
+            <div class="v52-op-icon" onclick="closeModal('modalUserEdit')" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="v52-modal-body">
+          <form id="formUserEdit" class="crm-form-section" onsubmit="return false;">
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>所属单位</label>
+              <div class="rf-form-field__ctrl">
+                <div id="su-f-unit" class="atomic-tree-select"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>姓名</label>
+              <input type="text" class="form-control" id="su-f-name" autocomplete="name" placeholder="请输入姓名" />
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>电话</label>
+              <input type="tel" class="form-control" id="su-f-phone" autocomplete="tel" placeholder="请输入手机号" />
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>账号</label>
+              <input type="text" class="form-control" id="su-f-account" autocomplete="username" placeholder="请输入登录账号" />
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>角色权限</label>
+              <select class="form-control" id="su-f-roleperm"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label"><span class="required">*</span>排序</label>
+              <input type="number" class="form-control" id="su-f-sort" step="1" value="100" />
+            </div>
+            <p id="su-form-error" class="text-danger" style="display:none;margin:0;font-size:14px;"></p>
+          </form>
+        </div>
+        <div class="v52-modal-footer">
+          <button type="button" class="v52-btn-std" onclick="closeModal('modalUserEdit')">取消</button>
+          <button type="button" class="v52-btn-primary" id="suUserSaveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="v52-modal-overlay" id="modalUserConfirm" onclick="if(event.target===this)closeModal('modalUserConfirm')">
+      <div class="v52-modal-box" style="width:420px;max-width:96vw;">
+        <div class="v52-modal-header">
+          <div class="v52-modal-title">操作确认</div>
+          <div class="v52-header-ops">
+            <div class="v52-op-icon" onclick="closeModal('modalUserConfirm')" title="关闭">
+              <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="v52-modal-body">
+          <p id="modalUserConfirmMsg" style="margin:0;font-size:14px;color:#666;line-height:1.6;">确认删除该人员吗？</p>
+        </div>
+        <div class="v52-modal-footer">
+          <button type="button" class="v52-btn-std" onclick="closeModal('modalUserConfirm')">取消</button>
+          <button type="button" class="v52-btn-primary" id="modalUserConfirmOk">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="../frontend/js/logger.js"></script>
+    <script src="../frontend/js/icons.js"></script>
+    <script src="../frontend/js/config.js"></script>
+    <script src="../frontend/js/storage.js"></script>
+    <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/seed.js"></script>
+    <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/ui.js"></script>
+    <script src="../frontend/js/nav.js"></script>
+    <script src="../frontend/js/nav-config.js"></script>
+    <script src="../frontend/js/vben/icons-bridge.js"></script>
+    <script src="../frontend/js/vben-bridge.js"></script>
+    <script src="../frontend/js/vben/sidebar.js"></script>
+    <script src="../frontend/js/vben/header.js"></script>
+    <script src="../frontend/js/vben/footer.js"></script>
+    <script src="../frontend/js/vben/layout.js"></script>
+    <script src="../frontend/js/layout.js"></script>
+    <script src="../frontend/js/system-admin/hsf-sys-seed.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-storage.js"></script>
+    <script src="../frontend/js/system-admin/core/event-bus.js"></script>
+    <script src="../frontend/js/system-admin/core/filter-bar.js"></script>
+    <script src="../frontend/js/components/modal.js"></script>
+    <script src="../frontend/js/components/table-skeleton.js"></script>
+    <script src="../frontend/js/tztt-admin-list.js"></script>
+    <script src="../frontend/js/region-tree-select.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-pagination.js"></script>
+    <script src="../frontend/js/components/toast.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-bootstrap.js"></script>
+    <script src="../frontend/js/system-admin/users.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-mount.js"></script>
+  </body>
+</html>

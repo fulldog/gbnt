@@ -1,0 +1,123 @@
+/**
+ * AMP · 演示页 · 手机桌面（壁纸 + 可点击 App 图标）
+ *
+ * 调整图标位置/圆角：改 #demoPhoneApp 的 CSS 变量
+ *   --demo-app-top    距顶 %
+ *   --demo-app-left   距左 %
+ *   --demo-app-size   宽度 %
+ *   --demo-app-radius 圆角
+ */
+.demo-phone-host .app-device__status,
+.demo-phone-host .app-device__home-indicator {
+  display: none;
+}
+
+.demo-phone-host .app-device__viewport {
+  background: #000;
+}
+
+.app-device__viewport > .demo-phone-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.demo-phone-page__wallpaper {
+  position: absolute;
+  left: -2px;
+  top: -4px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  object-fit: cover;
+  object-position: top center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+#demoPhoneApp {
+  --demo-app-top: 9.28%;
+  --demo-app-left: 6.8%;
+  --demo-app-size: 15.35%;
+  --demo-app-radius: 22.5%;
+
+  position: absolute;
+  top: var(--demo-app-top);
+  left: var(--demo-app-left);
+  width: var(--demo-app-size);
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  background: #fff;
+  border-radius: var(--demo-app-radius);
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.demo-phone-page__app-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  pointer-events: none;
+  display: block;
+}
+
+.demo-phone-page__badge {
+  position: absolute;
+  top: -22%;
+  right: -28%;
+  z-index: 2;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  border: 1.5px solid #fff;
+  pointer-events: none;
+}
+
+.demo-phone-page__app-name {
+  position: absolute;
+  top: calc(var(--demo-app-top, 9.28%) + var(--demo-app-size, 15.35%) + 1.2%);
+  left: var(--demo-app-left, 6.8%);
+  width: var(--demo-app-size, 15.35%);
+  text-align: center;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.2;
+  text-shadow: none;
+  pointer-events: none;
+}
+
+#demoPhoneApp:hover {
+  transform: scale(1.04);
+}
+
+#demoPhoneApp:active {
+  transform: scale(0.94);
+  opacity: 0.92;
+}
+
+#demoPhoneApp:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.85);
+  outline-offset: 2px;
+}

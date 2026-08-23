@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="hsf-mp">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <title>移动端 · 高标农田专项整治平台</title>
+    <link rel="icon" type="image/png" href="../media/favicon.png" />
+    <link rel="stylesheet" href="../frontend/css/variables.css" />
+    <link rel="stylesheet" href="../frontend/css/device-shell.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/demo-phone.css" />
+  </head>
+  <body class="demo-phone-host">
+    <template id="demo-phone-tpl">
+      <div class="demo-phone-page">
+        <img class="demo-phone-page__wallpaper" src="../frontend/assets/phone/iphone.png" alt="" />
+        <a class="demo-phone-page__app" id="demoPhoneApp" href="./login.html" aria-label="打开高标农田专项整治">
+          <img class="demo-phone-page__app-icon" src="../frontend/assets/demo/app-icon.png" alt="" />
+          <span class="demo-phone-page__badge" aria-hidden="true">2</span>
+        </a>
+        <span class="demo-phone-page__app-name">高标农田</span>
+      </div>
+    </template>
+    <div id="app-viewport"></div>
+    <script src="../frontend/libs/fluid-bg/fluid-bg.min.js"></script>
+    <script src="../frontend/js/device-shell.js"></script>
+    <script src="../frontend/js/mp-nav.js"></script>
+    <script src="../frontend/js/pages/demo-phone.js"></script>
+  </body>
+</html>

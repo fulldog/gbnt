@@ -1,0 +1,9 @@
+.sys-dict-block {
+  margin-bottom: 20px;
+}
+
+.sys-block-title {
+  margin: 0 0 12px;
+  font-size: var(--font-size-title-sm);
+  font-weight: 600;
+}

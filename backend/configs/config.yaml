@@ -1,0 +1,25 @@
+server:
+  addr: ":8080"
+  mode: debug # debug / release
+
+mysql:
+  dsn: "root:root@tcp(127.0.0.1:3306)/gbnt?charset=utf8mb4&parseTime=True&loc=Local"
+  max_idle: 10
+  max_open: 50
+
+jwt:
+  secret: "gbnt-dev-secret-change-me"
+  expire_hours: 72
+
+log:
+  dir: "logs"
+  max_size_mb: 100      # 单文件超过此大小切割
+  max_backups: 30
+  max_age_days: 30
+  level: info
+  slow_sql_ms: 200      # 慢 SQL 阈值（毫秒）
+
+upload:
+  root: "storage/uploads"
+  chunk_size: 2097152   # 2MB
+  max_file_size: 104857600 # 100MB
