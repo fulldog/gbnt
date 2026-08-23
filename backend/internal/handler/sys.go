@@ -174,7 +174,8 @@ func (d *Deps) DeleteRole(c *gin.Context) {
 }
 
 func (d *Deps) GetRolePerms(c *gin.Context) {
-	list, err := d.Sys.GetRolePerms(c.Param("code"))
+	// 路径参数名须为 id（与 CRUD 路由一致）；取值是角色 code，如 admin
+	list, err := d.Sys.GetRolePerms(c.Param("id"))
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -190,7 +191,7 @@ func (d *Deps) SetRolePerms(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.SetRolePerms(c.Param("code"), req.Perms); err != nil {
+	if err := d.Sys.SetRolePerms(c.Param("id"), req.Perms); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

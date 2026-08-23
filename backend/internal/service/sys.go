@@ -41,6 +41,7 @@ func (s *SysService) DeleteOrg(id uint64) error {
 	if o.OrgKey == "org-gov" {
 		return errors.New("根节点不可删除")
 	}
+	// 软删：is_delete=1
 	return s.DB.Delete(&model.SysOrg{}, id).Error
 }
 
@@ -123,6 +124,7 @@ func (s *SysService) UpdateUser(id uint64, in UserInput) (*model.SysUser, error)
 }
 
 func (s *SysService) DeleteUser(id uint64) error {
+	// 软删：is_delete=1
 	return s.DB.Delete(&model.SysUser{}, id).Error
 }
 
@@ -143,6 +145,7 @@ func (s *SysService) UpdateRole(r *model.SysRole) error {
 }
 
 func (s *SysService) DeleteRole(id uint64) error {
+	// 软删：is_delete=1
 	return s.DB.Delete(&model.SysRole{}, id).Error
 }
 
@@ -154,12 +157,25 @@ func (s *SysService) GetRolePerms(code string) ([]model.SysRolePerm, error) {
 
 func (s *SysService) SetRolePerms(code string, perms []model.SysRolePerm) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
+		// 软删原权限（is_delete=1），避免唯一索引冲突时再复活或新建
 		if err := tx.Where("role_code = ?", code).Delete(&model.SysRolePerm{}).Error; err != nil {
 			return err
 		}
 		for i := range perms {
-			perms[i].ID = 0
 			perms[i].RoleCode = code
+			var old model.SysRolePerm
+			err := tx.Unscoped().
+				Where("role_code = ? AND path = ? AND action = ?", code, perms[i].Path, perms[i].Action).
+				First(&old).Error
+			if err == nil {
+				// 复活软删记录
+				if err := tx.Unscoped().Model(&old).Update("is_delete", 0).Error; err != nil {
+					return err
+				}
+				continue
+			}
+			perms[i].ID = 0
+			perms[i].IsDelete = 0
 			if err := tx.Create(&perms[i]).Error; err != nil {
 				return err
 			}
@@ -205,5 +221,6 @@ func (s *SysService) UpdateDictItem(item *model.SysDictItem) error {
 }
 
 func (s *SysService) DeleteDictItem(id uint64) error {
+	// 软删：is_delete=1
 	return s.DB.Delete(&model.SysDictItem{}, id).Error
 }

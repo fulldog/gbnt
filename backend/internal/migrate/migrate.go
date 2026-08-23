@@ -10,8 +10,13 @@ import (
 	"gbnt/backend/internal/model"
 )
 
-// Auto 执行自动迁移与种子。
-func Auto(db *gorm.DB) error {
+// Options 迁移选项。
+type Options struct {
+	Seed bool // 是否在空库写入种子
+}
+
+// Auto 执行自动迁移；opts.Seed 为 true 时写入种子。
+func Auto(db *gorm.DB, opts Options) error {
 	if err := db.AutoMigrate(
 		&model.SchemaMigration{},
 		&model.SysOrg{},
@@ -25,8 +30,13 @@ func Auto(db *gorm.DB) error {
 		&model.OpLog{},
 		&model.Attachment{},
 		&model.AttachmentChunk{},
+		&model.AttachmentRef{},
+		&model.AttachmentRefItem{},
 	); err != nil {
 		return err
+	}
+	if !opts.Seed {
+		return nil
 	}
 	return seed(db)
 }

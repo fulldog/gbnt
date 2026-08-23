@@ -26,8 +26,10 @@ type Deps struct {
 	OpLog  *service.OpLogService
 }
 
-// Register 注册全部路由。
+// Register 注册全部路由（管理端 /api + 小程序 /api/app）。
 func Register(r *gin.Engine, d *Deps) {
+	RegisterApp(r, d)
+
 	api := r.Group("/api")
 	{
 		// GET /api/health — 健康检查（无需登录）
@@ -91,14 +93,14 @@ func Register(r *gin.Engine, d *Deps) {
 			sys.GET("/roles", d.ListRoles)
 			// POST /api/sys/roles — 新增角色
 			sys.POST("/roles", d.CreateRole)
-			// PUT /api/sys/roles/:id — 更新角色
+			// GET /api/sys/roles/:id/perms — 查询角色权限（:id 为角色 code；须与下方 :id 同名，Gin 禁止 :code/:id 混用）
+			sys.GET("/roles/:id/perms", d.GetRolePerms)
+			// PUT /api/sys/roles/:id/perms — 覆盖设置角色权限（:id 为角色 code）
+			sys.PUT("/roles/:id/perms", d.SetRolePerms)
+			// PUT /api/sys/roles/:id — 更新角色（数字主键）
 			sys.PUT("/roles/:id", d.UpdateRole)
-			// DELETE /api/sys/roles/:id — 删除角色
+			// DELETE /api/sys/roles/:id — 删除角色（数字主键）
 			sys.DELETE("/roles/:id", d.DeleteRole)
-			// GET /api/sys/roles/:code/perms — 查询角色权限
-			sys.GET("/roles/:code/perms", d.GetRolePerms)
-			// PUT /api/sys/roles/:code/perms — 覆盖设置角色权限
-			sys.PUT("/roles/:code/perms", d.SetRolePerms)
 
 			// GET /api/sys/dict/types — 数据字典类型（排查类型）
 			sys.GET("/dict/types", d.ListDictTypes)
@@ -123,11 +125,17 @@ func Register(r *gin.Engine, d *Deps) {
 			att.POST("/init", d.AttachInit)
 			// POST /api/attachments/batch-init — 批量初始化上传
 			att.POST("/batch-init", d.AttachBatchInit)
+			// POST /api/attachments/complete-batch — 批量完成上传，返回 list[{uuid,url}]
+			att.POST("/complete-batch", d.AttachCompleteBatch)
+			// POST /api/attachments/bind — 文件 uuid 列表建一对多关联，返回 ref_uuid + list
+			att.POST("/bind", d.AttachBind)
+			// GET /api/attachments/refs/:ref_uuid — 按关联 uuid 反查文件 list
+			att.GET("/refs/:ref_uuid", d.AttachResolve)
 			// GET /api/attachments/:uuid/status — 上传进度与缺失分片
 			att.GET("/:uuid/status", d.AttachStatus)
 			// PUT /api/attachments/:uuid/chunks/:index — 上传分片（支持断点续传）
 			att.PUT("/:uuid/chunks/:index", d.AttachChunk)
-			// POST /api/attachments/:uuid/complete — 合并分片，完成上传
+			// POST /api/attachments/:uuid/complete — 合并分片，返回 list[{uuid,url}]
 			att.POST("/:uuid/complete", d.AttachComplete)
 			// GET /api/attachments/:uuid/download — 下载已就绪附件
 			att.GET("/:uuid/download", d.AttachDownload)

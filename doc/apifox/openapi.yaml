@@ -20,6 +20,8 @@ tags:
   - name: 字典
   - name: 操作日志
   - name: 附件
+  - name: 小程序
+    description: 小程序端独立 API（/api/app）；附件复用 /api/attachments
 components:
   securitySchemes:
     bearerAuth:
@@ -71,10 +73,19 @@ components:
         reporter_phone: { type: string }
         assignee_name: { type: string }
         assignee_phone: { type: string }
-        photo_uuids:
+        file_uuids:
           type: array
+          description: 文件 uuid 列表（新建必填；修改且 photo_ref_uuid 为空时必填）
           items: { type: string, format: uuid }
+        photo_ref_uuid:
+          type: string
+          description: 修改时有值=附件不变；为空则用 file_uuids 重新关联
         type_ext: { type: object }
+    FileItem:
+      type: object
+      properties:
+        uuid: { type: string, format: uuid }
+        url: { type: string, example: "/api/attachments/{uuid}/download" }
     AttachInitReq:
       type: object
       required: [file_name, size]
@@ -249,12 +260,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [photo_uuids]
               properties:
                 note: { type: string }
-                photo_uuids:
+                file_uuids:
                   type: array
                   items: { type: string }
+                rectify_photo_ref_uuid:
+                  type: string
+                  description: 有值=不变；空则用 file_uuids 重新关联
       responses:
         "200":
           description: ok
@@ -500,14 +513,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/roles/{code}/perms:
+  /api/sys/roles/{id}/perms:
     get:
       tags: [角色]
-      summary: 角色权限
+      summary: 角色权限（path id 为角色 code，如 admin）
       parameters:
         - in: path
-          name: code
+          name: id
           required: true
+          description: 角色 code（非数字主键）
           schema: { type: string }
       responses:
         "200":
@@ -517,11 +531,12 @@ paths:
               schema: { $ref: "#/components/schemas/Envelope" }
     put:
       tags: [角色]
-      summary: 覆盖角色权限
+      summary: 覆盖角色权限（path id 为角色 code）
       parameters:
         - in: path
-          name: code
+          name: id
           required: true
+          description: 角色 code（非数字主键）
           schema: { type: string }
       requestBody:
         required: true
@@ -690,6 +705,63 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/complete-batch:
+    post:
+      tags: [附件]
+      summary: 批量完成上传，返回 list[{uuid,url}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uuids]
+              properties:
+                uuids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: data.list = FileItem[]
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/bind:
+    post:
+      tags: [附件]
+      summary: 文件 uuid 列表创建一对多关联
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_uuids]
+              properties:
+                file_uuids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: data = {ref_uuid, list}
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/refs/{ref_uuid}:
+    get:
+      tags: [附件]
+      summary: 按关联 ref_uuid 反查文件 list
+      parameters:
+        - in: path
+          name: ref_uuid
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: data.list = FileItem[]
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
   /api/attachments/{uuid}/status:
     get:
       tags: [附件]
@@ -728,12 +800,12 @@ paths:
   /api/attachments/{uuid}/complete:
     post:
       tags: [附件]
-      summary: 合并分片完成上传
+      summary: 合并分片完成上传，返回 list[{uuid,url}]
       parameters:
         - $ref: "#/components/parameters/UuidPath"
       responses:
         "200":
-          description: ok
+          description: data.list = FileItem[]
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -763,3 +835,168 @@ paths:
               schema:
                 type: string
                 format: binary
+
+  # ---------- 小程序 /api/app ----------
+  /api/app/auth/login:
+    post:
+      tags: [小程序]
+      summary: 小程序登录
+      description: 账密登录，签发与管理端同一套 JWT。公开接口。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginReq" }
+      responses:
+        "200":
+          description: 返回 token 与用户信息
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/auth/me:
+    get:
+      tags: [小程序]
+      summary: 当前用户
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/todos:
+    get:
+      tags: [小程序]
+      summary: 待办列表
+      description: |
+        未传 status 时默认 pending；传 status=all 表示不限状态。
+        筛选对齐 miniapp/todo：type / street / village / keyword / page / size。
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: status
+          description: pending|done|all；省略则 pending
+          schema: { type: string }
+        - in: query
+          name: street
+          schema: { type: string }
+        - in: query
+          name: village
+          schema: { type: string }
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: data.list / total / page / size / status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/regions:
+    get:
+      tags: [小程序]
+      summary: 行政区划树
+      description: 街道 → 村/社区，供待办筛选与上报区划滚筒。
+      responses:
+        "200":
+          description: data.list = [{id,name,children:[{id,name,type}]}]
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/issues:
+    post:
+      tags: [小程序]
+      summary: 上报问题
+      description: 提交即待整改；file_uuids → photo_ref_uuid。附件先调 /api/attachments/*。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IssueInput" }
+      responses:
+        "200":
+          description: 新建问题（含 photos）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/issues/{id}:
+    get:
+      tags: [小程序]
+      summary: 问题详情
+      description: 含 lat/lng，issue-map 可复用定位字段。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/issues/{id}/rectify:
+    post:
+      tags: [小程序]
+      summary: 提交整改
+      description: 页内整改闭环；规则同管理端（file_uuids / rectify_photo_ref_uuid）。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: { type: string }
+                file_uuids:
+                  type: array
+                  items: { type: string, format: uuid }
+                rectify_photo_ref_uuid:
+                  type: string
+                  description: 有值=附件不变；为空则用 file_uuids 重新关联
+      responses:
+        "200":
+          description: 整改后问题（含 rectify_photos）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/mine/stats:
+    get:
+      tags: [小程序]
+      summary: 我的概览数量
+      description: |
+        reported=本人上报数；pending/done=本人上报或整改责任人同名。
+      responses:
+        "200":
+          description: "{ reported, pending, done }"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/mine/issues:
+    get:
+      tags: [小程序]
+      summary: 我的清单
+      parameters:
+        - in: query
+          name: scope
+          required: true
+          schema: { type: string, enum: [reported, pending, done] }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: data.list / total / page / size / scope
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }

@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +13,8 @@ import (
 
 // IssueService 排查/整改业务。
 type IssueService struct {
-	DB *gorm.DB
+	DB     *gorm.DB
+	Attach *AttachService
 }
 
 // IssueQuery 列表筛选。
@@ -23,7 +23,9 @@ type IssueQuery struct {
 	Page, Size                             int
 }
 
-// IssueInput 创建/更新入参（业务层用 UUID 关联附件）。
+// IssueInput 创建/更新入参。
+// 新建：传 file_uuids（文件 uuid 列表）→ 后台建关联，落库 photo_ref_uuid。
+// 修改：传了 photo_ref_uuid 则附件不变；photo_ref_uuid 为空则用 file_uuids 重新关联。
 type IssueInput struct {
 	Type          string          `json:"type"`
 	Street        string          `json:"street"`
@@ -41,56 +43,177 @@ type IssueInput struct {
 	ReporterPhone string          `json:"reporter_phone"`
 	AssigneeName  string          `json:"assignee_name"`
 	AssigneePhone string          `json:"assignee_phone"`
-	PhotoUUIDs    []string        `json:"photo_uuids"`
+	FileUUIDs     []string        `json:"file_uuids"`     // 文件 uuid 列表（新建必填；修改且 ref 为空时必填）
+	PhotoRefUUID  string          `json:"photo_ref_uuid"` // 修改：有值=不变；空=重新关联
 	TypeExt       json.RawMessage `json:"type_ext"`
 	Status        string          `json:"status"`
 }
 
-func (s *IssueService) List(q IssueQuery) ([]model.Issue, int64, error) {
+// IssueVO 业务明细/列表项（含反查后的文件 list）。
+type IssueVO struct {
+	model.Issue
+	Photos        []FileItem `json:"photos"`         // 现场照片 [{uuid,url}]
+	RectifyPhotos []FileItem `json:"rectify_photos"` // 整改照片
+}
+
+func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
+	vo := &IssueVO{Issue: *item}
+	photos, err := s.Attach.Resolve(item.PhotoRefUUID)
+	if err != nil && item.PhotoRefUUID != "" {
+		return nil, err
+	}
+	if photos == nil {
+		photos = []FileItem{}
+	}
+	vo.Photos = photos
+	rectify, err := s.Attach.Resolve(item.RectifyPhotoRefUUID)
+	if err != nil && item.RectifyPhotoRefUUID != "" {
+		return nil, err
+	}
+	if rectify == nil {
+		rectify = []FileItem{}
+	}
+	vo.RectifyPhotos = rectify
+	return vo, nil
+}
+
+func (s *IssueService) List(q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Page <= 0 {
 		q.Page = 1
 	}
 	if q.Size <= 0 {
 		q.Size = 20
 	}
-	db := s.DB.Model(&model.Issue{})
-	if q.Type != "" {
+	db := s.applyIssueFilters(s.DB.Model(&model.Issue{}), q)
+	var total int64
+	_ = db.Count(&total).Error
+	var list []model.Issue
+	if err := db.Order("id DESC").Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	out := make([]IssueVO, 0, len(list))
+	for i := range list {
+		vo, err := s.toVO(&list[i])
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, *vo)
+	}
+	return out, total, nil
+}
+
+// applyIssueFilters 列表通用筛选（status=all 表示不按状态过滤）。
+func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
+	if q.Type != "" && q.Type != "all" {
 		db = db.Where("type = ?", q.Type)
 	}
-	if q.Status != "" {
+	if q.Status != "" && q.Status != "all" {
 		db = db.Where("status = ?", q.Status)
 	}
-	if q.Street != "" {
+	if q.Street != "" && q.Street != "all" {
 		db = db.Where("street = ?", q.Street)
 	}
-	if q.Village != "" {
+	if q.Village != "" && q.Village != "all" {
 		db = db.Where("village = ?", q.Village)
 	}
 	if q.Keyword != "" {
 		like := "%" + q.Keyword + "%"
 		db = db.Where("code LIKE ? OR description LIKE ? OR project_name LIKE ?", like, like, like)
 	}
-	var total int64
-	_ = db.Count(&total).Error
-	var list []model.Issue
-	err := db.Order("id DESC").Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error
-	return list, total, err
+	return db
 }
 
-func (s *IssueService) Get(id uint64) (*model.Issue, error) {
+// ListTodos 小程序待办列表：未传 status 时默认 pending；status=all 表示不限状态。
+func (s *IssueService) ListTodos(q IssueQuery) ([]IssueVO, int64, error) {
+	if q.Status == "" {
+		q.Status = "pending"
+	}
+	if q.Status == "all" {
+		q.Status = "" // List 中空 status 表示不筛选
+	}
+	return s.List(q)
+}
+
+// MineStats 小程序「我的」概览：我上报 / 与我相关的待整改 / 已整改。
+// [PRD] reported=本人上报；pending|done=本人上报或整改责任人同名。
+func (s *IssueService) MineStats(userID uint64, userName string) (map[string]int64, error) {
+	var reported, pending, done int64
+	if err := s.DB.Model(&model.Issue{}).Where("reporter_id = ?", userID).Count(&reported).Error; err != nil {
+		return nil, err
+	}
+	if err := s.DB.Model(&model.Issue{}).Where(
+		"(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, "pending",
+	).Count(&pending).Error; err != nil {
+		return nil, err
+	}
+	if err := s.DB.Model(&model.Issue{}).Where(
+		"(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, "done",
+	).Count(&done).Error; err != nil {
+		return nil, err
+	}
+	return map[string]int64{
+		"reported": reported,
+		"pending":  pending,
+		"done":     done,
+	}, nil
+}
+
+// ListMine 小程序「我的」清单，scope=reported|pending|done。
+func (s *IssueService) ListMine(scope string, userID uint64, userName string, page, size int) ([]IssueVO, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	db := s.DB.Model(&model.Issue{})
+	switch scope {
+	case "reported":
+		db = db.Where("reporter_id = ?", userID)
+	case "pending":
+		db = db.Where("(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, "pending")
+	case "done":
+		db = db.Where("(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, "done")
+	default:
+		return nil, 0, errors.New("scope 须为 reported|pending|done")
+	}
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []model.Issue
+	if err := db.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	out := make([]IssueVO, 0, len(list))
+	for i := range list {
+		vo, err := s.toVO(&list[i])
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, *vo)
+	}
+	return out, total, nil
+}
+
+func (s *IssueService) Get(id uint64) (*IssueVO, error) {
 	var item model.Issue
 	if err := s.DB.First(&item, id).Error; err != nil {
 		return nil, err
 	}
-	return &item, nil
+	return s.toVO(&item)
 }
 
-func (s *IssueService) Create(in IssueInput, reporterID uint64, reporterName string) (*model.Issue, error) {
+func (s *IssueService) Create(in IssueInput, reporterID uint64, reporterName string) (*IssueVO, error) {
 	if in.Type == "" {
 		return nil, errors.New("type 必填")
 	}
-	if len(in.PhotoUUIDs) == 0 {
-		return nil, errors.New("photo_uuids 至少 1 个")
+	if len(in.FileUUIDs) == 0 {
+		return nil, errors.New("file_uuids 至少 1 个")
+	}
+	refUUID, _, err := s.Attach.Bind(in.FileUUIDs)
+	if err != nil {
+		return nil, err
 	}
 	ext := "{}"
 	if len(in.TypeExt) > 0 {
@@ -121,15 +244,15 @@ func (s *IssueService) Create(in IssueInput, reporterID uint64, reporterName str
 		AssigneeName:  in.AssigneeName,
 		AssigneePhone: in.AssigneePhone,
 		TypeExt:       ext,
-		PhotoUUIDs:    strings.Join(in.PhotoUUIDs, ","),
+		PhotoRefUUID:  refUUID,
 	}
 	if err := s.DB.Create(item).Error; err != nil {
 		return nil, err
 	}
-	return item, nil
+	return s.toVO(item)
 }
 
-func (s *IssueService) Update(id uint64, in IssueInput) (*model.Issue, error) {
+func (s *IssueService) Update(id uint64, in IssueInput) (*IssueVO, error) {
 	var item model.Issue
 	if err := s.DB.First(&item, id).Error; err != nil {
 		return nil, err
@@ -138,10 +261,23 @@ func (s *IssueService) Update(id uint64, in IssueInput) (*model.Issue, error) {
 	if len(in.TypeExt) > 0 {
 		ext = string(in.TypeExt)
 	}
-	photos := item.PhotoUUIDs
-	if len(in.PhotoUUIDs) > 0 {
-		photos = strings.Join(in.PhotoUUIDs, ",")
+
+	// 附件：传了关联 uuid → 认为无变化；为空 → 用 file_uuids 重新关联
+	photoRef := item.PhotoRefUUID
+	if in.PhotoRefUUID != "" {
+		// 前端带回关联 uuid：附件不变
+		photoRef = item.PhotoRefUUID
+	} else {
+		if len(in.FileUUIDs) == 0 {
+			return nil, errors.New("photo_ref_uuid 为空时须传 file_uuids 重新关联")
+		}
+		ref, _, err := s.Attach.Bind(in.FileUUIDs)
+		if err != nil {
+			return nil, err
+		}
+		photoRef = ref
 	}
+
 	updates := map[string]interface{}{
 		"type": in.Type, "street": in.Street, "village": in.Village,
 		"project_name": in.ProjectName, "code": in.Code,
@@ -149,7 +285,8 @@ func (s *IssueService) Update(id uint64, in IssueInput) (*model.Issue, error) {
 		"lat": in.Lat, "lng": in.Lng,
 		"description": in.Description, "measures": in.Measures,
 		"plan_date": in.PlanDate, "assignee_name": in.AssigneeName,
-		"assignee_phone": in.AssigneePhone, "type_ext": ext, "photo_uuids": photos,
+		"assignee_phone": in.AssigneePhone, "type_ext": ext,
+		"photo_ref_uuid": photoRef,
 	}
 	if in.Status != "" {
 		updates["status"] = in.Status
@@ -157,25 +294,47 @@ func (s *IssueService) Update(id uint64, in IssueInput) (*model.Issue, error) {
 	if err := s.DB.Model(&item).Updates(updates).Error; err != nil {
 		return nil, err
 	}
-	_ = s.DB.First(&item, id)
-	return &item, nil
+	return s.Get(id)
 }
 
 func (s *IssueService) Delete(id uint64) error {
+	// 软删：is_delete=1
 	return s.DB.Delete(&model.Issue{}, id).Error
 }
 
+// RectifyInput 整改入参。
+type RectifyInput struct {
+	Note                string   `json:"note"`
+	FileUUIDs           []string `json:"file_uuids"`             // 新整改照片文件 uuid
+	RectifyPhotoRefUUID string   `json:"rectify_photo_ref_uuid"` // 有值=不变；空=重新关联
+}
+
 // Rectify 提交整改照片闭环。
-func (s *IssueService) Rectify(id uint64, note string, photoUUIDs []string) (*model.Issue, error) {
-	if len(photoUUIDs) == 0 {
-		return nil, errors.New("整改照片 photo_uuids 必填")
+func (s *IssueService) Rectify(id uint64, in RectifyInput) (*IssueVO, error) {
+	var item model.Issue
+	if err := s.DB.First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	ref := item.RectifyPhotoRefUUID
+	if in.RectifyPhotoRefUUID != "" {
+		// 传了关联 uuid：整改附件不变
+		ref = item.RectifyPhotoRefUUID
+	} else {
+		if len(in.FileUUIDs) == 0 {
+			return nil, errors.New("rectify_photo_ref_uuid 为空时须传 file_uuids")
+		}
+		r, _, err := s.Attach.Bind(in.FileUUIDs)
+		if err != nil {
+			return nil, err
+		}
+		ref = r
 	}
 	now := time.Now()
 	if err := s.DB.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"status":              "done",
-		"rectify_note":        note,
-		"rectify_at":          &now,
-		"rectify_photo_uuids": strings.Join(photoUUIDs, ","),
+		"status":                 "done",
+		"rectify_note":           in.Note,
+		"rectify_at":             &now,
+		"rectify_photo_ref_uuid": ref,
 	}).Error; err != nil {
 		return nil, err
 	}
@@ -215,7 +374,7 @@ func (s *IssueService) Stats() (map[string]interface{}, error) {
 	}, nil
 }
 
-// LedgerStreet 按村聚合街道台账（简化版，对齐前端聚合口径）。
+// LedgerStreet 按村聚合街道台账。
 func (s *IssueService) LedgerStreet(street, from, to string) (interface{}, error) {
 	q := s.DB.Model(&model.Issue{})
 	if street != "" {
@@ -240,7 +399,7 @@ func (s *IssueService) LedgerStreet(street, from, to string) (interface{}, error
 	return ginH{"rows": list, "street": street}, err
 }
 
-// LedgerSurvey 排查汇总（按类型计数）。
+// LedgerSurvey 排查汇总。
 func (s *IssueService) LedgerSurvey(street, from, to string) (interface{}, error) {
 	q := s.DB.Model(&model.Issue{})
 	if street != "" {
@@ -264,5 +423,4 @@ func (s *IssueService) LedgerSurvey(street, from, to string) (interface{}, error
 	return ginH{"rows": list, "street": street}, err
 }
 
-// ginH 避免 handler 包循环依赖的轻量 map。
 type ginH map[string]interface{}

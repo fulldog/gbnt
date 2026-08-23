@@ -11,7 +11,7 @@ import (
 	"gbnt/backend/pkg/response"
 )
 
-// AttachInit 初始化单个上传任务，返回 uuid。
+// AttachInit 初始化单个上传任务。
 func (d *Deps) AttachInit(c *gin.Context) {
 	var req service.AttachInitReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -26,7 +26,7 @@ func (d *Deps) AttachInit(c *gin.Context) {
 	response.OK(c, out)
 }
 
-// AttachBatchInit 批量初始化，每个文件一个 uuid。
+// AttachBatchInit 批量初始化。
 func (d *Deps) AttachBatchInit(c *gin.Context) {
 	var req struct {
 		Files []service.AttachInitReq `json:"files" binding:"required"`
@@ -72,14 +72,58 @@ func (d *Deps) AttachChunk(c *gin.Context) {
 	response.OK(c, gin.H{"chunk_index": idx})
 }
 
-// AttachComplete 合并分片，状态变为 ready。
+// AttachComplete 合并分片；返回 data.list = [{uuid,url},...]。
 func (d *Deps) AttachComplete(c *gin.Context) {
-	out, err := d.Attach.Complete(c.Param("uuid"))
+	list, err := d.Attach.Complete(c.Param("uuid"))
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, out)
+	response.OK(c, gin.H{"list": list})
+}
+
+// AttachCompleteBatch 批量完成多个文件上传，返回统一 list。
+func (d *Deps) AttachCompleteBatch(c *gin.Context) {
+	var req struct {
+		UUIDs []string `json:"uuids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误：需 uuids")
+		return
+	}
+	list, err := d.Attach.CompleteMany(req.UUIDs)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"list": list})
+}
+
+// AttachBind 用文件 uuid 列表创建一对多关联，返回 ref_uuid + list。
+func (d *Deps) AttachBind(c *gin.Context) {
+	var req struct {
+		FileUUIDs []string `json:"file_uuids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误：需 file_uuids")
+		return
+	}
+	ref, list, err := d.Attach.Bind(req.FileUUIDs)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"ref_uuid": ref, "list": list})
+}
+
+// AttachResolve 按关联 ref_uuid 反查文件 list。
+func (d *Deps) AttachResolve(c *gin.Context) {
+	list, err := d.Attach.Resolve(c.Param("ref_uuid"))
+	if err != nil {
+		response.Fail(c, 404, response.CodeNotFound, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"list": list})
 }
 
 // AttachMeta 附件元数据。
@@ -104,6 +148,5 @@ func (d *Deps) AttachDownload(c *gin.Context) {
 	}
 	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
 	c.File(path)
-	// 手动补耗时头（File 不走 response.OK）
 	_ = http.StatusOK
 }

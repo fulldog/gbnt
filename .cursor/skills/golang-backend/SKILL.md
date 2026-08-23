@@ -43,13 +43,18 @@ backend/
 
 ## Auth
 
-- JWT Bearer; whitelist login/health/captcha/public attachment download if needed
+- JWT Bearer; whitelist login/health
+- Sliding renew: when remaining TTL ≤ `renew_before_hours`, middleware issues new token via headers `X-New-Token` + `X-Token-Expires-At` (no refresh token)
 - Comments in Chinese for business intent; mark `[PRD]` where rules come from PRD
 
 ## Attachments
 
 - Independent module: batch init + chunked resumable upload
-- After complete, return/use `uuid`; business tables store UUID only
+- Complete returns `data.list=[{uuid,url}]`
+- Business submits `file_uuids`; backend Bind → `ref_uuid` stored on business row
+- Tables: `attachment_refs` + `attachment_ref_items` (1:N)
+- Query expands `ref_uuid` → `photos/rectify_photos` with real uuid+url
+- Update: non-empty `photo_ref_uuid` = unchanged; empty = re-bind via `file_uuids`
 
 ## Docs
 
@@ -58,8 +63,10 @@ backend/
 
 ## Migration
 
-- GORM AutoMigrate on startup + versioned SQL in `internal/migrate/sql/`
-- Record versions in `schema_migrations`
+- Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
+- When enabled: GORM AutoMigrate on startup; optional seed on empty DB
+- Soft delete: every table has `is_delete` (0/1); `Delete()` only flags, queries exclude deleted
+- Column order: business fields first; embed `Base` (`id/created_at/updated_at/is_delete`) at struct end
 
 ## Do not
 

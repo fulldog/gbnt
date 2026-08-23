@@ -16,10 +16,16 @@ import (
 	"gbnt/backend/internal/model"
 )
 
-// AttachService 附件：批量 init + 分片断点续传，业务只存 uuid。
+// AttachService 附件：分片上传 + 文件关联组（业务只存 ref_uuid）。
 type AttachService struct {
 	DB  *gorm.DB
 	Cfg config.UploadConfig
+}
+
+// FileItem 上传/反查返回的单文件项。
+type FileItem struct {
+	UUID string `json:"uuid"`
+	URL  string `json:"url"`
 }
 
 // AttachInitReq 初始化请求。
@@ -30,13 +36,19 @@ type AttachInitReq struct {
 	MD5         string `json:"md5"`
 }
 
-// AttachInitResp 初始化响应。
+// AttachInitResp 初始化响应（上传过程态）。
 type AttachInitResp struct {
 	UUID           string `json:"uuid"`
 	ChunkSize      int64  `json:"chunk_size"`
 	TotalChunks    int    `json:"total_chunks"`
 	UploadedChunks []int  `json:"uploaded_chunks"`
 	Status         string `json:"status"`
+	URL            string `json:"url"` // 未完成前为空
+}
+
+// FileURL 生成附件访问路径（相对 /api，前端拼 API_BASE_URL）。
+func (s *AttachService) FileURL(fileUUID string) string {
+	return "/api/attachments/" + fileUUID + "/download"
 }
 
 func (s *AttachService) ensureRoot() error {
@@ -152,6 +164,10 @@ func (s *AttachService) Status(uuidStr string) (map[string]interface{}, error) {
 		upList = append(upList, k)
 	}
 	sort.Ints(upList)
+	url := ""
+	if att.Status == "ready" {
+		url = s.FileURL(att.UUID)
+	}
 	return map[string]interface{}{
 		"uuid":            att.UUID,
 		"status":          att.Status,
@@ -161,6 +177,7 @@ func (s *AttachService) Status(uuidStr string) (map[string]interface{}, error) {
 		"chunk_size":      att.ChunkSize,
 		"size":            att.Size,
 		"file_name":       att.FileName,
+		"url":             url,
 	}, nil
 }
 
@@ -197,14 +214,14 @@ func (s *AttachService) UploadChunk(uuidStr string, index int, data []byte) erro
 	return s.DB.Model(att).Update("uploaded_bits", bitsToCSV(bits)).Error
 }
 
-// Complete 合并分片。
-func (s *AttachService) Complete(uuidStr string) (*AttachInitResp, error) {
+// Complete 合并分片；成功返回 list[{uuid,url}]。
+func (s *AttachService) Complete(uuidStr string) ([]FileItem, error) {
 	att, err := s.get(uuidStr)
 	if err != nil {
 		return nil, err
 	}
 	if att.Status == "ready" {
-		return &AttachInitResp{UUID: att.UUID, ChunkSize: att.ChunkSize, TotalChunks: att.TotalChunks, Status: att.Status}, nil
+		return []FileItem{{UUID: att.UUID, URL: s.FileURL(att.UUID)}}, nil
 	}
 	uploaded := parseBits(att.UploadedBits)
 	if len(uploaded) < att.TotalChunks {
@@ -231,19 +248,101 @@ func (s *AttachService) Complete(uuidStr string) (*AttachInitResp, error) {
 	}).Error; err != nil {
 		return nil, err
 	}
-	return &AttachInitResp{
-		UUID: att.UUID, ChunkSize: att.ChunkSize, TotalChunks: att.TotalChunks,
-		Status: "ready",
-	}, nil
+	return []FileItem{{UUID: att.UUID, URL: s.FileURL(att.UUID)}}, nil
+}
+
+// CompleteMany 批量完成（校验均已 ready 或逐个合并），返回统一 list。
+func (s *AttachService) CompleteMany(uuids []string) ([]FileItem, error) {
+	list := make([]FileItem, 0, len(uuids))
+	for _, id := range uuids {
+		items, err := s.Complete(id)
+		if err != nil {
+			return list, err
+		}
+		list = append(list, items...)
+	}
+	return list, nil
+}
+
+// Bind 用文件 uuid 列表创建一对多关联；任一不存在或未就绪则报错。返回关联 ref_uuid 与文件 list。
+func (s *AttachService) Bind(fileUUIDs []string) (refUUID string, list []FileItem, err error) {
+	if len(fileUUIDs) == 0 {
+		return "", nil, errors.New("文件 uuid 列表不能为空")
+	}
+	seen := map[string]struct{}{}
+	clean := make([]string, 0, len(fileUUIDs))
+	for _, id := range fileUUIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	if len(clean) == 0 {
+		return "", nil, errors.New("文件 uuid 列表不能为空")
+	}
+
+	list = make([]FileItem, 0, len(clean))
+	for _, id := range clean {
+		att, err := s.get(id)
+		if err != nil {
+			return "", nil, fmt.Errorf("文件不存在: %s", id)
+		}
+		if att.Status != "ready" {
+			return "", nil, fmt.Errorf("文件未就绪: %s", id)
+		}
+		list = append(list, FileItem{UUID: att.UUID, URL: s.FileURL(att.UUID)})
+	}
+
+	refUUID = uuid.NewString()
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.AttachmentRef{RefUUID: refUUID}).Error; err != nil {
+			return err
+		}
+		for i, id := range clean {
+			item := model.AttachmentRefItem{RefUUID: refUUID, FileUUID: id, Sort: i}
+			if err := tx.Create(&item).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return refUUID, list, nil
+}
+
+// Resolve 按关联 ref_uuid 反查真实文件 uuid 与 url 列表。
+func (s *AttachService) Resolve(refUUID string) ([]FileItem, error) {
+	if refUUID == "" {
+		return []FileItem{}, nil
+	}
+	var items []model.AttachmentRefItem
+	if err := s.DB.Where("ref_uuid = ?", refUUID).Order("sort ASC, id ASC").Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, errors.New("关联记录不存在或无文件")
+	}
+	list := make([]FileItem, 0, len(items))
+	for _, it := range items {
+		att, err := s.get(it.FileUUID)
+		if err != nil {
+			return nil, fmt.Errorf("关联文件缺失: %s", it.FileUUID)
+		}
+		list = append(list, FileItem{UUID: att.UUID, URL: s.FileURL(att.UUID)})
+	}
+	return list, nil
 }
 
 // Meta 元数据。
 func (s *AttachService) Meta(uuidStr string) (*model.Attachment, error) {
-	att, err := s.get(uuidStr)
-	if err != nil {
-		return nil, err
-	}
-	return att, nil
+	return s.get(uuidStr)
 }
 
 // FilePath 已就绪文件路径。

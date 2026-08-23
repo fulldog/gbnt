@@ -157,15 +157,12 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req struct {
-		Note       string   `json:"note"`
-		PhotoUUIDs []string `json:"photo_uuids" binding:"required"`
-	}
+	var req service.RectifyInput
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "参数错误：需 photo_uuids")
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Rectify(id, req.Note, req.PhotoUUIDs)
+	item, err := d.Issue.Rectify(id, req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return

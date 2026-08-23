@@ -3,13 +3,19 @@ server:
   mode: debug # debug / release
 
 mysql:
-  dsn: "root:root@tcp(127.0.0.1:3306)/gbnt?charset=utf8mb4&parseTime=True&loc=Local"
+  dsn: "root:your_root_pass@tcp(43.133.161.184:3306)/gbnt?charset=utf8mb4&parseTime=True&loc=Local"
   max_idle: 10
   max_open: 50
 
+# 数据库迁移控制（启动时）
+migrate:
+  enabled: false   # true=执行 GORM AutoMigrate；false=跳过（生产可关）
+  seed: true      # true=空库写入种子数据；仅 enabled=true 时生效
+
 jwt:
   secret: "gbnt-dev-secret-change-me"
-  expire_hours: 72
+  expire_hours: 72          # access token 有效期
+  renew_before_hours: 24    # 剩余有效期低于此时触发滑动续期（响应头 X-New-Token）
 
 log:
   dir: "logs"
@@ -21,5 +27,5 @@ log:
 
 upload:
   root: "storage/uploads"
-  chunk_size: 2097152   # 2MB
+  chunk_size: 20971520   # 2MB
   max_file_size: 104857600 # 100MB

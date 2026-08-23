@@ -106,6 +106,9 @@ func AccessLog() gin.HandlerFunc {
 }
 
 // JWTAuth 校验 Bearer Token；whitelist 路径跳过。
+// 滑动续期：剩余有效期进入 renew 窗口时，签发新 token，经响应头带回：
+//
+//	X-New-Token / X-Token-Expires-At
 func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 	set := map[string]struct{}{}
 	for _, p := range whitelist {
@@ -117,7 +120,6 @@ func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		// 前缀白名单：附件分片上传可带 token，但 health 等精确匹配即可
 		auth := c.GetHeader("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
@@ -135,6 +137,16 @@ func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 		c.Set("user_name", claims.Name)
 		c.Set("org_id", claims.OrgID)
 		c.Set("role", claims.Role)
+
+		// 滑动续期：临近过期则换发新 token
+		if jm.NeedRenew(claims) {
+			if token, exp, err := jm.Resign(claims); err == nil {
+				c.Header("X-New-Token", token)
+				c.Header("X-Token-Expires-At", exp.UTC().Format(time.RFC3339))
+				// 便于浏览器跨域读取自定义头（若前端另配 CORS）
+				c.Writer.Header().Add("Access-Control-Expose-Headers", "X-New-Token, X-Token-Expires-At")
+			}
+		}
 		c.Next()
 	}
 }

@@ -41,20 +41,26 @@ func main() {
 	if err != nil {
 		logs.Error.Fatal("mysql", zap.Error(err))
 	}
-	if err := migrate.Auto(db); err != nil {
-		logs.Error.Fatal("migrate", zap.Error(err))
+	if cfg.Migrate.Enabled {
+		if err := migrate.Auto(db, migrate.Options{Seed: cfg.Migrate.Seed}); err != nil {
+			logs.Error.Fatal("migrate", zap.Error(err))
+		}
+		logs.Info.Info("migrate ok",
+			zap.Bool("seed", cfg.Migrate.Seed),
+		)
+	} else {
+		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"))
 	}
-	logs.Info.Info("migrate ok")
-
-	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours)
+	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
+	attachSvc := &service.AttachService{DB: db, Cfg: cfg.Upload}
 	deps := &handler.Deps{
 		DB:     db,
 		JWT:    jm,
 		Cfg:    cfg,
 		Auth:   &service.AuthService{DB: db, JWT: jm},
 		Sys:    &service.SysService{DB: db},
-		Issue:  &service.IssueService{DB: db},
-		Attach: &service.AttachService{DB: db, Cfg: cfg.Upload},
+		Issue:  &service.IssueService{DB: db, Attach: attachSvc},
+		Attach: attachSvc,
 		OpLog:  &service.OpLogService{DB: db},
 	}
 
@@ -66,6 +72,7 @@ func main() {
 	r.Use(middleware.JWTAuth(jm, []string{
 		"/api/health",
 		"/api/auth/login",
+		"/api/app/auth/login", // 小程序登录白名单
 	}))
 	handler.Register(r, deps)
 
