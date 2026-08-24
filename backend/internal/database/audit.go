@@ -20,8 +20,8 @@ type UserInfo struct {
 	Username string
 	Name     string
 	Phone    string
-	OrgID    string
-	Role     string
+	OrgID    uint64
+	RoleID   uint64
 }
 
 // WithUser 把当前用户写入 context，供审计字段与业务层读取。
@@ -53,10 +53,10 @@ func UserIDFromContext(ctx context.Context) int {
 	return int(u.ID)
 }
 
-// RegisterAuditCallbacks 创建时写 created_id+update_id，更新时写 update_id。
+// RegisterAuditCallbacks 创建时写 created_id+updated_id，更新时写 updated_id。
 func RegisterAuditCallbacks(db *gorm.DB) {
 	_ = db.Callback().Create().Before("gorm:create").Register("gbnt:created_id", fillCreatedAudit)
-	_ = db.Callback().Update().Before("gorm:update").Register("gbnt:update_id", fillUpdateAudit)
+	_ = db.Callback().Update().Before("gorm:update").Register("gbnt:updated_id", fillUpdateAudit)
 }
 
 func fillCreatedAudit(db *gorm.DB) {
@@ -70,7 +70,7 @@ func fillCreatedAudit(db *gorm.DB) {
 	if f := db.Statement.Schema.LookUpField("CreatedID"); f != nil {
 		_ = f.Set(db.Statement.Context, db.Statement.ReflectValue, uid)
 	}
-	if f := db.Statement.Schema.LookUpField("UpdateID"); f != nil {
+	if f := db.Statement.Schema.LookUpField("UpdatedID"); f != nil {
 		_ = f.Set(db.Statement.Context, db.Statement.ReflectValue, uid)
 	}
 }
@@ -79,12 +79,12 @@ func fillUpdateAudit(db *gorm.DB) {
 	if db.Statement == nil || db.Statement.Schema == nil {
 		return
 	}
-	if db.Statement.Schema.LookUpField("UpdateID") == nil {
+	if db.Statement.Schema.LookUpField("UpdatedID") == nil {
 		return
 	}
 	uid := UserIDFromContext(db.Statement.Context)
 	if uid == 0 {
 		return
 	}
-	db.Statement.SetColumn("update_id", uid)
+	db.Statement.SetColumn("updated_id", uid)
 }

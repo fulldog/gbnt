@@ -10,6 +10,7 @@ import (
 
 	"gbnt/backend/internal/config"
 	"gbnt/backend/internal/database"
+	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/jwtutil"
 	"gbnt/backend/pkg/response"
@@ -17,14 +18,16 @@ import (
 
 // Deps 处理器依赖。
 type Deps struct {
-	DB     *gorm.DB
-	JWT    *jwtutil.Manager
-	Cfg    *config.Config
-	Auth   *service.AuthService
-	Sys    *service.SysService
-	Issue  *service.IssueService
-	Attach *service.AttachService
-	OpLog  *service.OpLogService
+	DB      *gorm.DB
+	JWT     *jwtutil.Manager
+	Cfg     *config.Config
+	Auth    *service.AuthService
+	Captcha *service.CaptchaService
+	Sys     *service.SysService
+	Issue   *service.IssueService
+	Attach  *service.AttachService
+	OpLog   *service.OpLogService
+	Perm    *perm.Service
 }
 
 // Register 注册全部路由（管理端 /api + 小程序 /api/app）。
@@ -38,7 +41,9 @@ func Register(r *gin.Engine, d *Deps) {
 
 		auth := api.Group("/auth")
 		{
-			// POST /api/auth/login — 账号密码登录，返回 JWT
+			// GET /api/auth/captcha — 获取图形验证码（白名单）
+			auth.GET("/captcha", d.GetCaptcha)
+			// POST /api/auth/login — 账号密码 + 图形验证码登录，返回 JWT
 			auth.POST("/login", d.Login)
 			// GET /api/auth/me — 当前登录用户信息
 			auth.GET("/me", d.Me)
@@ -94,10 +99,12 @@ func Register(r *gin.Engine, d *Deps) {
 			sys.GET("/roles", d.ListRoles)
 			// POST /api/sys/roles — 新增角色
 			sys.POST("/roles", d.CreateRole)
-			// GET /api/sys/roles/:id/perms — 查询角色权限（:id 为角色 code；须与下方 :id 同名，Gin 禁止 :code/:id 混用）
-			sys.GET("/roles/:id/perms", d.GetRolePerms)
-			// PUT /api/sys/roles/:id/perms — 覆盖设置角色权限（:id 为角色 code）
-			sys.PUT("/roles/:id/perms", d.SetRolePerms)
+			// GET /api/sys/roles/:id/apis — 查询角色 API 权限（:id 为 role_id）
+			sys.GET("/roles/:id/apis", d.GetRoleAPIs)
+			// PUT /api/sys/roles/:id/apis — 覆盖设置角色 API 权限
+			sys.PUT("/roles/:id/apis", d.SetRoleAPIs)
+			// GET /api/sys/apis — API 目录列表
+			sys.GET("/apis", d.ListAPIs)
 			// PUT /api/sys/roles/:id — 更新角色（数字主键）
 			sys.PUT("/roles/:id", d.UpdateRole)
 			// DELETE /api/sys/roles/:id — 删除角色（数字主键）

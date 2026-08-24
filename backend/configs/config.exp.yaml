@@ -27,6 +27,20 @@ log:
 
 upload:
   root: "storage/uploads"
-  chunk_size: 20971520   # 2MB
-  max_file_size: 104857600 # 100MB
-  font: ""               # 水印 CJK 字体路径；空则 Windows 微软雅黑 / Linux Noto 或文泉驿
+  chunk_size: 20971520             # 预留：分片上传未实现，当前直传不使用
+  max_file_size: 20971520         # 100MB；单张图片大小上限
+  font: ""
+
+captcha:
+  enabled: true
+  length: 4
+  ttl_seconds: 300
+  width: 120
+  height: 40
+  slider_ttl_seconds: 300
+  pass_ttl_seconds: 180
+  slider_min_ms: 300
+  slider_max_ms: 8000
+
+rbac:
+  enabled: true

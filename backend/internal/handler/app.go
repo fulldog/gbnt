@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
@@ -14,7 +15,11 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 	{
 		auth := app.Group("/auth")
 		{
-			// POST /api/app/auth/login — 小程序登录（账密），签发同一套 JWT
+			// POST /api/app/auth/slider/start — 开始滑动验证（白名单）
+			auth.POST("/slider/start", d.AppSliderStart)
+			// POST /api/app/auth/slider/finish — 完成滑动，换取 pass_token（白名单）
+			auth.POST("/slider/finish", d.AppSliderFinish)
+			// POST /api/app/auth/login — 小程序登录（账密 + pass_token）
 			auth.POST("/login", d.AppLogin)
 			// GET /api/app/auth/me — 当前登录用户
 			auth.GET("/me", d.AppMe)
@@ -22,7 +27,7 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 
 		// GET /api/app/todos — 待办列表（默认 status=pending）
 		app.GET("/todos", d.AppListTodos)
-		// GET /api/app/regions — 行政区划树（街道→村/社区，上报/待办筛选）
+		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
 
 		issues := app.Group("/issues")
@@ -45,9 +50,74 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 	}
 }
 
-// AppLogin 小程序登录，复用 AuthService 签发 JWT。
+// AppSliderStart 开始滑动验证。
+func (d *Deps) AppSliderStart(c *gin.Context) {
+	if d.Captcha == nil {
+		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
+		return
+	}
+	id, exp, err := d.Captcha.SliderStart()
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"slider_id": id, "expire_seconds": exp})
+}
+
+// AppSliderFinish 完成滑动，换取一次性 pass_token。
+func (d *Deps) AppSliderFinish(c *gin.Context) {
+	var req struct {
+		SliderID   string `json:"slider_id" binding:"required"`
+		DurationMs int64  `json:"duration_ms" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	if d.Captcha == nil {
+		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
+		return
+	}
+	token, exp, err := d.Captcha.SliderFinish(req.SliderID, req.DurationMs)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"pass_token": token, "expire_seconds": exp})
+}
+
+// AppLoginReq 小程序登录请求（滑动 pass_token）。
+type AppLoginReq struct {
+	Username  string `json:"username" binding:"required"`
+	Password  string `json:"password" binding:"required"`
+	PassToken string `json:"pass_token"`
+}
+
+// AppLogin 小程序登录：账密 + pass_token。
 func (d *Deps) AppLogin(c *gin.Context) {
-	d.Login(c)
+	var req AppLoginReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	if d.Cfg != nil && d.Cfg.Captcha.Enabled {
+		if err := d.Captcha.VerifyPassToken(req.PassToken); err != nil {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+			return
+		}
+	}
+	user, token, exp, err := d.Auth.Login(req.Username, req.Password)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), service.UserInfoFromModel(user)))
+	d.OpLog.Mark(c, "登录", user.Username)
+	response.OK(c, gin.H{
+		"token":      token,
+		"expires_at": exp,
+		"user":       d.userPayload(user),
+	})
 }
 
 // AppMe 小程序当前用户。
@@ -80,37 +150,14 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size, "status": status})
 }
 
-// AppRegions 小程序行政区划：返回街道及下属村/社区（对齐 miniapp 双列滚筒数据源）。
+// AppRegions 小程序组织树：按 sys_orgs.parent_id 返回嵌套 children。
 func (d *Deps) AppRegions(c *gin.Context) {
-	orgs, err := d.Sys.ListOrgs()
+	tree, err := d.Sys.ListOrgTree()
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	type child struct {
-		ID   uint64 `json:"id"`
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	type street struct {
-		ID       uint64  `json:"id"`
-		Name     string  `json:"name"`
-		Children []child `json:"children"`
-	}
-	out := make([]street, 0)
-	for _, o := range orgs {
-		if o.Type != "street" {
-			continue
-		}
-		s := street{ID: o.ID, Name: o.Name, Children: []child{}}
-		for _, cld := range orgs {
-			if cld.ParentID == o.ID && (cld.Type == "village" || cld.Type == "community" || cld.Remark == "village" || cld.Remark == "community") {
-				s.Children = append(s.Children, child{ID: cld.ID, Name: cld.Name, Type: cld.Type})
-			}
-		}
-		out = append(out, s)
-	}
-	response.OK(c, gin.H{"list": out})
+	response.OK(c, gin.H{"list": tree})
 }
 
 // AppGetIssue 小程序问题详情。

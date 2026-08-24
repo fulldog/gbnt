@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gbnt/backend/internal/model"
+	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
@@ -67,7 +68,11 @@ func (d *Deps) DeleteOrg(c *gin.Context) {
 // —— 用户 ——
 
 func (d *Deps) ListUsers(c *gin.Context) {
-	list, total, err := d.Sys.ListUsers(c.Query("org_id"), c.Query("keyword"), atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20))
+	var orgID uint64
+	if v := c.Query("org_id"); v != "" {
+		orgID, _ = strconv.ParseUint(v, 10, 64)
+	}
+	list, total, err := d.Sys.ListUsers(orgID, c.Query("keyword"), atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20))
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -173,29 +178,50 @@ func (d *Deps) DeleteRole(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-func (d *Deps) GetRolePerms(c *gin.Context) {
-	// 路径参数名须为 id（与 CRUD 路由一致）；取值是角色 code，如 admin
-	list, err := d.Sys.GetRolePerms(c.Param("id"))
+func (d *Deps) GetRoleAPIs(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	ids, err := d.Sys.GetRoleAPIs(id)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	response.OK(c, list)
+	if id == perm.SuperAdminRoleID {
+		response.OK(c, gin.H{"api_ids": "*"})
+		return
+	}
+	response.OK(c, gin.H{"api_ids": ids})
 }
 
-func (d *Deps) SetRolePerms(c *gin.Context) {
+func (d *Deps) SetRoleAPIs(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
 	var req struct {
-		Perms []model.SysRolePerm `json:"perms" binding:"required"`
+		APIIDs []uint64 `json:"api_ids" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.SetRolePerms(c.Request.Context(), c.Param("id"), req.Perms); err != nil {
+	if err := d.Sys.SetRoleAPIs(c.Request.Context(), id, req.APIIDs); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
+	d.Sys.InvalidateRoleCache(id)
 	response.OK(c, nil)
+}
+
+func (d *Deps) ListAPIs(c *gin.Context) {
+	list, err := d.Sys.ListAPIs()
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, list)
 }
 
 // —— 字典 ——

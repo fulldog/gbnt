@@ -51,6 +51,7 @@ backend/
 ## Attachments
 
 - Direct batch images: `POST /api/attachments/images` (multipart `files` + `lat`/`lng`/`address`); watermark name from JWT `UserInfo` in context; return `data.list=[{file_id,url}]`
+- `upload.chunk_size` is reserved (chunk upload not implemented); only `root`, `max_file_size`, `font` are used
 - Business submits `file_uuids` (file_id 列表); backend Bind → `att_id` stored as `photo_ref_uuid`
 - Table: `attachment_ref_items` (`att_id` + `file_id`)
 
@@ -62,7 +63,9 @@ backend/
 ## Migration
 
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
-- When enabled: GORM AutoMigrate on startup; optional seed on empty DB
+- **`server.mode=debug`**: every startup TRUNCATE business tables + full bootstrap (orgs, roles, APIs, admin `admin/123456`, dict)
+- **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs`; seed only on empty DB when `migrate.seed=true`
+- Package layout: `migrate.go` (entry), `schema.go`, `dev_reset.go`, `seed.go`, `rbac.go`, `org_seed.go`, `sync_apis.go`
 - Soft delete: every table has `is_delete` (0/1); `Delete()` only flags, queries exclude deleted
 - Column order: business fields first; embed `Base` (`id/created_at/updated_at/created_id/update_id/is_delete`) at struct end
 - `created_id` / `update_id` filled from JWT `UserInfo` in request context via GORM callback

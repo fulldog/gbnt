@@ -1,136 +1,42 @@
-// Package migrate AutoMigrate + 版本化 SQL。
+// Package migrate 数据库结构迁移与种子数据。
+// server.mode=debug 时每次启动清空业务表并全量初始化；release 模式仅 AutoMigrate + 同步 API + 可选空库种子。
 package migrate
 
 import (
-	"time"
+	"strings"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-
-	"gbnt/backend/internal/model"
 )
 
 // Options 迁移选项。
 type Options struct {
-	Seed bool // 是否在空库写入种子
+	Seed bool // release 模式下空库是否写种子
+	Dev  bool // debug 模式：清空并全量初始化
 }
 
-// Auto 执行自动迁移；opts.Seed 为 true 时写入种子。
+// Auto 执行迁移。
 func Auto(db *gorm.DB, opts Options) error {
-	if err := db.AutoMigrate(
-		&model.SchemaMigration{},
-		&model.SysOrg{},
-		&model.SysUser{},
-		&model.SysRole{},
-		&model.SysRolePerm{},
-		&model.SysDictType{},
-		&model.SysDictField{},
-		&model.SysDictItem{},
-		&model.Issue{},
-		&model.OpLog{},
-		&model.Attachment{},
-		&model.AttachmentRefItem{},
-	); err != nil {
+	if opts.Dev {
+		if err := resetDev(db); err != nil {
+			return err
+		}
+	}
+	if err := ensureSchema(db); err != nil {
 		return err
 	}
-	if err := dropLegacyAttach(db); err != nil {
+	if opts.Dev {
+		return bootstrapSeed(db)
+	}
+	if err := SyncSysAPIs(db); err != nil {
 		return err
 	}
-	if !opts.Seed {
-		return nil
-	}
-	return seed(db)
-}
-
-func dropLegacyAttach(db *gorm.DB) error {
-	m := db.Migrator()
-	for _, name := range []string{"attachment_chunks", "attachment_refs"} {
-		if m.HasTable(name) {
-			if err := m.DropTable(name); err != nil {
-				return err
-			}
-		}
-	}
-	att := &model.Attachment{}
-	for _, col := range []string{"uploader_id", "chunk_size", "total_chunks", "uploaded_bits", "uuid"} {
-		if m.HasColumn(att, col) {
-			if err := m.DropColumn(att, col); err != nil {
-				return err
-			}
-		}
-	}
-	item := &model.AttachmentRefItem{}
-	for _, col := range []string{"ref_uuid", "file_uuid", "sort"} {
-		if m.HasColumn(item, col) {
-			if err := m.DropColumn(item, col); err != nil {
-				return err
-			}
-		}
+	if opts.Seed {
+		return seedIfEmpty(db)
 	}
 	return nil
 }
 
-func seed(db *gorm.DB) error {
-	var n int64
-	db.Model(&model.SysUser{}).Count(&n)
-	if n > 0 {
-		return nil
-	}
-
-	orgs := []model.SysOrg{
-		{OrgKey: "org-gov", ParentID: 0, Name: "聊城经济技术开发区管委会", Type: "gov", Sort: 1},
-		{OrgKey: "org-agri", ParentID: 0, Name: "农业农村局", Type: "bureau", Sort: 2},
-		{OrgKey: "org-jgt", ParentID: 0, Name: "蒋官屯街道", Type: "street", Sort: 3},
-		{OrgKey: "org-lg", ParentID: 0, Name: "李官屯新村", Type: "village", Remark: "village", Sort: 4},
-	}
-	// 修正 parent：先插入再按 key 关联
-	for i := range orgs {
-		if err := db.Create(&orgs[i]).Error; err != nil {
-			return err
-		}
-	}
-	var gov, street model.SysOrg
-	_ = db.Where("org_key = ?", "org-gov").First(&gov).Error
-	_ = db.Where("org_key = ?", "org-jgt").First(&street).Error
-	_ = db.Model(&model.SysOrg{}).Where("org_key = ?", "org-agri").Update("parent_id", gov.ID).Error
-	_ = db.Model(&model.SysOrg{}).Where("org_key = ?", "org-jgt").Update("parent_id", gov.ID).Error
-	_ = db.Model(&model.SysOrg{}).Where("org_key = ?", "org-lg").Update("parent_id", street.ID).Error
-
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	admin := model.SysUser{
-		Username: "admin",
-		Password: string(hash),
-		Name:     "李强",
-		Phone:    "13800000000",
-		OrgKey:   "org-gov",
-		Role:     "admin",
-		Status:   1,
-	}
-	if err := db.Create(&admin).Error; err != nil {
-		return err
-	}
-
-	role := model.SysRole{Code: "admin", Name: "管理员", Desc: "全部权限"}
-	if err := db.Create(&role).Error; err != nil {
-		return err
-	}
-
-	dictTypes := []model.SysDictType{
-		{Code: "well", Name: "机井", Sort: 1},
-		{Code: "road", Name: "道路", Sort: 2},
-		{Code: "bridge", Name: "桥涵", Sort: 3},
-		{Code: "forest", Name: "林网", Sort: 4},
-		{Code: "transformer", Name: "变压器", Sort: 5},
-	}
-	for i := range dictTypes {
-		if err := db.Create(&dictTypes[i]).Error; err != nil {
-			return err
-		}
-	}
-
-	_ = db.Create(&model.SchemaMigration{Version: "v1_init", AppliedAt: time.Now()}).Error
-	return nil
+// IsDevMode 根据 server.mode 判断是否开发模式。
+func IsDevMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "debug")
 }

@@ -11,148 +11,188 @@ import (
 
 // Base 公共字段（含软删标记 is_delete）；嵌入各表结构体末尾。
 type Base struct {
-	ID        uint64                `gorm:"primaryKey;autoIncrement" json:"id"`
-	CreatedAt time.Time             `json:"created_at"`
-	UpdatedAt time.Time             `json:"updated_at"`
-	CreatedID int                   `gorm:"column:created_id;index;default:0" json:"created_id"`
-	UpdateID  int                   `gorm:"column:update_id;index;default:0" json:"update_id"`
-	IsDelete  soft_delete.DeletedAt `gorm:"column:is_delete;softDelete:flag;index;default:0" json:"is_delete"`
+	ID        uint64                `gorm:"primaryKey;autoIncrement;comment:主键ID" json:"id"`
+	CreatedAt time.Time             `gorm:"comment:创建时间" json:"created_at"`
+	UpdatedAt time.Time             `gorm:"comment:更新时间" json:"updated_at"`
+	CreatedID int                   `gorm:"column:created_id;index;default:0;comment:创建人用户ID" json:"created_id"`
+	UpdatedID int                   `gorm:"column:updated_id;index;default:0;comment:最后更新人用户ID" json:"updated_id"`
+	IsDelete  soft_delete.DeletedAt `gorm:"column:is_delete;softDelete:flag;index;default:0;comment:软删标记 0正常 1已删" json:"is_delete"`
 }
 
-// SchemaMigration 迁移版本记录。
-type SchemaMigration struct {
-	Version   string                `gorm:"primaryKey;size:64" json:"version"`
-	AppliedAt time.Time             `json:"applied_at"`
-	IsDelete  soft_delete.DeletedAt `gorm:"column:is_delete;softDelete:flag;index;default:0" json:"is_delete"`
-}
-
-// SysOrg 组织架构（对齐前端 orgs / sysDepartments）。
+// SysOrg 组织架构（对齐 demo/web/sys-org.html · sysDepartments）。
 type SysOrg struct {
-	OrgKey   string `gorm:"size:64;uniqueIndex" json:"org_key"` // 如 org-gov
-	ParentID uint64 `gorm:"index;default:0" json:"parent_id"`
-	Name     string `gorm:"size:128;not null" json:"name"`
-	Type     string `gorm:"size:32" json:"type"` // gov/bureau/street/village/community
-	Remark   string `gorm:"size:64" json:"remark"`
-	Sort     int    `gorm:"default:0" json:"sort"`
+	ParentID uint64 `gorm:"index;default:0;comment:上级组织主键ID 0为根" json:"parent_id"`
+	Name     string `gorm:"size:128;not null;uniqueIndex;comment:组织名称" json:"name"`
+	Sort     int    `gorm:"default:0;comment:排序号 越小越靠前" json:"sort"`
 	Base
 }
+
+func (SysOrg) TableName() string { return "sys_orgs" }
 
 // SysUser 工作人员。
 type SysUser struct {
-	Username string `gorm:"size:64;uniqueIndex;not null" json:"username"`
-	Password string `gorm:"size:128;not null" json:"-"` // bcrypt
-	Name     string `gorm:"size:64" json:"name"`
-	Phone    string `gorm:"size:32" json:"phone"`
-	OrgKey   string `gorm:"size:64;index" json:"org_id"`
-	Role     string `gorm:"size:64" json:"role"`     // admin/street/village 等
-	Status   int    `gorm:"default:1" json:"status"` // 1 启用
+	Username string `gorm:"size:64;uniqueIndex;not null;comment:登录账号" json:"username"`
+	Password string `gorm:"size:128;not null;comment:密码 bcrypt 哈希" json:"-"`
+	Name     string `gorm:"size:64;comment:姓名" json:"name"`
+	Phone    string `gorm:"size:32;comment:手机号" json:"phone"`
+	OrgID    uint64 `gorm:"column:org_id;index;default:0;comment:所属组织主键ID" json:"org_id"`
+	RoleID   uint64 `gorm:"column:role_id;index;default:0;comment:角色主键ID" json:"role_id"`
+	Status   int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
 	Base
 }
+
+func (SysUser) TableName() string { return "sys_users" }
 
 // SysRole 角色。
 type SysRole struct {
-	Code string `gorm:"size:64;uniqueIndex" json:"code"`
-	Name string `gorm:"size:64" json:"name"`
-	Desc string `gorm:"size:255" json:"desc"`
+	Name   string `gorm:"size:64;comment:角色名称" json:"name"`
+	Desc   string `gorm:"size:255;comment:角色说明" json:"desc"`
+	Status int    `gorm:"default:1;comment:状态 1启用 0禁用" json:"status"`
 	Base
 }
 
-// SysRolePerm 角色权限（菜单 path + 动作）。
-type SysRolePerm struct {
-	RoleCode string `gorm:"size:64;index;uniqueIndex:uk_role_path_act" json:"role_code"`
-	Path     string `gorm:"size:128;uniqueIndex:uk_role_path_act" json:"path"`
-	Action   string `gorm:"size:32;uniqueIndex:uk_role_path_act" json:"action"` // query/create/...
+func (SysRole) TableName() string { return "sys_roles" }
+
+// SysAPI 需登录鉴权的 API 目录。
+type SysAPI struct {
+	Method  string `gorm:"size:8;uniqueIndex:uk_method_path;comment:HTTP方法" json:"method"`
+	Path    string `gorm:"size:256;uniqueIndex:uk_method_path;comment:路由模式 如/api/issues/:id" json:"path"`
+	Name    string `gorm:"size:128;comment:接口名称" json:"name"`
+	Module  string `gorm:"size:64;index;comment:权限模块" json:"module"`
+	Action  string `gorm:"size:32;comment:动作 view/create/edit/delete/import/export" json:"action"`
+	Sort    int    `gorm:"default:0;comment:排序" json:"sort"`
+	Enabled bool   `gorm:"default:1;comment:是否启用" json:"enabled"`
 	Base
 }
+
+func (SysAPI) TableName() string { return "sys_apis" }
+
+// SysRoleAPI 角色 ↔ API 授权。
+type SysRoleAPI struct {
+	RoleID uint64 `gorm:"index;uniqueIndex:uk_role_api;comment:角色ID" json:"role_id"`
+	APIID  uint64 `gorm:"index;uniqueIndex:uk_role_api;comment:API ID" json:"api_id"`
+	Base
+}
+
+func (SysRoleAPI) TableName() string { return "sys_role_apis" }
 
 // SysDictType 字典排查类型。
 type SysDictType struct {
-	Code string `gorm:"size:64;uniqueIndex" json:"code"` // well/road/...
-	Name string `gorm:"size:64" json:"name"`
-	Sort int    `json:"sort"`
+	Code string `gorm:"size:64;uniqueIndex;comment:类型编码 well/road/bridge/forest/transformer" json:"code"`
+	Name string `gorm:"size:64;comment:类型名称" json:"name"`
+	Sort int    `gorm:"comment:排序号" json:"sort"`
 	Base
 }
+
+func (SysDictType) TableName() string { return "sys_dict_types" }
 
 // SysDictField 字典字段。
 type SysDictField struct {
-	TypeCode string `gorm:"size:64;index;uniqueIndex:uk_type_field" json:"type_code"`
-	Code     string `gorm:"size:64;uniqueIndex:uk_type_field" json:"code"`
-	Name     string `gorm:"size:64" json:"name"`
-	Sort     int    `json:"sort"`
+	TypeCode string `gorm:"size:64;index;uniqueIndex:uk_type_field;comment:所属字典类型编码" json:"type_code"`
+	Code     string `gorm:"size:64;uniqueIndex:uk_type_field;comment:字段编码" json:"code"`
+	Name     string `gorm:"size:64;comment:字段名称" json:"name"`
+	Sort     int    `gorm:"comment:排序号" json:"sort"`
 	Base
 }
+
+func (SysDictField) TableName() string { return "sys_dict_fields" }
 
 // SysDictItem 字典选项值。
 type SysDictItem struct {
-	FieldID uint64 `gorm:"index" json:"field_id"`
-	Label   string `gorm:"size:128" json:"label"`
-	Value   string `gorm:"size:128" json:"value"`
-	Sort    int    `json:"sort"`
+	FieldID uint64 `gorm:"index;comment:所属字典字段主键ID" json:"field_id"`
+	Label   string `gorm:"size:128;comment:选项展示文案" json:"label"`
+	Value   string `gorm:"size:128;comment:选项存储值" json:"value"`
+	Sort    int    `gorm:"comment:排序号" json:"sort"`
 	Base
 }
+
+func (SysDictItem) TableName() string { return "sys_dict_items" }
 
 // Issue 排查/整改主表（对齐前端 issues）。
 type Issue struct {
-	IssueKey      string     `gorm:"size:64;uniqueIndex" json:"issue_key"` // 业务侧可读 id
-	Type          string     `gorm:"size:32;index" json:"type"`            // well/road/bridge/forest/transformer
-	Street        string     `gorm:"size:64;index" json:"street"`
-	Village       string     `gorm:"size:64;index" json:"village"`
-	ProjectName   string     `gorm:"size:128" json:"project_name"`
-	Code          string     `gorm:"size:64" json:"code"`
-	LocationText  string     `gorm:"size:255" json:"location_text"`
-	Address       string     `gorm:"size:255" json:"address"`
-	Lat           float64    `json:"lat"`
-	Lng           float64    `json:"lng"`
-	Description   string     `gorm:"type:text" json:"description"`
-	Measures      string     `gorm:"type:text" json:"measures"`
-	PlanDate      string     `gorm:"size:16;index" json:"plan_date"` // YYYY-MM-DD
-	Status        string     `gorm:"size:16;index" json:"status"`    // pending/done
-	ReporterID    uint64     `gorm:"index" json:"reporter_id"`
-	ReporterName  string     `gorm:"size:64" json:"reporter_name"`
-	ReporterPhone string     `gorm:"size:32" json:"reporter_phone"`
-	AssigneeName  string     `gorm:"size:64" json:"assignee_name"`
-	AssigneePhone string     `gorm:"size:32" json:"assignee_phone"`
-	RectifyNote   string     `gorm:"type:text" json:"rectify_note"`
-	RectifyAt     *time.Time `json:"rectify_at"`
-	// TypeExt 类型扩展字段 JSON（well/road/...）
-	TypeExt string `gorm:"type:json" json:"type_ext"`
-	// PhotoRefUUID 现场照片关联组 uuid（一对多，业务只落此字段）
-	PhotoRefUUID string `gorm:"size:36;index" json:"photo_ref_uuid"`
-	// RectifyPhotoRefUUID 整改照片关联组 uuid
-	RectifyPhotoRefUUID string `gorm:"size:36;index" json:"rectify_photo_ref_uuid"`
+	IssueKey            string     `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
+	Type                string     `gorm:"size:32;index;comment:问题类型 well/road/bridge/forest/transformer" json:"type"`
+	Street              string     `gorm:"size:64;index;comment:街道" json:"street"`
+	Village             string     `gorm:"size:64;index;comment:村或社区" json:"village"`
+	ProjectName         string     `gorm:"size:128;comment:项目名称" json:"project_name"`
+	Code                string     `gorm:"size:64;comment:设施编号或点位编号" json:"code"`
+	LocationText        string     `gorm:"size:255;comment:位置描述" json:"location_text"`
+	Address             string     `gorm:"size:255;comment:详细地址" json:"address"`
+	Lat                 float64    `gorm:"comment:纬度" json:"lat"`
+	Lng                 float64    `gorm:"comment:经度" json:"lng"`
+	Description         string     `gorm:"type:text;comment:问题描述" json:"description"`
+	Measures            string     `gorm:"type:text;comment:整改措施" json:"measures"`
+	PlanDate            string     `gorm:"size:16;index;comment:计划完成日 YYYY-MM-DD" json:"plan_date"`
+	Status              string     `gorm:"size:16;index;comment:状态 pending待整改 done已整改" json:"status"`
+	ReporterID          uint64     `gorm:"index;comment:上报人用户ID" json:"reporter_id"`
+	ReporterName        string     `gorm:"size:64;comment:上报人姓名" json:"reporter_name"`
+	ReporterPhone       string     `gorm:"size:32;comment:上报人电话" json:"reporter_phone"`
+	AssigneeName        string     `gorm:"size:64;comment:整改责任人" json:"assignee_name"`
+	AssigneePhone       string     `gorm:"size:32;comment:整改责任人电话" json:"assignee_phone"`
+	RectifyNote         string     `gorm:"type:text;comment:整改说明" json:"rectify_note"`
+	RectifyAt           *time.Time `gorm:"comment:整改完成时间" json:"rectify_at"`
+	TypeExt             string     `gorm:"type:json;comment:类型扩展字段JSON" json:"type_ext"`
+	PhotoRefUUID        string     `gorm:"size:36;index;comment:现场照片关联组att_id" json:"photo_ref_uuid"`
+	RectifyPhotoRefUUID string     `gorm:"size:36;index;comment:整改照片关联组att_id" json:"rectify_photo_ref_uuid"`
 	Base
 }
+
+func (Issue) TableName() string { return "issues" }
 
 // OpLog 操作日志。
 type OpLog struct {
-	UserID   uint64 `gorm:"index" json:"user_id"`
-	Username string `gorm:"size:64" json:"username"`
-	Action   string `gorm:"size:64;index" json:"action"`
-	Detail   string `gorm:"size:512" json:"detail"`
-	Path     string `gorm:"size:128" json:"path"`
-	TraceID  string `gorm:"size:64;index" json:"trace_id"`
-	IP       string `gorm:"size:64" json:"ip"`
-	Request  string `gorm:"type:text" json:"request"`
-	Response string `gorm:"type:text" json:"response"`
+	UserID   uint64 `gorm:"index;comment:操作用户ID" json:"user_id"`
+	Username string `gorm:"size:64;comment:操作用户名" json:"username"`
+	Action   string `gorm:"size:64;index;comment:操作动作" json:"action"`
+	Detail   string `gorm:"size:512;comment:操作摘要" json:"detail"`
+	Path     string `gorm:"size:128;comment:请求路径" json:"path"`
+	TraceID  string `gorm:"size:64;index;comment:请求链路ID" json:"trace_id"`
+	IP       string `gorm:"size:64;comment:客户端IP" json:"ip"`
+	Request  string `gorm:"type:text;comment:请求参数" json:"request"`
+	Response string `gorm:"type:text;comment:响应内容" json:"response"`
 	Base
 }
+
+func (OpLog) TableName() string { return "op_logs" }
 
 // Attachment 附件主记录。
 type Attachment struct {
-	FileID      string `gorm:"column:file_id;size:36;uniqueIndex;not null" json:"file_id"`
-	OrigName    string `gorm:"size:255" json:"orig_name"` // 上传时的原始文件名
-	FileName    string `gorm:"size:255" json:"file_name"` // 落盘文件名（原名_userID_毫秒）
-	ContentType string `gorm:"size:128" json:"content_type"`
-	Size        int64  `json:"size"`
-	MD5         string `gorm:"size:64" json:"md5"`
-	Status      string `gorm:"size:16;index" json:"status"` // success / failed 等
-	StoragePath string `gorm:"size:512" json:"storage_path"`
+	FileID      string `gorm:"column:file_id;size:36;uniqueIndex;not null;comment:文件业务UUID" json:"file_id"`
+	OrigName    string `gorm:"size:255;comment:上传原始文件名" json:"orig_name"`
+	FileName    string `gorm:"size:255;comment:落盘文件名" json:"file_name"`
+	ContentType string `gorm:"size:128;comment:MIME类型" json:"content_type"`
+	Size        int64  `gorm:"comment:文件大小字节" json:"size"`
+	MD5         string `gorm:"size:64;comment:文件MD5" json:"md5"`
+	Status      string `gorm:"size:16;index;comment:状态 success/failed 等" json:"status"`
+	StoragePath string `gorm:"size:512;comment:本地存储相对路径" json:"storage_path"`
 	Base
 }
 
+func (Attachment) TableName() string { return "attachments" }
+
 // AttachmentRefItem 附件关联明细：一组 att_id 对应多个 file_id。
 type AttachmentRefItem struct {
-	AttID  string `gorm:"column:att_id;size:36;index;uniqueIndex:uk_att_file;not null" json:"att_id"`
-	FileID string `gorm:"column:file_id;size:36;uniqueIndex:uk_att_file;index;not null" json:"file_id"`
+	AttID  string `gorm:"column:att_id;size:36;index;uniqueIndex:uk_att_file;not null;comment:关联组ID 业务落库用" json:"att_id"`
+	FileID string `gorm:"column:file_id;size:36;uniqueIndex:uk_att_file;index;not null;comment:文件UUID" json:"file_id"`
 	Base
+}
+
+func (AttachmentRefItem) TableName() string { return "attachment_ref_items" }
+
+// TableComments 表名 → 表注释（迁移时 ALTER TABLE COMMENT）。
+func TableComments() map[string]string {
+	return map[string]string{
+		"sys_orgs":             "组织架构",
+		"sys_users":            "工作人员/系统用户",
+		"sys_roles":            "角色",
+		"sys_apis":             "API目录",
+		"sys_role_apis":        "角色API授权",
+		"sys_dict_types":       "数据字典-排查类型",
+		"sys_dict_fields":      "数据字典-字段定义",
+		"sys_dict_items":       "数据字典-选项值",
+		"issues":               "排查整改问题主表",
+		"op_logs":              "操作日志",
+		"attachments":          "附件文件主表",
+		"attachment_ref_items": "附件一对多关联明细",
+	}
 }

@@ -13,13 +13,27 @@ Base URL：`http://127.0.0.1:8080`
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/health` | 健康检查 |
-| POST | `/api/auth/login` | 登录，body: `{username,password}` |
+| GET | `/api/auth/captcha` | 图形验证码，返回 `{captcha_id,image_base64,expire_seconds}` |
+| POST | `/api/auth/login` | 登录，body: `{username,password,captcha_id,captcha}`（`captcha.enabled=false` 时可省略验证码） |
 
 ## 鉴权
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/auth/me` | 当前用户 |
+| GET | `/api/auth/me` | 当前用户（含 `role_id`、`apis`；超管 `apis` 为 `"*"`） |
+
+### RBAC 接口权限
+
+JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac.enabled=false` 时跳过）。
+
+| 项 | 说明 |
+| --- | --- |
+| 超管 | `sys_roles.id = 1`，拥有全部 API，不写 `sys_role_apis` |
+| 管理员保护 | `role_id = 1` 不可删改（含 API 授权） |
+| 角色状态 | `sys_roles.status`：`1` 启用 / `0` 禁用；禁用后该角色用户无法登录且 token 失效 |
+| action 继承 | 同 `module` 下 `create/edit/delete/import/export` 均隐含 `view` |
+| 登录即可 | `/api/auth/me`、`POST /api/attachments/images` 不做 RBAC |
+| 小程序 | **`/api/app/*` 整段仅 JWT**，不入 `sys_apis`、不做 RBAC |
 
 ## 工作台
 
@@ -53,14 +67,14 @@ Base URL：`http://127.0.0.1:8080`
 | GET | `/api/sys/orgs` | 列表 |
 | POST | `/api/sys/orgs` | 新增 |
 | PUT | `/api/sys/orgs/:id` | 更新 |
-| DELETE | `/api/sys/orgs/:id` | 删除（根 org-gov 不可删） |
+| DELETE | `/api/sys/orgs/:id` | 删除（根节点 parent_id=0 不可删） |
 
 ## 系统 · 人员
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/sys/users` | 列表，query: org_id/keyword/page/size |
-| POST | `/api/sys/users` | 新增 |
+| POST | `/api/sys/users` | 新增（`role_id`） |
 | PUT | `/api/sys/users/:id` | 更新 |
 | DELETE | `/api/sys/users/:id` | 删除 |
 
@@ -68,12 +82,13 @@ Base URL：`http://127.0.0.1:8080`
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/sys/roles` | 列表 |
+| GET | `/api/sys/roles` | 列表（含 `status`） |
 | POST | `/api/sys/roles` | 新增 |
-| PUT | `/api/sys/roles/:id` | 更新 |
-| DELETE | `/api/sys/roles/:id` | 删除 |
-| GET | `/api/sys/roles/:id/perms` | 权限列表（`:id` 为角色 code，如 `admin`） |
-| PUT | `/api/sys/roles/:id/perms` | 覆盖权限 `{perms:[]}`（`:id` 为角色 code） |
+| PUT | `/api/sys/roles/:id` | 更新（`:id=1` 不可编辑） |
+| DELETE | `/api/sys/roles/:id` | 删除（`:id=1` 不可删；仍有用户绑定时拒绝） |
+| GET | `/api/sys/roles/:id/apis` | 角色已授权 API id 列表（超管返回 `"*"`） |
+| PUT | `/api/sys/roles/:id/apis` | 覆盖授权 `{api_ids:[1,2,3]}`（`:id=1` 不可编辑） |
+| GET | `/api/sys/apis` | 全量 API 目录（供授权 UI） |
 
 ## 系统 · 字典
 
@@ -94,52 +109,69 @@ Base URL：`http://127.0.0.1:8080`
 
 ## 附件（独立）
 
+当前仅实现**批量直传**一条 HTTP 接口；分片 init / chunk / complete、bind、download 等**未注册路由**（业务侧在提交 Issue 时由后台内部 `Bind` 关联，无需单独调 bind）。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/attachments/images` | **批量直传图片**（multipart，无需分片）；逐张打水印后 `data.list=[{uuid,url}]` |
-| POST | `/api/attachments/init` | 单文件 init → uuid；可带 `user_name`/`lat`/`lng`/`address`（图片水印） |
-| POST | `/api/attachments/batch-init` | 批量 init；顶层水印字段应用到每个文件 |
-| POST | `/api/attachments/complete-batch` | 批量 complete；图片烧录水印，`data.list=[{uuid,url}]` |
-| POST | `/api/attachments/bind` | `file_uuids` → `{ref_uuid, list}` |
-| GET | `/api/attachments/refs/:ref_uuid` | 反查关联文件 list |
-| GET | `/api/attachments/:uuid/status` | 进度 / missing_chunks |
-| PUT | `/api/attachments/:uuid/chunks/:index` | 上传分片（body=二进制） |
-| POST | `/api/attachments/:uuid/complete` | 合并完成；图片烧录左下角水印（body 可选同上水印字段） |
-| GET | `/api/attachments/:uuid` | 元数据 |
-| GET | `/api/attachments/:uuid/download` | 下载 |
+| POST | `/api/attachments/images` | 批量直传图片（multipart）；**登录即可**，不做 RBAC |
+
+**静态访问**：落盘文件经 Gin 静态目录 **`GET /uploads/...`** 直接访问（非 `/api/attachments/*`）。
+
+### `POST /api/attachments/images`
+
+| 项 | 说明 |
+| --- | --- |
+| Content-Type | `multipart/form-data` |
+| 文件字段 | `files`（多选）；无 `files` 时可退化为单字段 `file` |
+| 水印表单 | `lat`、`lng`、`address`（可选）；**上报人姓名取当前登录用户**，不传 `user_name` |
+| 限制 | jpg/png/gif/webp；单张 ≤ `upload.max_file_size`；**一次最多 20 张** |
+| 响应 | `data.list = [{file_id, url}, ...]`；`url` 形如 `/uploads/2026/08/24/xxx_{user_id}_{ms}.jpg` |
 
 ### 业务附件字段
 
-- 新建 Issue：`file_uuids`（文件 uuid 列表）→ 落库 `photo_ref_uuid`
-- 修改 Issue：`photo_ref_uuid` 非空=不变；为空则 `file_uuids` 重新关联
-- 整改：`file_uuids` / `rectify_photo_ref_uuid` 同上
-- 查询：返回 `photo_ref_uuid`（实为 att_id）+ `photos:[{file_id,url}]`（整改同理 `rectify_photos`）
+1. 先调 **`POST /api/attachments/images`**，收集返回的 **`file_id`**
+2. 业务 JSON 仍用字段名 **`file_uuids`**，值为上述 **`file_id` 列表**（历史命名，非分片 uuid）
+3. 新建 Issue：`file_uuids` 必填 → 后台内部建关联组，落库 **`photo_ref_uuid`**（实为 `att_id`）
+4. 修改 Issue：`photo_ref_uuid` 非空 = 附件不变；为空则须重新传 `file_uuids`
+5. 整改：`file_uuids` / `rectify_photo_ref_uuid` 规则同上
+6. 查询：返回 `photo_ref_uuid` + **`photos:[{file_id,url}]`**（整改同理 `rectify_photos`）
 
 ### 图片水印
 
-合并完成时对 jpg/png/gif/webp **烧录**左下角取证水印（对齐现场照片样式）：
+直传时对 jpg/png/gif/webp **烧录**左下角取证水印：
 
 1. 最上一行加粗 **地址** `address`
-2. 黄竖条 + **度分秒** `lat/lng`（如 `36°26'56"N, 115°58'55"E`）
+2. 黄竖条 + **度分秒** `lat/lng`
 3. **时间** `YYYY年M月D日 HH:MM`（服务器本地时区）
-4. **上报人** `user_name`
+4. **上报人** = JWT 当前用户姓名
 
-参数可在 `POST /api/attachments/images`（multipart）或 `init` / `complete` 传入。未传 `user_name` 时用当前登录用户姓名。非图片不处理。一次最多 20 张。Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测微软雅黑。
+Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测微软雅黑。
+
+### 上传配置（`upload`）
+
+| 参数 | 生效 | 说明 |
+| --- | --- | --- |
+| `root` | 是 | 落盘根目录；静态访问 `GET /uploads/...` |
+| `max_file_size` | 是 | 单张图片大小上限（字节） |
+| `font` | 是 | 水印中文字体路径；空则自动探测 |
+| `chunk_size` | **否** | **预留**；分片上传未实现，直传流程不读取 |
 
 ---
 
 ## 小程序 app API（`/api/app`）
 
-面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序直接调现有 `/api/attachments/*`（init / 分片 / complete → `file_uuids`）。
+面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，再在业务 body 传 `file_uuids`。
 
-白名单额外包含：`POST /api/app/auth/login`。
+白名单额外包含：`POST /api/app/auth/slider/start`、`POST /api/app/auth/slider/finish`、`POST /api/app/auth/login`。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/app/auth/login` | 登录，body: `{username,password}` → JWT（公开） |
-| GET | `/api/app/auth/me` | 当前用户 |
+| POST | `/api/app/auth/slider/start` | 开始滑动验证 → `{slider_id,expire_seconds}`（公开） |
+| POST | `/api/app/auth/slider/finish` | 完成滑动，body: `{slider_id,duration_ms}` → `{pass_token,expire_seconds}`（公开；耗时须在配置区间内） |
+| POST | `/api/app/auth/login` | 登录，body: `{username,password,pass_token}` → JWT（公开；`captcha.enabled=false` 时可省略 pass_token） |
+| GET | `/api/app/auth/me` | 当前用户（含 `role_id`、`apis`） |
 | GET | `/api/app/todos` | 待办列表；query: type/status/street/village/keyword/page/size；**未传 status 默认 pending**；`status=all` 不限 |
-| GET | `/api/app/regions` | 行政区划树（街道→村/社区） |
+| GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
 | GET | `/api/app/issues/:id` | 问题详情（含 lat/lng，地图页复用） |
 | POST | `/api/app/issues` | 上报（`file_uuids` → `photo_ref_uuid`；提交即 pending） |
 | POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` / `rectify_photo_ref_uuid` |

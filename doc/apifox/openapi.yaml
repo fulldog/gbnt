@@ -21,7 +21,7 @@ tags:
   - name: 操作日志
   - name: 附件
   - name: 小程序
-    description: 小程序端独立 API（/api/app）；附件复用 /api/attachments
+    description: 小程序端独立 API（/api/app）；附件直传 POST /api/attachments/images
 components:
   securitySchemes:
     bearerAuth:
@@ -34,11 +34,6 @@ components:
       name: id
       required: true
       schema: { type: integer, format: int64 }
-    UuidPath:
-      in: path
-      name: uuid
-      required: true
-      schema: { type: string, format: uuid }
   schemas:
     Envelope:
       type: object
@@ -54,6 +49,21 @@ components:
       properties:
         username: { type: string, example: admin }
         password: { type: string, example: "123456" }
+        captcha_id: { type: string, description: Web 图形验证码会话 ID；captcha.enabled=false 时可省略 }
+        captcha: { type: string, description: 图形验证码答案；captcha.enabled=false 时可省略 }
+    AppLoginReq:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: admin }
+        password: { type: string, example: "123456" }
+        pass_token: { type: string, description: 滑动验证一次性令牌；captcha.enabled=false 时可省略 }
+    SliderFinishReq:
+      type: object
+      required: [slider_id, duration_ms]
+      properties:
+        slider_id: { type: string }
+        duration_ms: { type: integer, description: 滑动耗时毫秒，须在配置区间内 }
     IssueInput:
       type: object
       properties:
@@ -75,7 +85,7 @@ components:
         assignee_phone: { type: string }
         file_uuids:
           type: array
-          description: 文件 uuid 列表（新建必填；修改且 photo_ref_uuid 为空时必填）
+          description: 上传接口返回的 file_id 列表（字段名沿用 file_uuids；新建必填；修改且 photo_ref_uuid 为空时必填）
           items: { type: string, format: uuid }
         photo_ref_uuid:
           type: string
@@ -84,36 +94,24 @@ components:
     FileItem:
       type: object
       properties:
-        uuid: { type: string, format: uuid }
-        url: { type: string, example: "/api/attachments/{uuid}/download" }
-    AttachWatermark:
+        file_id: { type: string, format: uuid }
+        url: { type: string, example: "/uploads/2026/08/24/photo_1_1724512345678.jpg" }
+    AttachImageForm:
       type: object
-      description: 图片水印（左下角：地址加粗、黄竖条、度分秒、时间、上报人）。非图片忽略。
+      description: multipart 表单；上报人姓名由服务端从 JWT 读取，无需传 user_name
       properties:
-        user_name: { type: string, description: 上报人姓名 }
+        files:
+          type: array
+          items: { type: string, format: binary }
+          description: 多图字段名 files；单图可用 file
         lat: { type: number, example: 36.4489 }
         lng: { type: number, example: 115.982 }
         address: { type: string, example: 程麻新村西排灌沟桥 }
-    AttachInitReq:
-      type: object
-      required: [file_name, size]
-      properties:
-        file_name: { type: string }
-        size: { type: integer, format: int64 }
-        content_type: { type: string }
-        md5: { type: string }
-        user_name: { type: string }
-        lat: { type: number }
-        lng: { type: number }
-        address: { type: string }
     Org:
       type: object
       properties:
-        org_key: { type: string }
-        parent_id: { type: integer }
+        parent_id: { type: integer, format: int64 }
         name: { type: string }
-        type: { type: string }
-        remark: { type: string }
         sort: { type: integer }
     UserInput:
       type: object
@@ -122,8 +120,8 @@ components:
         password: { type: string }
         name: { type: string }
         phone: { type: string }
-        org_id: { type: string }
-        role: { type: string }
+        org_id: { type: integer, format: int64 }
+        role_id: { type: integer, format: int64 }
         status: { type: integer }
 security:
   - bearerAuth: []
@@ -139,10 +137,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
+  /api/auth/captcha:
+    get:
+      tags: [鉴权]
+      summary: 获取图形验证码
+      description: 返回 captcha_id 与 PNG base64（含 data URI 前缀）。公开接口。
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
   /api/auth/login:
     post:
       tags: [鉴权]
       summary: 登录
+      description: 账号密码 + 图形验证码（captcha.enabled=false 时可省略验证码字段）。
       security: []
       requestBody:
         required: true
@@ -484,9 +495,9 @@ paths:
             schema:
               type: object
               properties:
-                code: { type: string }
                 name: { type: string }
                 desc: { type: string }
+                status: { type: integer, description: "1启用 0禁用" }
       responses:
         "200":
           description: ok
@@ -496,7 +507,7 @@ paths:
   /api/sys/roles/{id}:
     put:
       tags: [角色]
-      summary: 更新角色
+      summary: 更新角色（id=1 不可编辑）
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -508,6 +519,7 @@ paths:
               properties:
                 name: { type: string }
                 desc: { type: string }
+                status: { type: integer, description: "1启用 0禁用" }
       responses:
         "200":
           description: ok
@@ -516,7 +528,7 @@ paths:
               schema: { $ref: "#/components/schemas/Envelope" }
     delete:
       tags: [角色]
-      summary: 删除角色
+      summary: 删除角色（id=1 不可删）
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
@@ -525,31 +537,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/roles/{id}/perms:
+  /api/sys/roles/{id}/apis:
     get:
       tags: [角色]
-      summary: 角色权限（path id 为角色 code，如 admin）
+      summary: 角色 API 权限（path id 为 role_id）
       parameters:
-        - in: path
-          name: id
-          required: true
-          description: 角色 code（非数字主键）
-          schema: { type: string }
+        - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
+          description: ok；超管 role_id=1 时 data.api_ids 为 "*"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     put:
       tags: [角色]
-      summary: 覆盖角色权限（path id 为角色 code）
+      summary: 覆盖角色 API 权限
       parameters:
-        - in: path
-          name: id
-          required: true
-          description: 角色 code（非数字主键）
-          schema: { type: string }
+        - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
@@ -557,13 +561,19 @@ paths:
             schema:
               type: object
               properties:
-                perms:
+                api_ids:
                   type: array
-                  items:
-                    type: object
-                    properties:
-                      path: { type: string }
-                      action: { type: string }
+                  items: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/apis:
+    get:
+      tags: [角色]
+      summary: API 目录列表（供授权 UI）
       responses:
         "200":
           description: ok
@@ -684,221 +694,64 @@ paths:
   /api/attachments/images:
     post:
       tags: [附件]
-      summary: 批量直传图片（逐张打水印，无需分片）
+      summary: 批量直传图片（逐张打水印）
+      description: |
+        当前唯一附件 HTTP 接口。分片 init/chunk/complete、bind、download 等未实现。
+        静态访问返回的 url（/uploads/...）。一次最多 20 张。
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
-              type: object
-              required: [files]
-              properties:
-                files:
-                  type: array
-                  items: { type: string, format: binary }
-                  description: 图片文件，字段名 files（可多张）；也可用 file
-                user_name: { type: string }
-                lat: { type: number }
-                lng: { type: number }
-                address: { type: string }
+              $ref: "#/components/schemas/AttachImageForm"
       responses:
         "200":
-          description: data.list = FileItem[]
+          description: data.list = FileItem[]（file_id + url）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/init:
-    post:
-      tags: [附件]
-      summary: 初始化上传（返回 uuid）
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AttachInitReq" }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/batch-init:
-    post:
-      tags: [附件]
-      summary: 批量初始化
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [files]
-              properties:
-                files:
-                  type: array
-                  items: { $ref: "#/components/schemas/AttachInitReq" }
-                user_name: { type: string }
-                lat: { type: number }
-                lng: { type: number }
-                address: { type: string }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/complete-batch:
-    post:
-      tags: [附件]
-      summary: 批量完成上传（图片烧录水印），返回 list[{uuid,url}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [uuids]
-              properties:
-                uuids:
-                  type: array
-                  items: { type: string, format: uuid }
-                user_name: { type: string }
-                lat: { type: number }
-                lng: { type: number }
-                address: { type: string }
-      responses:
-        "200":
-          description: data.list = FileItem[]
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/bind:
-    post:
-      tags: [附件]
-      summary: 文件 uuid 列表创建一对多关联
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [file_uuids]
-              properties:
-                file_uuids:
-                  type: array
-                  items: { type: string, format: uuid }
-      responses:
-        "200":
-          description: data = {ref_uuid, list}
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/refs/{ref_uuid}:
-    get:
-      tags: [附件]
-      summary: 按关联 ref_uuid 反查文件 list
-      parameters:
-        - in: path
-          name: ref_uuid
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        "200":
-          description: data.list = FileItem[]
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/{uuid}/status:
-    get:
-      tags: [附件]
-      summary: 上传进度与缺失分片
-      parameters:
-        - $ref: "#/components/parameters/UuidPath"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/{uuid}/chunks/{index}:
-    put:
-      tags: [附件]
-      summary: 上传分片（body 为二进制）
-      parameters:
-        - $ref: "#/components/parameters/UuidPath"
-        - in: path
-          name: index
-          required: true
-          schema: { type: integer }
-      requestBody:
-        required: true
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/{uuid}/complete:
-    post:
-      tags: [附件]
-      summary: 合并分片完成上传；图片烧录左下角水印
-      parameters:
-        - $ref: "#/components/parameters/UuidPath"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/AttachWatermark" }
-      responses:
-        "200":
-          description: data.list = FileItem[]
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/{uuid}:
-    get:
-      tags: [附件]
-      summary: 附件元数据
-      parameters:
-        - $ref: "#/components/parameters/UuidPath"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/{uuid}/download:
-    get:
-      tags: [附件]
-      summary: 下载附件
-      parameters:
-        - $ref: "#/components/parameters/UuidPath"
-      responses:
-        "200":
-          description: 文件流
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
 
   # ---------- 小程序 /api/app ----------
-  /api/app/auth/login:
+  /api/app/auth/slider/start:
     post:
       tags: [小程序]
-      summary: 小程序登录
-      description: 账密登录，签发与管理端同一套 JWT。公开接口。
+      summary: 开始滑动验证
+      description: 返回 slider_id。公开接口。
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/auth/slider/finish:
+    post:
+      tags: [小程序]
+      summary: 完成滑动验证
+      description: 校验 duration_ms 后签发一次性 pass_token。公开接口。
       security: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/LoginReq" }
+            schema: { $ref: "#/components/schemas/SliderFinishReq" }
+      responses:
+        "200":
+          description: 返回 pass_token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/app/auth/login:
+    post:
+      tags: [小程序]
+      summary: 小程序登录
+      description: 账密 + pass_token（captcha.enabled=false 时可省略 pass_token）。签发与管理端同一套 JWT。公开接口。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppLoginReq" }
       responses:
         "200":
           description: 返回 token 与用户信息
@@ -954,11 +807,11 @@ paths:
   /api/app/regions:
     get:
       tags: [小程序]
-      summary: 行政区划树
-      description: 街道 → 村/社区，供待办筛选与上报区划滚筒。
+      summary: 组织树
+      description: 按 sys_orgs.parent_id 嵌套 children，供上报/待办区划选择。
       responses:
         "200":
-          description: data.list = [{id,name,children:[{id,name,type}]}]
+          description: data.list = [{id,name,parent_id,sort,children:[...]}]
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -966,7 +819,7 @@ paths:
     post:
       tags: [小程序]
       summary: 上报问题
-      description: 提交即待整改；file_uuids → photo_ref_uuid。附件先调 /api/attachments/*。
+      description: 提交即待整改；先 POST /api/attachments/images 取 file_id，再传 file_uuids → photo_ref_uuid。
       requestBody:
         required: true
         content:

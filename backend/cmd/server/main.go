@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"gbnt/backend/internal/cachex"
 	"gbnt/backend/internal/config"
 	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/handler"
 	"gbnt/backend/internal/logger"
 	"gbnt/backend/internal/migrate"
+	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/internal/watermark"
 	"gbnt/backend/pkg/jwtutil"
@@ -43,11 +46,13 @@ func main() {
 		logs.Error.Fatal("mysql", zap.Error(err))
 	}
 	if cfg.Migrate.Enabled {
-		if err := migrate.Auto(db, migrate.Options{Seed: cfg.Migrate.Seed}); err != nil {
+		dev := migrate.IsDevMode(cfg.Server.Mode)
+		if err := migrate.Auto(db, migrate.Options{Seed: cfg.Migrate.Seed, Dev: dev}); err != nil {
 			logs.Error.Fatal("migrate", zap.Error(err))
 		}
 		logs.Info.Info("migrate ok",
-			zap.Bool("seed", cfg.Migrate.Seed),
+			zap.Bool("dev_reset", dev),
+			zap.Bool("seed", cfg.Migrate.Seed || dev),
 		)
 	} else {
 		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"))
@@ -59,15 +64,26 @@ func main() {
 		Cfg: cfg.Upload,
 		WM:  watermark.NewRenderer(cfg.Upload.Font),
 	}
+	memCache := cachex.New(5*time.Minute, 10*time.Minute)
+	captchaSvc := &service.CaptchaService{Store: memCache, Cfg: cfg.Captcha}
+	permSvc := perm.NewService(db, memCache)
+	if cfg.Migrate.Enabled {
+		if err := permSvc.ReloadAPIIndex(); err != nil {
+			logs.Error.Fatal("perm index", zap.Error(err))
+		}
+	}
+	sysSvc := &service.SysService{DB: db, Perm: permSvc}
 	deps := &handler.Deps{
-		DB:     db,
-		JWT:    jm,
-		Cfg:    cfg,
-		Auth:   authSvc,
-		Sys:    &service.SysService{DB: db},
-		Issue:  &service.IssueService{DB: db, Attach: attachSvc},
-		Attach: attachSvc,
-		OpLog:  &service.OpLogService{DB: db},
+		DB:      db,
+		JWT:     jm,
+		Cfg:     cfg,
+		Auth:    authSvc,
+		Captcha: captchaSvc,
+		Sys:     sysSvc,
+		Issue:   &service.IssueService{DB: db, Attach: attachSvc},
+		Attach:  attachSvc,
+		OpLog:   &service.OpLogService{DB: db},
+		Perm:    permSvc,
 	}
 
 	gin.SetMode(cfg.Server.Mode)
@@ -82,11 +98,8 @@ func main() {
 		}
 	}
 	r.Static("/uploads", uploadRoot)
-	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, []string{
-		"/api/health",
-		"/api/auth/login",
-		"/api/app/auth/login", // 小程序登录白名单
-	}))
+	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, perm.PublicPaths))
+	r.Use(middleware.RBAC(permSvc, cfg.RBAC.Enabled, perm.PublicPaths))
 	handler.Register(r, deps)
 	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {
 		_ = deps.OpLog.Persist(c, req, resp)

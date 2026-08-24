@@ -16,6 +16,8 @@ type Config struct {
 	JWT     JWTConfig     `mapstructure:"jwt"`
 	Log     LogConfig     `mapstructure:"log"`
 	Upload  UploadConfig  `mapstructure:"upload"`
+	Captcha CaptchaConfig `mapstructure:"captcha"`
+	RBAC    RBACConfig    `mapstructure:"rbac"`
 }
 
 type ServerConfig struct {
@@ -52,9 +54,27 @@ type LogConfig struct {
 
 type UploadConfig struct {
 	Root        string `mapstructure:"root"`
-	ChunkSize   int64  `mapstructure:"chunk_size"`
+	ChunkSize   int64  `mapstructure:"chunk_size"` // 预留：分片上传未实现
 	MaxFileSize int64  `mapstructure:"max_file_size"`
 	Font        string `mapstructure:"font"` // 水印中文字体 ttf/otf/ttc；空则探测系统字体
+}
+
+// CaptchaConfig 登录人机验证（Web 图形码 / App 滑动）。
+type CaptchaConfig struct {
+	Enabled          bool `mapstructure:"enabled"`
+	Length           int  `mapstructure:"length"`
+	TTLSeconds       int  `mapstructure:"ttl_seconds"`
+	Width            int  `mapstructure:"width"`
+	Height           int  `mapstructure:"height"`
+	SliderTTLSeconds int  `mapstructure:"slider_ttl_seconds"`
+	PassTTLSeconds   int  `mapstructure:"pass_ttl_seconds"`
+	SliderMinMs      int  `mapstructure:"slider_min_ms"`
+	SliderMaxMs      int  `mapstructure:"slider_max_ms"`
+}
+
+// RBACConfig 接口权限。
+type RBACConfig struct {
+	Enabled bool `mapstructure:"enabled"`
 }
 
 // Load 从 configs/config.yaml 读取，并用 GBNT_ 前缀环境变量覆盖。
@@ -67,6 +87,16 @@ func Load(path string) (*Config, error) {
 	// 未配置时默认开启迁移与种子（生产可在 yaml / 环境变量显式关闭）
 	v.SetDefault("migrate.enabled", true)
 	v.SetDefault("migrate.seed", true)
+	v.SetDefault("captcha.enabled", true)
+	v.SetDefault("captcha.length", 4)
+	v.SetDefault("captcha.ttl_seconds", 300)
+	v.SetDefault("captcha.width", 120)
+	v.SetDefault("captcha.height", 40)
+	v.SetDefault("captcha.slider_ttl_seconds", 300)
+	v.SetDefault("captcha.pass_ttl_seconds", 180)
+	v.SetDefault("captcha.slider_min_ms", 300)
+	v.SetDefault("captcha.slider_max_ms", 8000)
+	v.SetDefault("rbac.enabled", true)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -116,5 +146,37 @@ func Load(path string) (*Config, error) {
 			c.JWT.RenewBeforeHours = 1
 		}
 	}
+	normalizeCaptcha(&c.Captcha)
 	return &c, nil
+}
+
+func normalizeCaptcha(c *CaptchaConfig) {
+	if c.Length <= 0 {
+		c.Length = 4
+	}
+	if c.TTLSeconds <= 0 {
+		c.TTLSeconds = 300
+	}
+	if c.Width <= 0 {
+		c.Width = 120
+	}
+	if c.Height <= 0 {
+		c.Height = 40
+	}
+	if c.SliderTTLSeconds <= 0 {
+		c.SliderTTLSeconds = 300
+	}
+	if c.PassTTLSeconds <= 0 {
+		c.PassTTLSeconds = 180
+	}
+	if c.SliderMinMs <= 0 {
+		c.SliderMinMs = 300
+	}
+	if c.SliderMaxMs <= 0 {
+		c.SliderMaxMs = 8000
+	}
+	if c.SliderMinMs >= c.SliderMaxMs {
+		c.SliderMinMs = 300
+		c.SliderMaxMs = 8000
+	}
 }

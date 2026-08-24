@@ -6,22 +6,46 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gbnt/backend/internal/database"
+	"gbnt/backend/internal/model"
+	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
 
-// LoginReq 登录请求。
+// LoginReq 管理端登录请求（图形验证码）。
 type LoginReq struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username  string `json:"username" binding:"required"`
+	Password  string `json:"password" binding:"required"`
+	CaptchaID string `json:"captcha_id"`
+	Captcha   string `json:"captcha"`
 }
 
-// Login 账号密码登录，返回 JWT。
+// GetCaptcha 获取图形验证码。
+func (d *Deps) GetCaptcha(c *gin.Context) {
+	if d.Captcha == nil {
+		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
+		return
+	}
+	out, err := d.Captcha.CreateImage()
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, out)
+}
+
+// Login 账号密码 + 图形验证码登录，返回 JWT。
 func (d *Deps) Login(c *gin.Context) {
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
+	}
+	if d.Cfg != nil && d.Cfg.Captcha.Enabled {
+		if err := d.Captcha.VerifyImage(req.CaptchaID, req.Captcha); err != nil {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+			return
+		}
 	}
 	user, token, exp, err := d.Auth.Login(req.Username, req.Password)
 	if err != nil {
@@ -33,15 +57,56 @@ func (d *Deps) Login(c *gin.Context) {
 	response.OK(c, gin.H{
 		"token":      token,
 		"expires_at": exp,
-		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-			"name":     user.Name,
-			"phone":    user.Phone,
-			"org_id":   user.OrgKey,
-			"role":     user.Role,
-		},
+		"user":       d.userPayload(user),
 	})
+}
+
+func (d *Deps) userPayload(u *model.SysUser) gin.H {
+	if u == nil {
+		return nil
+	}
+	out := gin.H{
+		"id":       u.ID,
+		"username": u.Username,
+		"name":     u.Name,
+		"phone":    u.Phone,
+		"org_id":   u.OrgID,
+		"role_id":  u.RoleID,
+	}
+	d.fillAPIs(out, u.RoleID)
+	return out
+}
+
+func (d *Deps) userInfoPayload(info *database.UserInfo) gin.H {
+	if info == nil {
+		return nil
+	}
+	out := gin.H{
+		"id":       info.ID,
+		"username": info.Username,
+		"name":     info.Name,
+		"phone":    info.Phone,
+		"org_id":   info.OrgID,
+		"role_id":  info.RoleID,
+	}
+	d.fillAPIs(out, info.RoleID)
+	return out
+}
+
+func (d *Deps) fillAPIs(out gin.H, roleID uint64) {
+	if d.Perm == nil {
+		return
+	}
+	if roleID == perm.SuperAdminRoleID {
+		out["apis"] = "*"
+		return
+	}
+	ids, err := d.Perm.ListAPIIDsForRole(roleID)
+	if err != nil {
+		out["apis"] = []uint64{}
+		return
+	}
+	out["apis"] = ids
 }
 
 // Me 当前登录用户。
@@ -51,14 +116,7 @@ func (d *Deps) Me(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	response.OK(c, gin.H{
-		"id":       info.ID,
-		"username": info.Username,
-		"name":     info.Name,
-		"phone":    info.Phone,
-		"org_id":   info.OrgID,
-		"role":     info.Role,
-	})
+	response.OK(c, d.userInfoPayload(info))
 }
 
 // WorkbenchStats 工作台统计。

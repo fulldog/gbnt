@@ -32,11 +32,28 @@ func (s *AuthService) Login(username, password string) (*model.SysUser, string, 
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
 		return nil, "", time.Time{}, errors.New("账号或密码不正确")
 	}
+	if err := s.checkRoleActive(user.RoleID); err != nil {
+		return nil, "", time.Time{}, err
+	}
 	token, exp, err := s.JWT.Sign(user.ID)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
 	return &user, token, exp, nil
+}
+
+func (s *AuthService) checkRoleActive(roleID uint64) error {
+	if roleID == 0 {
+		return errors.New("角色已禁用")
+	}
+	var role model.SysRole
+	if err := s.DB.First(&role, roleID).Error; err != nil {
+		return errors.New("角色已禁用")
+	}
+	if role.Status != 1 {
+		return errors.New("角色已禁用")
+	}
+	return nil
 }
 
 // UserInfoFromModel 将 SysUser 转为上下文 UserInfo。
@@ -49,18 +66,21 @@ func UserInfoFromModel(u *model.SysUser) *database.UserInfo {
 		Username: u.Username,
 		Name:     u.Name,
 		Phone:    u.Phone,
-		OrgID:    u.OrgKey,
-		Role:     u.Role,
+		OrgID:    u.OrgID,
+		RoleID:   u.RoleID,
 	}
 }
 
-// LoadActiveUserInfo 按 user_id 查库，仅 status=1 视为有效登录用户。
+// LoadActiveUserInfo 按 user_id 查库，用户与角色均须 status=1。
 func (s *AuthService) LoadActiveUserInfo(ctx context.Context, id uint64) (*database.UserInfo, error) {
 	if id == 0 {
 		return nil, database.ErrUnauth
 	}
 	var user model.SysUser
 	if err := s.DB.WithContext(ctx).Where("id = ? AND status = 1", id).First(&user).Error; err != nil {
+		return nil, database.ErrUnauth
+	}
+	if err := s.checkRoleActive(user.RoleID); err != nil {
 		return nil, database.ErrUnauth
 	}
 	return UserInfoFromModel(&user), nil
