@@ -6,3 +6,4 @@ storage/uploads/
 .vscode/
 *.exe
 *.test
+configs/config.yaml
