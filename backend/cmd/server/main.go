@@ -15,6 +15,7 @@ import (
 	"gbnt/backend/internal/logger"
 	"gbnt/backend/internal/migrate"
 	"gbnt/backend/internal/service"
+	"gbnt/backend/internal/watermark"
 	"gbnt/backend/pkg/jwtutil"
 	"gbnt/backend/pkg/middleware"
 )
@@ -52,12 +53,17 @@ func main() {
 		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"))
 	}
 	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
-	attachSvc := &service.AttachService{DB: db, Cfg: cfg.Upload}
+	authSvc := &service.AuthService{DB: db, JWT: jm}
+	attachSvc := &service.AttachService{
+		DB:  db,
+		Cfg: cfg.Upload,
+		WM:  watermark.NewRenderer(cfg.Upload.Font),
+	}
 	deps := &handler.Deps{
 		DB:     db,
 		JWT:    jm,
 		Cfg:    cfg,
-		Auth:   &service.AuthService{DB: db, JWT: jm},
+		Auth:   authSvc,
 		Sys:    &service.SysService{DB: db},
 		Issue:  &service.IssueService{DB: db, Attach: attachSvc},
 		Attach: attachSvc,
@@ -69,12 +75,22 @@ func main() {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.TraceAndTiming())
 	r.Use(middleware.AccessLog())
-	r.Use(middleware.JWTAuth(jm, []string{
+	uploadRoot := cfg.Upload.Root
+	if !filepath.IsAbs(uploadRoot) {
+		if wd, err := os.Getwd(); err == nil {
+			uploadRoot = filepath.Join(wd, uploadRoot)
+		}
+	}
+	r.Static("/uploads", uploadRoot)
+	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, []string{
 		"/api/health",
 		"/api/auth/login",
 		"/api/app/auth/login", // 小程序登录白名单
 	}))
 	handler.Register(r, deps)
+	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {
+		_ = deps.OpLog.Persist(c, req, resp)
+	})
 
 	logs.Info.Info("server listen", zap.String("addr", cfg.Server.Addr))
 	if err := r.Run(cfg.Server.Addr); err != nil {

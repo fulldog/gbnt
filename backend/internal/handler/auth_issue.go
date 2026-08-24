@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
@@ -27,7 +28,8 @@ func (d *Deps) Login(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	_ = d.OpLog.Push(user.ID, user.Username, "登录", user.Username, c.Request.URL.Path, c.GetString(response.CtxTraceID), c.ClientIP())
+	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), service.UserInfoFromModel(user)))
+	d.OpLog.Mark(c, "登录", user.Username)
 	response.OK(c, gin.H{
 		"token":      token,
 		"expires_at": exp,
@@ -44,19 +46,18 @@ func (d *Deps) Login(c *gin.Context) {
 
 // Me 当前登录用户。
 func (d *Deps) Me(c *gin.Context) {
-	uid := userID(c)
-	user, err := d.Auth.GetByID(uid)
+	info, err := database.UserFromContext(c.Request.Context())
 	if err != nil {
-		response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
 	response.OK(c, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
-		"name":     user.Name,
-		"phone":    user.Phone,
-		"org_id":   user.OrgKey,
-		"role":     user.Role,
+		"id":       info.ID,
+		"username": info.Username,
+		"name":     info.Name,
+		"phone":    info.Phone,
+		"org_id":   info.OrgID,
+		"role":     info.Role,
 	})
 }
 
@@ -110,12 +111,17 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Create(req, userID(c), c.GetString("user_name"))
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	item, err := d.Issue.Create(c.Request.Context(), req, user.ID, user.Name)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	_ = d.OpLog.Push(userID(c), c.GetString("username"), "上报问题", item.Type+" · "+item.Code, c.Request.URL.Path, c.GetString(response.CtxTraceID), c.ClientIP())
+	d.OpLog.Mark(c, "上报问题", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
@@ -130,7 +136,7 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Update(id, req)
+	item, err := d.Issue.Update(c.Request.Context(), id, req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
@@ -144,7 +150,7 @@ func (d *Deps) DeleteIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := d.Issue.Delete(id); err != nil {
+	if err := d.Issue.Delete(c.Request.Context(), id); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -162,7 +168,7 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Rectify(id, req)
+	item, err := d.Issue.Rectify(c.Request.Context(), id, req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
@@ -179,12 +185,17 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	n, err := d.Issue.Import(req.Rows, userID(c), c.GetString("user_name"))
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	n, err := d.Issue.Import(c.Request.Context(), req.Rows, user.ID, user.Name)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	_ = d.OpLog.Push(userID(c), c.GetString("username"), "批量导入", "导入 "+itoa(n)+" 条", c.Request.URL.Path, c.GetString(response.CtxTraceID), c.ClientIP())
+	d.OpLog.Mark(c, "批量导入", "导入 "+itoa(n)+" 条")
 	response.OK(c, gin.H{"imported": n})
 }
 

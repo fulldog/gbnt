@@ -2,14 +2,19 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/model"
 	"gbnt/backend/pkg/jwtutil"
+	"gbnt/backend/pkg/response"
 )
 
 // AuthService 鉴权。
@@ -27,11 +32,38 @@ func (s *AuthService) Login(username, password string) (*model.SysUser, string, 
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
 		return nil, "", time.Time{}, errors.New("账号或密码不正确")
 	}
-	token, exp, err := s.JWT.Sign(user.ID, user.Username, user.Name, user.OrgKey, user.Role)
+	token, exp, err := s.JWT.Sign(user.ID)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
 	return &user, token, exp, nil
+}
+
+// UserInfoFromModel 将 SysUser 转为上下文 UserInfo。
+func UserInfoFromModel(u *model.SysUser) *database.UserInfo {
+	if u == nil {
+		return nil
+	}
+	return &database.UserInfo{
+		ID:       u.ID,
+		Username: u.Username,
+		Name:     u.Name,
+		Phone:    u.Phone,
+		OrgID:    u.OrgKey,
+		Role:     u.Role,
+	}
+}
+
+// LoadActiveUserInfo 按 user_id 查库，仅 status=1 视为有效登录用户。
+func (s *AuthService) LoadActiveUserInfo(ctx context.Context, id uint64) (*database.UserInfo, error) {
+	if id == 0 {
+		return nil, database.ErrUnauth
+	}
+	var user model.SysUser
+	if err := s.DB.WithContext(ctx).Where("id = ? AND status = 1", id).First(&user).Error; err != nil {
+		return nil, database.ErrUnauth
+	}
+	return UserInfoFromModel(&user), nil
 }
 
 // GetByID 按 ID 取用户。
@@ -48,17 +80,60 @@ type OpLogService struct {
 	DB *gorm.DB
 }
 
-// Push 写入一条操作日志。
-func (s *OpLogService) Push(userID uint64, username, action, detail, path, traceID, ip string) error {
-	return s.DB.Create(&model.OpLog{
-		UserID:   userID,
-		Username: username,
-		Action:   action,
-		Detail:   detail,
-		Path:     path,
+const (
+	ctxOpAction = "op_action"
+	ctxOpDetail = "op_detail"
+	maxOpBody   = 16384
+)
+
+// Mark 标记本请求的操作文案，由中间件在响应后写入 OpLog（含 request/response）。
+func (s *OpLogService) Mark(c *gin.Context, action, detail string) {
+	if c == nil {
+		return
+	}
+	c.Set(ctxOpAction, action)
+	c.Set(ctxOpDetail, detail)
+}
+
+// Persist 写入操作日志（含脱敏后的请求/响应体）。
+func (s *OpLogService) Persist(c *gin.Context, req, resp string) error {
+	if c == nil || s == nil || s.DB == nil {
+		return nil
+	}
+	action, _ := c.Get(ctxOpAction)
+	detail, _ := c.Get(ctxOpDetail)
+	act, _ := action.(string)
+	det, _ := detail.(string)
+	if act == "" {
+		act = c.Request.Method
+	}
+	uid := uint64(0)
+	uname := ""
+	if u, err := database.UserFromContext(c.Request.Context()); err == nil {
+		uid = u.ID
+		uname = u.Username
+	}
+	tid, _ := c.Get(response.CtxTraceID)
+	traceID, _ := tid.(string)
+	return s.DB.WithContext(c.Request.Context()).Create(&model.OpLog{
+		UserID:   uid,
+		Username: uname,
+		Action:   act,
+		Detail:   det,
+		Path:     c.Request.URL.Path,
 		TraceID:  traceID,
-		IP:       ip,
+		IP:       c.ClientIP(),
+		Request:  clipOpBody(req),
+		Response: clipOpBody(resp),
 	}).Error
+}
+
+func clipOpBody(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= maxOpBody {
+		return s
+	}
+	return s[:maxOpBody] + "..."
 }
 
 // List 分页查询。

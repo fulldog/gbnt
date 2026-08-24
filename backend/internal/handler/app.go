@@ -125,12 +125,17 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Create(req, userID(c), c.GetString("user_name"))
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	item, err := d.Issue.Create(c.Request.Context(), req, user.ID, user.Name)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	_ = d.OpLog.Push(userID(c), c.GetString("username"), "小程序上报", item.Type+" · "+item.Code, c.Request.URL.Path, c.GetString(response.CtxTraceID), c.ClientIP())
+	d.OpLog.Mark(c, "小程序上报", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
@@ -145,18 +150,23 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Rectify(id, req)
+	item, err := d.Issue.Rectify(c.Request.Context(), id, req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	_ = d.OpLog.Push(userID(c), c.GetString("username"), "小程序整改", item.Type+" · "+item.Code, c.Request.URL.Path, c.GetString(response.CtxTraceID), c.ClientIP())
+	d.OpLog.Mark(c, "小程序整改", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
 // AppMineStats 我的概览数量。
 func (d *Deps) AppMineStats(c *gin.Context) {
-	stats, err := d.Issue.MineStats(userID(c), c.GetString("user_name"))
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	stats, err := d.Issue.MineStats(user.ID, user.Name)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -169,7 +179,12 @@ func (d *Deps) AppMineIssues(c *gin.Context) {
 	scope := c.DefaultQuery("scope", "reported")
 	page := atoiDefault(c.Query("page"), 1)
 	size := atoiDefault(c.Query("size"), 20)
-	list, total, err := d.Issue.ListMine(scope, userID(c), c.GetString("user_name"), page, size)
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	list, total, err := d.Issue.ListMine(scope, user.ID, user.Name, page, size)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return

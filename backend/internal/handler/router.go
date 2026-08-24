@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"gbnt/backend/internal/config"
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/jwtutil"
 	"gbnt/backend/pkg/response"
@@ -121,26 +122,8 @@ func Register(r *gin.Engine, d *Deps) {
 
 		att := api.Group("/attachments")
 		{
-			// POST /api/attachments/init — 初始化单文件上传，返回 uuid
-			att.POST("/init", d.AttachInit)
-			// POST /api/attachments/batch-init — 批量初始化上传
-			att.POST("/batch-init", d.AttachBatchInit)
-			// POST /api/attachments/complete-batch — 批量完成上传，返回 list[{uuid,url}]
-			att.POST("/complete-batch", d.AttachCompleteBatch)
-			// POST /api/attachments/bind — 文件 uuid 列表建一对多关联，返回 ref_uuid + list
-			att.POST("/bind", d.AttachBind)
-			// GET /api/attachments/refs/:ref_uuid — 按关联 uuid 反查文件 list
-			att.GET("/refs/:ref_uuid", d.AttachResolve)
-			// GET /api/attachments/:uuid/status — 上传进度与缺失分片
-			att.GET("/:uuid/status", d.AttachStatus)
-			// PUT /api/attachments/:uuid/chunks/:index — 上传分片（支持断点续传）
-			att.PUT("/:uuid/chunks/:index", d.AttachChunk)
-			// POST /api/attachments/:uuid/complete — 合并分片，返回 list[{uuid,url}]
-			att.POST("/:uuid/complete", d.AttachComplete)
-			// GET /api/attachments/:uuid/download — 下载已就绪附件
-			att.GET("/:uuid/download", d.AttachDownload)
-			// GET /api/attachments/:uuid — 附件元数据（通配放最后）
-			att.GET("/:uuid", d.AttachMeta)
+			// POST /api/attachments/images — 批量直传图片（multipart，逐张打水印）
+			att.POST("/images", d.AttachUploadImages)
 		}
 	}
 }
@@ -159,18 +142,8 @@ func parseID(c *gin.Context) (uint64, bool) {
 	return id, true
 }
 
-func userID(c *gin.Context) uint64 {
-	v, _ := c.Get("user_id")
-	switch t := v.(type) {
-	case uint64:
-		return t
-	case float64:
-		return uint64(t)
-	case int:
-		return uint64(t)
-	default:
-		return 0
-	}
+func userFromCtx(c *gin.Context) (*database.UserInfo, error) {
+	return database.UserFromContext(c.Request.Context())
 }
 
 func splitCSV(s string) []string {

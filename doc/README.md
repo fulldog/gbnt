@@ -120,6 +120,8 @@ X-Token-Expires-At: <RFC3339 过期时间>
 
 本地落盘：`backend/storage/uploads/<uuid>/`。URL 形如 `/api/attachments/{uuid}/download`。
 
+图片水印参数：`user_name`、`lat`、`lng`、`address`。推荐直传：`POST /api/attachments/images`（multipart 批量，服务端逐张打水印）。分片链路在 complete 时同样烧录。
+
 ## 5. 模块与路径一览
 
 详见 [api.md](./api.md) 与 Apifox 导入文件 [apifox/openapi.yaml](./apifox/openapi.yaml)。

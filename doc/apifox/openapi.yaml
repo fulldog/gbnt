@@ -86,6 +86,14 @@ components:
       properties:
         uuid: { type: string, format: uuid }
         url: { type: string, example: "/api/attachments/{uuid}/download" }
+    AttachWatermark:
+      type: object
+      description: 图片水印（左下角：地址加粗、黄竖条、度分秒、时间、上报人）。非图片忽略。
+      properties:
+        user_name: { type: string, description: 上报人姓名 }
+        lat: { type: number, example: 36.4489 }
+        lng: { type: number, example: 115.982 }
+        address: { type: string, example: 程麻新村西排灌沟桥 }
     AttachInitReq:
       type: object
       required: [file_name, size]
@@ -94,6 +102,10 @@ components:
         size: { type: integer, format: int64 }
         content_type: { type: string }
         md5: { type: string }
+        user_name: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        address: { type: string }
     Org:
       type: object
       properties:
@@ -669,6 +681,32 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/images:
+    post:
+      tags: [附件]
+      summary: 批量直传图片（逐张打水印，无需分片）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items: { type: string, format: binary }
+                  description: 图片文件，字段名 files（可多张）；也可用 file
+                user_name: { type: string }
+                lat: { type: number }
+                lng: { type: number }
+                address: { type: string }
+      responses:
+        "200":
+          description: data.list = FileItem[]
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
   /api/attachments/init:
     post:
       tags: [附件]
@@ -699,6 +737,10 @@ paths:
                 files:
                   type: array
                   items: { $ref: "#/components/schemas/AttachInitReq" }
+                user_name: { type: string }
+                lat: { type: number }
+                lng: { type: number }
+                address: { type: string }
       responses:
         "200":
           description: ok
@@ -708,7 +750,7 @@ paths:
   /api/attachments/complete-batch:
     post:
       tags: [附件]
-      summary: 批量完成上传，返回 list[{uuid,url}]
+      summary: 批量完成上传（图片烧录水印），返回 list[{uuid,url}]
       requestBody:
         required: true
         content:
@@ -720,6 +762,10 @@ paths:
                 uuids:
                   type: array
                   items: { type: string, format: uuid }
+                user_name: { type: string }
+                lat: { type: number }
+                lng: { type: number }
+                address: { type: string }
       responses:
         "200":
           description: data.list = FileItem[]
@@ -800,9 +846,14 @@ paths:
   /api/attachments/{uuid}/complete:
     post:
       tags: [附件]
-      summary: 合并分片完成上传，返回 list[{uuid,url}]
+      summary: 合并分片完成上传；图片烧录左下角水印
       parameters:
         - $ref: "#/components/parameters/UuidPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AttachWatermark" }
       responses:
         "200":
           description: data.list = FileItem[]

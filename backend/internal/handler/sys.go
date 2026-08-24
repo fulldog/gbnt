@@ -27,7 +27,7 @@ func (d *Deps) CreateOrg(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateOrg(&req); err != nil {
+	if err := d.Sys.CreateOrg(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -45,7 +45,7 @@ func (d *Deps) UpdateOrg(c *gin.Context) {
 		return
 	}
 	req.ID = id
-	if err := d.Sys.UpdateOrg(&req); err != nil {
+	if err := d.Sys.UpdateOrg(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -57,7 +57,7 @@ func (d *Deps) DeleteOrg(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := d.Sys.DeleteOrg(id); err != nil {
+	if err := d.Sys.DeleteOrg(c.Request.Context(), id); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -81,7 +81,7 @@ func (d *Deps) CreateUser(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	u, err := d.Sys.CreateUser(req)
+	u, err := d.Sys.CreateUser(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
@@ -99,7 +99,7 @@ func (d *Deps) UpdateUser(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	u, err := d.Sys.UpdateUser(id, req)
+	u, err := d.Sys.UpdateUser(c.Request.Context(), id, req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
@@ -112,7 +112,7 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := d.Sys.DeleteUser(id); err != nil {
+	if err := d.Sys.DeleteUser(c.Request.Context(), id); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -136,7 +136,7 @@ func (d *Deps) CreateRole(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateRole(&req); err != nil {
+	if err := d.Sys.CreateRole(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -154,7 +154,7 @@ func (d *Deps) UpdateRole(c *gin.Context) {
 		return
 	}
 	req.ID = id
-	if err := d.Sys.UpdateRole(&req); err != nil {
+	if err := d.Sys.UpdateRole(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -166,7 +166,7 @@ func (d *Deps) DeleteRole(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := d.Sys.DeleteRole(id); err != nil {
+	if err := d.Sys.DeleteRole(c.Request.Context(), id); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -191,7 +191,7 @@ func (d *Deps) SetRolePerms(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.SetRolePerms(c.Param("id"), req.Perms); err != nil {
+	if err := d.Sys.SetRolePerms(c.Request.Context(), c.Param("id"), req.Perms); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -234,7 +234,7 @@ func (d *Deps) CreateDictItem(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateDictItem(&req); err != nil {
+	if err := d.Sys.CreateDictItem(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -252,7 +252,7 @@ func (d *Deps) UpdateDictItem(c *gin.Context) {
 		return
 	}
 	req.ID = id
-	if err := d.Sys.UpdateDictItem(&req); err != nil {
+	if err := d.Sys.UpdateDictItem(c.Request.Context(), &req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -264,7 +264,7 @@ func (d *Deps) DeleteDictItem(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := d.Sys.DeleteDictItem(id); err != nil {
+	if err := d.Sys.DeleteDictItem(c.Request.Context(), id); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

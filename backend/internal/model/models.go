@@ -14,6 +14,8 @@ type Base struct {
 	ID        uint64                `gorm:"primaryKey;autoIncrement" json:"id"`
 	CreatedAt time.Time             `json:"created_at"`
 	UpdatedAt time.Time             `json:"updated_at"`
+	CreatedID int                   `gorm:"column:created_id;index;default:0" json:"created_id"`
+	UpdateID  int                   `gorm:"column:update_id;index;default:0" json:"update_id"`
 	IsDelete  soft_delete.DeletedAt `gorm:"column:is_delete;softDelete:flag;index;default:0" json:"is_delete"`
 }
 
@@ -130,44 +132,27 @@ type OpLog struct {
 	Path     string `gorm:"size:128" json:"path"`
 	TraceID  string `gorm:"size:64;index" json:"trace_id"`
 	IP       string `gorm:"size:64" json:"ip"`
+	Request  string `gorm:"type:text" json:"request"`
+	Response string `gorm:"type:text" json:"response"`
 	Base
 }
 
-// Attachment 附件主记录（业务只存 UUID）。
+// Attachment 附件主记录。
 type Attachment struct {
-	UUID         string `gorm:"size:36;uniqueIndex;not null" json:"uuid"`
-	FileName     string `gorm:"size:255" json:"file_name"`
-	ContentType  string `gorm:"size:128" json:"content_type"`
-	Size         int64  `json:"size"`
-	ChunkSize    int64  `json:"chunk_size"`
-	TotalChunks  int    `json:"total_chunks"`
-	UploadedBits string `gorm:"type:text" json:"-"` // 已上传分片位图，如 0,1,2
-	MD5          string `gorm:"size:64" json:"md5"`
-	Status       string `gorm:"size:16;index" json:"status"` // initing/uploading/ready/failed
-	StoragePath  string `gorm:"size:512" json:"-"`
-	UploaderID   uint64 `gorm:"index" json:"uploader_id"`
+	FileID      string `gorm:"column:file_id;size:36;uniqueIndex;not null" json:"file_id"`
+	OrigName    string `gorm:"size:255" json:"orig_name"` // 上传时的原始文件名
+	FileName    string `gorm:"size:255" json:"file_name"` // 落盘文件名（原名_userID_毫秒）
+	ContentType string `gorm:"size:128" json:"content_type"`
+	Size        int64  `json:"size"`
+	MD5         string `gorm:"size:64" json:"md5"`
+	Status      string `gorm:"size:16;index" json:"status"` // success / failed 等
+	StoragePath string `gorm:"size:512" json:"storage_path"`
 	Base
 }
 
-// AttachmentChunk 分片记录（断点续传）。
-type AttachmentChunk struct {
-	UUID       string `gorm:"size:36;uniqueIndex:uk_uuid_idx;not null" json:"uuid"`
-	ChunkIndex int    `gorm:"uniqueIndex:uk_uuid_idx;not null" json:"chunk_index"`
-	Size       int64  `json:"size"`
-	Path       string `gorm:"size:512" json:"-"`
-	Base
-}
-
-// AttachmentRef 文件关联组：业务表只存 RefUUID，一组对应多个文件。
-type AttachmentRef struct {
-	RefUUID string `gorm:"size:36;uniqueIndex;not null" json:"ref_uuid"`
-	Base
-}
-
-// AttachmentRefItem 关联组内文件明细（一对多）。
+// AttachmentRefItem 附件关联明细：一组 att_id 对应多个 file_id。
 type AttachmentRefItem struct {
-	RefUUID  string `gorm:"size:36;index;uniqueIndex:uk_ref_file;not null" json:"ref_uuid"`
-	FileUUID string `gorm:"size:36;uniqueIndex:uk_ref_file;index;not null" json:"file_uuid"`
-	Sort     int    `gorm:"default:0" json:"sort"`
+	AttID  string `gorm:"column:att_id;size:36;index;uniqueIndex:uk_att_file;not null" json:"att_id"`
+	FileID string `gorm:"column:file_id;size:36;uniqueIndex:uk_att_file;index;not null" json:"file_id"`
 	Base
 }

@@ -8,13 +8,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims 业务声明。
+// Claims 业务声明（仅 user_id，其余用户信息由中间件实时查库）。
 type Claims struct {
-	UserID   uint64 `json:"user_id"`
-	Username string `json:"username"`
-	Name     string `json:"name"`
-	OrgID    string `json:"org_id"`
-	Role     string `json:"role"`
+	UserID uint64 `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -51,14 +47,10 @@ func (m *Manager) Expire() time.Duration { return m.expire }
 func (m *Manager) RenewBefore() time.Duration { return m.renewBefore }
 
 // Sign 签发 access token。
-func (m *Manager) Sign(userID uint64, username, name, orgID, role string) (string, time.Time, error) {
+func (m *Manager) Sign(userID uint64) (string, time.Time, error) {
 	exp := time.Now().Add(m.expire)
 	claims := Claims{
-		UserID:   userID,
-		Username: username,
-		Name:     name,
-		OrgID:    orgID,
-		Role:     role,
+		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -74,7 +66,7 @@ func (m *Manager) Resign(c *Claims) (string, time.Time, error) {
 	if c == nil {
 		return "", time.Time{}, errors.New("nil claims")
 	}
-	return m.Sign(c.UserID, c.Username, c.Name, c.OrgID, c.Role)
+	return m.Sign(c.UserID)
 }
 
 // NeedRenew 是否处于滑动续期窗口（仍有效，但剩余时间 < renewBefore）。

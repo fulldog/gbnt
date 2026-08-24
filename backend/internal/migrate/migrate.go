@@ -29,16 +29,45 @@ func Auto(db *gorm.DB, opts Options) error {
 		&model.Issue{},
 		&model.OpLog{},
 		&model.Attachment{},
-		&model.AttachmentChunk{},
-		&model.AttachmentRef{},
 		&model.AttachmentRefItem{},
 	); err != nil {
+		return err
+	}
+	if err := dropLegacyAttach(db); err != nil {
 		return err
 	}
 	if !opts.Seed {
 		return nil
 	}
 	return seed(db)
+}
+
+func dropLegacyAttach(db *gorm.DB) error {
+	m := db.Migrator()
+	for _, name := range []string{"attachment_chunks", "attachment_refs"} {
+		if m.HasTable(name) {
+			if err := m.DropTable(name); err != nil {
+				return err
+			}
+		}
+	}
+	att := &model.Attachment{}
+	for _, col := range []string{"uploader_id", "chunk_size", "total_chunks", "uploaded_bits", "uuid"} {
+		if m.HasColumn(att, col) {
+			if err := m.DropColumn(att, col); err != nil {
+				return err
+			}
+		}
+	}
+	item := &model.AttachmentRefItem{}
+	for _, col := range []string{"ref_uuid", "file_uuid", "sort"} {
+		if m.HasColumn(item, col) {
+			if err := m.DropColumn(item, col); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func seed(db *gorm.DB) error {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,35 +15,41 @@ type SysService struct {
 	DB *gorm.DB
 }
 
+func (s *SysService) db(ctx context.Context) *gorm.DB {
+	if ctx == nil {
+		return s.DB
+	}
+	return s.DB.WithContext(ctx)
+}
+
 func (s *SysService) ListOrgs() ([]model.SysOrg, error) {
 	var list []model.SysOrg
 	err := s.DB.Order("sort ASC, id ASC").Find(&list).Error
 	return list, err
 }
 
-func (s *SysService) CreateOrg(o *model.SysOrg) error {
+func (s *SysService) CreateOrg(ctx context.Context, o *model.SysOrg) error {
 	if o.OrgKey == "" || o.Name == "" {
 		return errors.New("org_key 与 name 必填")
 	}
-	return s.DB.Create(o).Error
+	return s.db(ctx).Create(o).Error
 }
 
-func (s *SysService) UpdateOrg(o *model.SysOrg) error {
-	return s.DB.Model(&model.SysOrg{}).Where("id = ?", o.ID).Updates(map[string]interface{}{
+func (s *SysService) UpdateOrg(ctx context.Context, o *model.SysOrg) error {
+	return s.db(ctx).Model(&model.SysOrg{}).Where("id = ?", o.ID).Updates(map[string]interface{}{
 		"name": o.Name, "type": o.Type, "remark": o.Remark, "sort": o.Sort, "parent_id": o.ParentID,
 	}).Error
 }
 
-func (s *SysService) DeleteOrg(id uint64) error {
+func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 	var o model.SysOrg
-	if err := s.DB.First(&o, id).Error; err != nil {
+	if err := s.db(ctx).First(&o, id).Error; err != nil {
 		return err
 	}
 	if o.OrgKey == "org-gov" {
 		return errors.New("根节点不可删除")
 	}
-	// 软删：is_delete=1
-	return s.DB.Delete(&model.SysOrg{}, id).Error
+	return s.db(ctx).Delete(&model.SysOrg{}, id).Error
 }
 
 // UserInput 创建/更新用户入参。
@@ -72,7 +79,7 @@ func (s *SysService) ListUsers(orgID, keyword string, page, size int) ([]model.S
 	return list, total, err
 }
 
-func (s *SysService) CreateUser(in UserInput) (*model.SysUser, error) {
+func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUser, error) {
 	if in.Username == "" || in.Password == "" {
 		return nil, errors.New("username 与 password 必填")
 	}
@@ -92,15 +99,15 @@ func (s *SysService) CreateUser(in UserInput) (*model.SysUser, error) {
 	if in.Status != nil {
 		u.Status = *in.Status
 	}
-	if err := s.DB.Create(u).Error; err != nil {
+	if err := s.db(ctx).Create(u).Error; err != nil {
 		return nil, err
 	}
 	return u, nil
 }
 
-func (s *SysService) UpdateUser(id uint64, in UserInput) (*model.SysUser, error) {
+func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*model.SysUser, error) {
 	var u model.SysUser
-	if err := s.DB.First(&u, id).Error; err != nil {
+	if err := s.db(ctx).First(&u, id).Error; err != nil {
 		return nil, err
 	}
 	updates := map[string]interface{}{
@@ -116,16 +123,15 @@ func (s *SysService) UpdateUser(id uint64, in UserInput) (*model.SysUser, error)
 		}
 		updates["password"] = string(hash)
 	}
-	if err := s.DB.Model(&u).Updates(updates).Error; err != nil {
+	if err := s.db(ctx).Model(&u).Updates(updates).Error; err != nil {
 		return nil, err
 	}
-	_ = s.DB.First(&u, id)
+	_ = s.db(ctx).First(&u, id)
 	return &u, nil
 }
 
-func (s *SysService) DeleteUser(id uint64) error {
-	// 软删：is_delete=1
-	return s.DB.Delete(&model.SysUser{}, id).Error
+func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
+	return s.db(ctx).Delete(&model.SysUser{}, id).Error
 }
 
 func (s *SysService) ListRoles() ([]model.SysRole, error) {
@@ -134,19 +140,18 @@ func (s *SysService) ListRoles() ([]model.SysRole, error) {
 	return list, err
 }
 
-func (s *SysService) CreateRole(r *model.SysRole) error {
-	return s.DB.Create(r).Error
+func (s *SysService) CreateRole(ctx context.Context, r *model.SysRole) error {
+	return s.db(ctx).Create(r).Error
 }
 
-func (s *SysService) UpdateRole(r *model.SysRole) error {
-	return s.DB.Model(&model.SysRole{}).Where("id = ?", r.ID).Updates(map[string]interface{}{
+func (s *SysService) UpdateRole(ctx context.Context, r *model.SysRole) error {
+	return s.db(ctx).Model(&model.SysRole{}).Where("id = ?", r.ID).Updates(map[string]interface{}{
 		"name": r.Name, "desc": r.Desc,
 	}).Error
 }
 
-func (s *SysService) DeleteRole(id uint64) error {
-	// 软删：is_delete=1
-	return s.DB.Delete(&model.SysRole{}, id).Error
+func (s *SysService) DeleteRole(ctx context.Context, id uint64) error {
+	return s.db(ctx).Delete(&model.SysRole{}, id).Error
 }
 
 func (s *SysService) GetRolePerms(code string) ([]model.SysRolePerm, error) {
@@ -155,8 +160,8 @@ func (s *SysService) GetRolePerms(code string) ([]model.SysRolePerm, error) {
 	return list, err
 }
 
-func (s *SysService) SetRolePerms(code string, perms []model.SysRolePerm) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
+func (s *SysService) SetRolePerms(ctx context.Context, code string, perms []model.SysRolePerm) error {
+	return s.db(ctx).Transaction(func(tx *gorm.DB) error {
 		// 软删原权限（is_delete=1），避免唯一索引冲突时再复活或新建
 		if err := tx.Where("role_code = ?", code).Delete(&model.SysRolePerm{}).Error; err != nil {
 			return err
@@ -210,17 +215,16 @@ func (s *SysService) ListDictItems(fieldID uint64) ([]model.SysDictItem, error) 
 	return list, err
 }
 
-func (s *SysService) CreateDictItem(item *model.SysDictItem) error {
-	return s.DB.Create(item).Error
+func (s *SysService) CreateDictItem(ctx context.Context, item *model.SysDictItem) error {
+	return s.db(ctx).Create(item).Error
 }
 
-func (s *SysService) UpdateDictItem(item *model.SysDictItem) error {
-	return s.DB.Model(&model.SysDictItem{}).Where("id = ?", item.ID).Updates(map[string]interface{}{
+func (s *SysService) UpdateDictItem(ctx context.Context, item *model.SysDictItem) error {
+	return s.db(ctx).Model(&model.SysDictItem{}).Where("id = ?", item.ID).Updates(map[string]interface{}{
 		"label": item.Label, "value": item.Value, "sort": item.Sort,
 	}).Error
 }
 
-func (s *SysService) DeleteDictItem(id uint64) error {
-	// 软删：is_delete=1
-	return s.DB.Delete(&model.SysDictItem{}, id).Error
+func (s *SysService) DeleteDictItem(ctx context.Context, id uint64) error {
+	return s.db(ctx).Delete(&model.SysDictItem{}, id).Error
 }

@@ -43,18 +43,16 @@ backend/
 
 ## Auth
 
-- JWT Bearer; whitelist login/health
+- JWT Bearer; whitelist login/health; token claims only `user_id`
+- JWT middleware loads active `UserInfo` from DB by `user_id` (status=1); failure → 401
 - Sliding renew: when remaining TTL ≤ `renew_before_hours`, middleware issues new token via headers `X-New-Token` + `X-Token-Expires-At` (no refresh token)
 - Comments in Chinese for business intent; mark `[PRD]` where rules come from PRD
 
 ## Attachments
 
-- Independent module: batch init + chunked resumable upload
-- Complete returns `data.list=[{uuid,url}]`
-- Business submits `file_uuids`; backend Bind → `ref_uuid` stored on business row
-- Tables: `attachment_refs` + `attachment_ref_items` (1:N)
-- Query expands `ref_uuid` → `photos/rectify_photos` with real uuid+url
-- Update: non-empty `photo_ref_uuid` = unchanged; empty = re-bind via `file_uuids`
+- Direct batch images: `POST /api/attachments/images` (multipart `files` + `lat`/`lng`/`address`); watermark name from JWT `UserInfo` in context; return `data.list=[{file_id,url}]`
+- Business submits `file_uuids` (file_id 列表); backend Bind → `att_id` stored as `photo_ref_uuid`
+- Table: `attachment_ref_items` (`att_id` + `file_id`)
 
 ## Docs
 
@@ -66,7 +64,10 @@ backend/
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
 - When enabled: GORM AutoMigrate on startup; optional seed on empty DB
 - Soft delete: every table has `is_delete` (0/1); `Delete()` only flags, queries exclude deleted
-- Column order: business fields first; embed `Base` (`id/created_at/updated_at/is_delete`) at struct end
+- Column order: business fields first; embed `Base` (`id/created_at/updated_at/created_id/update_id/is_delete`) at struct end
+- `created_id` / `update_id` filled from JWT `UserInfo` in request context via GORM callback
+- OpLog stores `request` / `response` (masked) for POST/PUT/PATCH/DELETE `/api/*`
+- Attachments: `POST /api/attachments/images`; disk `y/m/d/{orig}_{user_id}_{unix_ms}{ext}`; table `attachments` has `file_id`/`orig_name`/`file_name`; group table `attachment_ref_items` (`att_id` + `file_id`)
 
 ## Do not
 

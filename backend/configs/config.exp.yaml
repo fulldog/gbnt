@@ -29,3 +29,4 @@ upload:
   root: "storage/uploads"
   chunk_size: 20971520   # 2MB
   max_file_size: 104857600 # 100MB
+  font: ""               # 水印 CJK 字体路径；空则 Windows 微软雅黑 / Linux Noto 或文泉驿

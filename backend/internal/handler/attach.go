@@ -1,152 +1,78 @@
 package handler
 
 import (
-	"io"
-	"net/http"
+	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
 
-// AttachInit 初始化单个上传任务。
-func (d *Deps) AttachInit(c *gin.Context) {
-	var req service.AttachInitReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "参数错误")
-		return
+func parseOptionalFloat(s string) (*float64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
 	}
-	out, err := d.Attach.Init(req, userID(c))
+	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
-		return
+		return nil, err
 	}
-	response.OK(c, out)
+	return &v, nil
 }
 
-// AttachBatchInit 批量初始化。
-func (d *Deps) AttachBatchInit(c *gin.Context) {
-	var req struct {
-		Files []service.AttachInitReq `json:"files" binding:"required"`
+func watermarkFromForm(c *gin.Context) (service.WatermarkInput, error) {
+	var meta service.WatermarkInput
+	meta.Address = strings.TrimSpace(c.PostForm("address"))
+	lat, err := parseOptionalFloat(c.PostForm("lat"))
+	if err != nil {
+		return meta, err
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+	lng, err := parseOptionalFloat(c.PostForm("lng"))
+	if err != nil {
+		return meta, err
+	}
+	meta.Lat = lat
+	meta.Lng = lng
+	return meta, nil
+}
+
+// AttachUploadImages 批量直传图片：multipart files + lat/lng/address，水印姓名取自登录用户。
+func (d *Deps) AttachUploadImages(c *gin.Context) {
+	maxMem := d.Cfg.Upload.MaxFileSize
+	if maxMem <= 0 {
+		maxMem = 32 << 20
+	}
+	if err := c.Request.ParseMultipartForm(maxMem); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "读取上传表单失败")
 		return
 	}
-	list, err := d.Attach.BatchInit(req.Files, userID(c))
+	form := c.Request.MultipartForm
+	if form == nil {
+		response.Fail(c, 400, response.CodeBadReq, "请使用 multipart 上传图片")
+		return
+	}
+	headers := form.File["files"]
+	if len(headers) == 0 {
+		headers = form.File["file"]
+	}
+	meta, err := watermarkFromForm(c)
 	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "经纬度参数无效")
+		return
+	}
+	list, err := d.Attach.SaveImages(c.Request.Context(), headers, meta)
+	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
+	d.OpLog.Mark(c, "上传图片", "")
 	response.OK(c, gin.H{"list": list})
-}
-
-// AttachStatus 查询上传进度与缺失分片。
-func (d *Deps) AttachStatus(c *gin.Context) {
-	out, err := d.Attach.Status(c.Param("uuid"))
-	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, err.Error())
-		return
-	}
-	response.OK(c, out)
-}
-
-// AttachChunk 上传分片（支持断点续传）。
-func (d *Deps) AttachChunk(c *gin.Context) {
-	idx, err := strconv.Atoi(c.Param("index"))
-	if err != nil || idx < 0 {
-		response.Fail(c, 400, response.CodeBadReq, "无效分片序号")
-		return
-	}
-	data, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "读取分片失败")
-		return
-	}
-	if err := d.Attach.UploadChunk(c.Param("uuid"), idx, data); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
-		return
-	}
-	response.OK(c, gin.H{"chunk_index": idx})
-}
-
-// AttachComplete 合并分片；返回 data.list = [{uuid,url},...]。
-func (d *Deps) AttachComplete(c *gin.Context) {
-	list, err := d.Attach.Complete(c.Param("uuid"))
-	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
-		return
-	}
-	response.OK(c, gin.H{"list": list})
-}
-
-// AttachCompleteBatch 批量完成多个文件上传，返回统一 list。
-func (d *Deps) AttachCompleteBatch(c *gin.Context) {
-	var req struct {
-		UUIDs []string `json:"uuids" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "参数错误：需 uuids")
-		return
-	}
-	list, err := d.Attach.CompleteMany(req.UUIDs)
-	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
-		return
-	}
-	response.OK(c, gin.H{"list": list})
-}
-
-// AttachBind 用文件 uuid 列表创建一对多关联，返回 ref_uuid + list。
-func (d *Deps) AttachBind(c *gin.Context) {
-	var req struct {
-		FileUUIDs []string `json:"file_uuids" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "参数错误：需 file_uuids")
-		return
-	}
-	ref, list, err := d.Attach.Bind(req.FileUUIDs)
-	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
-		return
-	}
-	response.OK(c, gin.H{"ref_uuid": ref, "list": list})
-}
-
-// AttachResolve 按关联 ref_uuid 反查文件 list。
-func (d *Deps) AttachResolve(c *gin.Context) {
-	list, err := d.Attach.Resolve(c.Param("ref_uuid"))
-	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, err.Error())
-		return
-	}
-	response.OK(c, gin.H{"list": list})
-}
-
-// AttachMeta 附件元数据。
-func (d *Deps) AttachMeta(c *gin.Context) {
-	out, err := d.Attach.Meta(c.Param("uuid"))
-	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, err.Error())
-		return
-	}
-	response.OK(c, out)
-}
-
-// AttachDownload 下载已就绪附件。
-func (d *Deps) AttachDownload(c *gin.Context) {
-	path, name, ctype, err := d.Attach.FilePath(c.Param("uuid"))
-	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, err.Error())
-		return
-	}
-	if ctype != "" {
-		c.Header("Content-Type", ctype)
-	}
-	c.Header("Content-Disposition", "attachment; filename=\""+name+"\"")
-	c.File(path)
-	_ = http.StatusOK
 }

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"time"
@@ -52,7 +53,7 @@ type IssueInput struct {
 // IssueVO 业务明细/列表项（含反查后的文件 list）。
 type IssueVO struct {
 	model.Issue
-	Photos        []FileItem `json:"photos"`         // 现场照片 [{uuid,url}]
+	Photos        []FileItem `json:"photos"`         // 现场照片 [{file_id,url}]
 	RectifyPhotos []FileItem `json:"rectify_photos"` // 整改照片
 }
 
@@ -204,14 +205,21 @@ func (s *IssueService) Get(id uint64) (*IssueVO, error) {
 	return s.toVO(&item)
 }
 
-func (s *IssueService) Create(in IssueInput, reporterID uint64, reporterName string) (*IssueVO, error) {
+func (s *IssueService) db(ctx context.Context) *gorm.DB {
+	if ctx == nil {
+		return s.DB
+	}
+	return s.DB.WithContext(ctx)
+}
+
+func (s *IssueService) Create(ctx context.Context, in IssueInput, reporterID uint64, reporterName string) (*IssueVO, error) {
 	if in.Type == "" {
 		return nil, errors.New("type 必填")
 	}
 	if len(in.FileUUIDs) == 0 {
 		return nil, errors.New("file_uuids 至少 1 个")
 	}
-	refUUID, _, err := s.Attach.Bind(in.FileUUIDs)
+	refUUID, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -246,13 +254,13 @@ func (s *IssueService) Create(in IssueInput, reporterID uint64, reporterName str
 		TypeExt:       ext,
 		PhotoRefUUID:  refUUID,
 	}
-	if err := s.DB.Create(item).Error; err != nil {
+	if err := s.db(ctx).Create(item).Error; err != nil {
 		return nil, err
 	}
 	return s.toVO(item)
 }
 
-func (s *IssueService) Update(id uint64, in IssueInput) (*IssueVO, error) {
+func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*IssueVO, error) {
 	var item model.Issue
 	if err := s.DB.First(&item, id).Error; err != nil {
 		return nil, err
@@ -271,7 +279,7 @@ func (s *IssueService) Update(id uint64, in IssueInput) (*IssueVO, error) {
 		if len(in.FileUUIDs) == 0 {
 			return nil, errors.New("photo_ref_uuid 为空时须传 file_uuids 重新关联")
 		}
-		ref, _, err := s.Attach.Bind(in.FileUUIDs)
+		ref, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -291,15 +299,15 @@ func (s *IssueService) Update(id uint64, in IssueInput) (*IssueVO, error) {
 	if in.Status != "" {
 		updates["status"] = in.Status
 	}
-	if err := s.DB.Model(&item).Updates(updates).Error; err != nil {
+	if err := s.db(ctx).Model(&item).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 	return s.Get(id)
 }
 
-func (s *IssueService) Delete(id uint64) error {
+func (s *IssueService) Delete(ctx context.Context, id uint64) error {
 	// 软删：is_delete=1
-	return s.DB.Delete(&model.Issue{}, id).Error
+	return s.db(ctx).Delete(&model.Issue{}, id).Error
 }
 
 // RectifyInput 整改入参。
@@ -310,7 +318,7 @@ type RectifyInput struct {
 }
 
 // Rectify 提交整改照片闭环。
-func (s *IssueService) Rectify(id uint64, in RectifyInput) (*IssueVO, error) {
+func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput) (*IssueVO, error) {
 	var item model.Issue
 	if err := s.DB.First(&item, id).Error; err != nil {
 		return nil, err
@@ -323,14 +331,14 @@ func (s *IssueService) Rectify(id uint64, in RectifyInput) (*IssueVO, error) {
 		if len(in.FileUUIDs) == 0 {
 			return nil, errors.New("rectify_photo_ref_uuid 为空时须传 file_uuids")
 		}
-		r, _, err := s.Attach.Bind(in.FileUUIDs)
+		r, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
 		if err != nil {
 			return nil, err
 		}
 		ref = r
 	}
 	now := time.Now()
-	if err := s.DB.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
+	if err := s.db(ctx).Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"status":                 "done",
 		"rectify_note":           in.Note,
 		"rectify_at":             &now,
@@ -341,10 +349,10 @@ func (s *IssueService) Rectify(id uint64, in RectifyInput) (*IssueVO, error) {
 	return s.Get(id)
 }
 
-func (s *IssueService) Import(rows []IssueInput, reporterID uint64, reporterName string) (int, error) {
+func (s *IssueService) Import(ctx context.Context, rows []IssueInput, reporterID uint64, reporterName string) (int, error) {
 	n := 0
 	for _, row := range rows {
-		if _, err := s.Create(row, reporterID, reporterName); err != nil {
+		if _, err := s.Create(ctx, row, reporterID, reporterName); err != nil {
 			return n, err
 		}
 		n++

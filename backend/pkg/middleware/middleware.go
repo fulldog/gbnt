@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/logger"
 	"gbnt/backend/pkg/jwtutil"
 	"gbnt/backend/pkg/response"
@@ -69,7 +70,11 @@ func (w bodyLogWriter) Write(b []byte) (int, error) {
 func AccessLog() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var reqBody []byte
-		if c.Request.Body != nil && c.Request.Method != "GET" {
+		ct := c.ContentType()
+		slurpBody := c.Request.Body != nil && c.Request.Method != "GET" &&
+			!strings.HasPrefix(ct, "multipart/") &&
+			!strings.HasPrefix(ct, "application/octet-stream")
+		if slurpBody {
 			reqBody, _ = io.ReadAll(c.Request.Body)
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		}
@@ -79,11 +84,21 @@ func AccessLog() gin.HandlerFunc {
 
 		c.Next()
 
+		reqLog := maskJSON(string(reqBody))
+		if reqLog == "" && strings.HasPrefix(c.ContentType(), "multipart/") {
+			reqLog = "[multipart]"
+		}
+		respLog := maskJSON(truncate(blw.buf.String(), 4096))
+
 		cost := int64(0)
 		if v, ok := c.Get(response.CtxStartAt); ok {
 			if t, ok2 := v.(time.Time); ok2 {
 				cost = time.Since(t).Milliseconds()
 			}
+		}
+
+		if afterAccess != nil && shouldPersistOpLog(c) {
+			afterAccess(c, reqLog, respLog)
 		}
 
 		if logger.L() == nil {
@@ -98,18 +113,22 @@ func AccessLog() gin.HandlerFunc {
 			zap.String("ua", c.Request.UserAgent()),
 			zap.Int("status", c.Writer.Status()),
 			zap.Int64("cost_ms", cost),
-			zap.Any("user_id", c.Keys["user_id"]),
-			zap.String("req", maskJSON(string(reqBody))),
-			zap.String("resp", maskJSON(truncate(blw.buf.String(), 4096))),
+			zap.Uint64("user_id", uint64(database.UserIDFromContext(c.Request.Context()))),
+			zap.String("req", reqLog),
+			zap.String("resp", respLog),
 		)
 	}
 }
 
+// ActiveUserLoader 按 user_id 实时加载有效用户（status=1）。
+type ActiveUserLoader func(ctx context.Context, userID uint64) (*database.UserInfo, error)
+
 // JWTAuth 校验 Bearer Token；whitelist 路径跳过。
+// 解析 JWT 后按 user_id 查库加载 UserInfo，失败则 401。
 // 滑动续期：剩余有效期进入 renew 窗口时，签发新 token，经响应头带回：
 //
 //	X-New-Token / X-Token-Expires-At
-func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
+func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, whitelist []string) gin.HandlerFunc {
 	set := map[string]struct{}{}
 	for _, p := range whitelist {
 		set[p] = struct{}{}
@@ -117,6 +136,10 @@ func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 		if _, ok := set[path]; ok {
+			c.Next()
+			return
+		}
+		if strings.HasPrefix(path, "/uploads/") {
 			c.Next()
 			return
 		}
@@ -132,11 +155,18 @@ func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		c.Set("user_id", claims.UserID)
-		c.Set("username", claims.Username)
-		c.Set("user_name", claims.Name)
-		c.Set("org_id", claims.OrgID)
-		c.Set("role", claims.Role)
+		if loadUser == nil {
+			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+			c.Abort()
+			return
+		}
+		info, err := loadUser(c.Request.Context(), claims.UserID)
+		if err != nil {
+			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+			c.Abort()
+			return
+		}
+		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), info))
 
 		// 滑动续期：临近过期则换发新 token
 		if jm.NeedRenew(claims) {
@@ -148,6 +178,28 @@ func JWTAuth(jm *jwtutil.Manager, whitelist []string) gin.HandlerFunc {
 			}
 		}
 		c.Next()
+	}
+}
+
+type AfterAccessFunc func(c *gin.Context, req, resp string)
+
+var afterAccess AfterAccessFunc
+
+// OnAfterAccess 注册访问结束后的回调（写入操作日志表）。
+func OnAfterAccess(fn AfterAccessFunc) {
+	afterAccess = fn
+}
+
+func shouldPersistOpLog(c *gin.Context) bool {
+	path := c.Request.URL.Path
+	if path == "/api/health" || strings.HasPrefix(path, "/uploads/") {
+		return false
+	}
+	switch c.Request.Method {
+	case "POST", "PUT", "PATCH", "DELETE":
+		return strings.HasPrefix(path, "/api/")
+	default:
+		return false
 	}
 }
 

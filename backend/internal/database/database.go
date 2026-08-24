@@ -37,6 +37,7 @@ func Open(cfg config.MySQLConfig, slowMs int) (*gorm.DB, error) {
 	if cfg.MaxOpen > 0 {
 		sqlDB.SetMaxOpenConns(cfg.MaxOpen)
 	}
+	RegisterAuditCallbacks(db)
 	return db, nil
 }
 

@@ -96,14 +96,15 @@ Base URL：`http://127.0.0.1:8080`
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/attachments/init` | 单文件 init → uuid |
-| POST | `/api/attachments/batch-init` | 批量 init |
-| POST | `/api/attachments/complete-batch` | 批量 complete，`data.list=[{uuid,url}]` |
+| POST | `/api/attachments/images` | **批量直传图片**（multipart，无需分片）；逐张打水印后 `data.list=[{uuid,url}]` |
+| POST | `/api/attachments/init` | 单文件 init → uuid；可带 `user_name`/`lat`/`lng`/`address`（图片水印） |
+| POST | `/api/attachments/batch-init` | 批量 init；顶层水印字段应用到每个文件 |
+| POST | `/api/attachments/complete-batch` | 批量 complete；图片烧录水印，`data.list=[{uuid,url}]` |
 | POST | `/api/attachments/bind` | `file_uuids` → `{ref_uuid, list}` |
 | GET | `/api/attachments/refs/:ref_uuid` | 反查关联文件 list |
 | GET | `/api/attachments/:uuid/status` | 进度 / missing_chunks |
 | PUT | `/api/attachments/:uuid/chunks/:index` | 上传分片（body=二进制） |
-| POST | `/api/attachments/:uuid/complete` | 合并完成，`data.list=[{uuid,url}]` |
+| POST | `/api/attachments/:uuid/complete` | 合并完成；图片烧录左下角水印（body 可选同上水印字段） |
 | GET | `/api/attachments/:uuid` | 元数据 |
 | GET | `/api/attachments/:uuid/download` | 下载 |
 
@@ -112,7 +113,18 @@ Base URL：`http://127.0.0.1:8080`
 - 新建 Issue：`file_uuids`（文件 uuid 列表）→ 落库 `photo_ref_uuid`
 - 修改 Issue：`photo_ref_uuid` 非空=不变；为空则 `file_uuids` 重新关联
 - 整改：`file_uuids` / `rectify_photo_ref_uuid` 同上
-- 查询：返回 `photo_ref_uuid` + `photos:[{uuid,url}]`（整改同理 `rectify_photos`）
+- 查询：返回 `photo_ref_uuid`（实为 att_id）+ `photos:[{file_id,url}]`（整改同理 `rectify_photos`）
+
+### 图片水印
+
+合并完成时对 jpg/png/gif/webp **烧录**左下角取证水印（对齐现场照片样式）：
+
+1. 最上一行加粗 **地址** `address`
+2. 黄竖条 + **度分秒** `lat/lng`（如 `36°26'56"N, 115°58'55"E`）
+3. **时间** `YYYY年M月D日 HH:MM`（服务器本地时区）
+4. **上报人** `user_name`
+
+参数可在 `POST /api/attachments/images`（multipart）或 `init` / `complete` 传入。未传 `user_name` 时用当前登录用户姓名。非图片不处理。一次最多 20 张。Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测微软雅黑。
 
 ---
 

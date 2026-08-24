@@ -54,6 +54,7 @@ type UploadConfig struct {
 	Root        string `mapstructure:"root"`
 	ChunkSize   int64  `mapstructure:"chunk_size"`
 	MaxFileSize int64  `mapstructure:"max_file_size"`
+	Font        string `mapstructure:"font"` // 水印中文字体 ttf/otf/ttc；空则探测系统字体
 }
 
 // Load 从 configs/config.yaml 读取，并用 GBNT_ 前缀环境变量覆盖。
