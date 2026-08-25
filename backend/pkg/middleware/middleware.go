@@ -123,12 +123,17 @@ func AccessLog() gin.HandlerFunc {
 // ActiveUserLoader 按 user_id 实时加载有效用户（status=1）。
 type ActiveUserLoader func(ctx context.Context, userID uint64) (*database.UserInfo, error)
 
+// TokenDenier JWT jti 黑名单查询。
+type TokenDenier interface {
+	Denied(jti string) bool
+}
+
 // JWTAuth 校验 Bearer Token；whitelist 路径跳过。
-// 解析 JWT 后按 user_id 查库加载 UserInfo，失败则 401。
+// 解析 JWT 后校验 jti 黑名单与 token_ver，再按 user_id 查库加载 UserInfo，失败则 401。
 // 滑动续期：剩余有效期进入 renew 窗口时，签发新 token，经响应头带回：
 //
 //	X-New-Token / X-Token-Expires-At
-func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, whitelist []string) gin.HandlerFunc {
+func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, whitelist []string) gin.HandlerFunc {
 	set := map[string]struct{}{}
 	for _, p := range whitelist {
 		set[p] = struct{}{}
@@ -149,8 +154,14 @@ func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, whitelist []string)
 			c.Abort()
 			return
 		}
-		claims, err := jm.Parse(strings.TrimPrefix(auth, "Bearer "))
+		raw := strings.TrimPrefix(auth, "Bearer ")
+		claims, err := jm.Parse(raw)
 		if err != nil {
+			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+			c.Abort()
+			return
+		}
+		if deny != nil && deny.Denied(claims.ID) {
 			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
 			c.Abort()
 			return
@@ -162,6 +173,11 @@ func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, whitelist []string)
 		}
 		info, err := loadUser(c.Request.Context(), claims.UserID)
 		if err != nil {
+			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+			c.Abort()
+			return
+		}
+		if claims.TokenVer != info.TokenVer {
 			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
 			c.Abort()
 			return
@@ -225,7 +241,7 @@ func maskJSON(raw string) string {
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		return raw
 	}
-	for _, k := range []string{"password", "token", "access_token", "old_password", "new_password"} {
+	for _, k := range []string{"password", "token", "access_token", "old_password", "new_password", "confirm_password"} {
 		if _, ok := m[k]; ok {
 			m[k] = "***"
 		}

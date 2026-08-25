@@ -2,12 +2,12 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/model"
-	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
@@ -66,14 +66,15 @@ func (d *Deps) userPayload(u *model.SysUser) gin.H {
 		return nil
 	}
 	out := gin.H{
-		"id":       u.ID,
-		"username": u.Username,
-		"name":     u.Name,
-		"phone":    u.Phone,
-		"org_id":   u.OrgID,
-		"role_id":  u.RoleID,
+		"id":             u.ID,
+		"username":       u.Username,
+		"name":           u.Name,
+		"phone":          u.Phone,
+		"org_id":         u.OrgID,
+		"role_id":        u.RoleID,
+		"is_super_admin": u.IsSuperAdmin,
 	}
-	d.fillAPIs(out, u.RoleID)
+	d.fillAPIs(out, u.RoleID, u.IsSuperAdmin)
 	return out
 }
 
@@ -82,22 +83,23 @@ func (d *Deps) userInfoPayload(info *database.UserInfo) gin.H {
 		return nil
 	}
 	out := gin.H{
-		"id":       info.ID,
-		"username": info.Username,
-		"name":     info.Name,
-		"phone":    info.Phone,
-		"org_id":   info.OrgID,
-		"role_id":  info.RoleID,
+		"id":             info.ID,
+		"username":       info.Username,
+		"name":           info.Name,
+		"phone":          info.Phone,
+		"org_id":         info.OrgID,
+		"role_id":        info.RoleID,
+		"is_super_admin": info.IsSuperAdmin,
 	}
-	d.fillAPIs(out, info.RoleID)
+	d.fillAPIs(out, info.RoleID, info.IsSuperAdmin)
 	return out
 }
 
-func (d *Deps) fillAPIs(out gin.H, roleID uint64) {
+func (d *Deps) fillAPIs(out gin.H, roleID uint64, isSuperAdmin bool) {
 	if d.Perm == nil {
 		return
 	}
-	if roleID == perm.SuperAdminRoleID {
+	if isSuperAdmin {
 		out["apis"] = "*"
 		return
 	}
@@ -119,6 +121,40 @@ func (d *Deps) Me(c *gin.Context) {
 	response.OK(c, d.userInfoPayload(info))
 }
 
+// ChangePassword PUT /api/auth/password — 本人改密（JWT，不做 RBAC）。
+func (d *Deps) ChangePassword(c *gin.Context) {
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	var req service.ChangePasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	if err := d.Auth.ChangePassword(c.Request.Context(), user.ID, req.OldPassword, req.NewPassword, req.ConfirmPassword); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	d.OpLog.Mark(c, "修改密码", user.Username)
+	response.OK(c, nil)
+}
+
+// Logout POST /api/auth/logout — 退出登录：当前 token jti 入黑名单（JWT，不做 RBAC）。
+func (d *Deps) Logout(c *gin.Context) {
+	auth := c.GetHeader("Authorization")
+	raw := strings.TrimPrefix(auth, "Bearer ")
+	if err := d.Auth.Logout(raw); err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	if user, err := userFromCtx(c); err == nil {
+		d.OpLog.Mark(c, "退出登录", user.Username)
+	}
+	response.OK(c, nil)
+}
+
 // WorkbenchStats GET /api/workbench/stats — 上报/待整改/已整改/完成率/分类型。
 func (d *Deps) WorkbenchStats(c *gin.Context) {
 	stats, err := d.Issue.Stats()
@@ -129,16 +165,21 @@ func (d *Deps) WorkbenchStats(c *gin.Context) {
 	response.OK(c, stats)
 }
 
-// ListIssues GET /api/issues — 专项整改列表；query: type/status/street/village/keyword/page/size。
+// ListIssues GET /api/issues — 专项整改列表；query: type/status/street/village/*_org_id/project_year/keyword/page/size。
 func (d *Deps) ListIssues(c *gin.Context) {
 	q := service.IssueQuery{
-		Type:    c.Query("type"),
-		Status:  c.Query("status"),
-		Street:  c.Query("street"),
-		Village: c.Query("village"),
-		Keyword: c.Query("keyword"),
-		Page:    atoiDefault(c.Query("page"), 1),
-		Size:    atoiDefault(c.Query("size"), 20),
+		Type:          c.Query("type"),
+		Status:        c.Query("status"),
+		Street:        c.Query("street"),
+		Village:       c.Query("village"),
+		RootOrgID:     parseUint64Query(c.Query("root_org_id")),
+		DistrictOrgID: parseUint64Query(c.Query("district_org_id")),
+		StreetOrgID:   parseUint64Query(c.Query("street_org_id")),
+		VillageOrgID:  parseUint64Query(c.Query("village_org_id")),
+		ProjectYear:   atoiDefault(c.Query("project_year"), 0),
+		Keyword:       c.Query("keyword"),
+		Page:          atoiDefault(c.Query("page"), 1),
+		Size:          atoiDefault(c.Query("size"), 20),
 	}
 	list, total, err := d.Issue.List(q)
 	if err != nil {
@@ -162,7 +203,7 @@ func (d *Deps) GetIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// CreateIssue POST /api/issues — 新增排查（提交即 pending）；body 见 IssueInput。
+// CreateIssue POST /api/issues — 新增排查；区划 ID + QuizBool 推导 needs_rectify/status。
 func (d *Deps) CreateIssue(c *gin.Context) {
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -234,6 +275,21 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
+// ReRectifyIssue POST /api/issues/:id/re-rectify — 重新整改（done → pending）。
+func (d *Deps) ReRectifyIssue(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	item, err := d.Issue.ReRectify(c.Request.Context(), id)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	d.OpLog.Mark(c, "重新整改", item.Type+" · "+item.Code)
+	response.OK(c, item)
+}
+
 // ImportIssues POST /api/issues/import — 批量导入 {rows:IssueInput[]}。
 func (d *Deps) ImportIssues(c *gin.Context) {
 	var req service.ImportIssuesReq
@@ -282,6 +338,17 @@ func atoiDefault(s string, def int) int {
 	n, err := strconv.Atoi(s)
 	if err != nil || n <= 0 {
 		return def
+	}
+	return n
+}
+
+func parseUint64Query(s string) uint64 {
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0
 	}
 	return n
 }

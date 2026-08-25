@@ -58,13 +58,14 @@ func main() {
 		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"))
 	}
 	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
-	authSvc := &service.AuthService{DB: db, JWT: jm}
+	memCache := cachex.New(5*time.Minute, 10*time.Minute)
+	denyList := &jwtutil.DenyList{Store: memCache}
+	authSvc := &service.AuthService{DB: db, JWT: jm, Deny: denyList}
 	attachSvc := &service.AttachService{
 		DB:  db,
 		Cfg: cfg.Upload,
 		WM:  watermark.NewRenderer(cfg.Upload.Font),
 	}
-	memCache := cachex.New(5*time.Minute, 10*time.Minute)
 	captchaSvc := &service.CaptchaService{Store: memCache, Cfg: cfg.Captcha}
 	permSvc := perm.NewService(db, memCache)
 	if cfg.Migrate.Enabled {
@@ -98,7 +99,7 @@ func main() {
 		}
 	}
 	r.Static("/uploads", uploadRoot)
-	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, perm.PublicPaths))
+	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, denyList, perm.PublicPaths))
 	r.Use(middleware.RBAC(permSvc, cfg.RBAC.Enabled, perm.PublicPaths))
 	handler.Register(r, deps)
 	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {

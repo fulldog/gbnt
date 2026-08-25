@@ -1,13 +1,10 @@
 package migrate
 
 import (
-	"fmt"
-
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"gbnt/backend/internal/model"
-	"gbnt/backend/internal/perm"
 )
 
 // bootstrapSeed 全量写入组织、角色、API 目录、默认授权与管理员。
@@ -39,33 +36,26 @@ func seedIfEmpty(db *gorm.DB) error {
 	return bootstrapSeed(db)
 }
 
-// seedAdmin 写入管理员账号。
+// seedAdmin 写入超级管理员：admin/admin，id 自增为 1，is_super_admin=true。
 func seedAdmin(db *gorm.DB) error {
-	_, rootID, err := loadOrgNameIndex(db)
-	if err != nil {
-		return err
-	}
-	if rootID == 0 {
-		return fmt.Errorf("seed admin: root org not found")
-	}
-
 	var userCount int64
 	_ = db.Model(&model.SysUser{}).Count(&userCount)
 	if userCount > 0 {
 		return nil
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 	admin := model.SysUser{
-		Username: "admin",
-		Password: string(hash),
-		Name:     "李强",
-		Phone:    "13800000000",
-		OrgID:    rootID,
-		RoleID:   perm.SuperAdminRoleID,
-		Status:   1,
+		Username:     "admin",
+		Password:     string(hash),
+		Name:         "超级管理员",
+		Phone:        "",
+		OrgID:        0,
+		RoleID:       0,
+		Status:       1,
+		IsSuperAdmin: true,
 	}
 	return db.Create(&admin).Error
 }

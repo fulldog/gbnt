@@ -9,7 +9,7 @@ import (
 	"gbnt/backend/internal/model"
 )
 
-// ensureSchema GORM AutoMigrate + 表注释；并删除已废弃的字典表。
+// ensureSchema GORM AutoMigrate + 表注释；并删除已废弃的字典表/列。
 func ensureSchema(db *gorm.DB) error {
 	if err := dropLegacyDictTables(db); err != nil {
 		return err
@@ -21,13 +21,42 @@ func ensureSchema(db *gorm.DB) error {
 		&model.SysAPI{},
 		&model.SysRoleAPI{},
 		&model.Issue{},
+		&model.IssueRectifyRecord{},
 		&model.OpLog{},
 		&model.Attachment{},
 		&model.AttachmentRefItem{},
 	); err != nil {
 		return err
 	}
+	if err := dropLegacyIssueColumns(db); err != nil {
+		return err
+	}
 	return applyTableComments(db)
+}
+
+// dropLegacyIssueColumns 删除已从 Issue 模型移除的列（AutoMigrate 不会 DROP）。
+// 保留 assignee_name / assignee_phone（接口不传，库内可空）。
+func dropLegacyIssueColumns(db *gorm.DB) error {
+	m := db.Migrator()
+	if !m.HasTable(&model.Issue{}) {
+		return nil
+	}
+	for _, col := range []string{
+		"project_name",
+		"location_text",
+		"description",
+		"measures",
+		"reporter_name",
+		"reporter_phone",
+	} {
+		if !m.HasColumn(&model.Issue{}, col) {
+			continue
+		}
+		if err := m.DropColumn(&model.Issue{}, col); err != nil {
+			return fmt.Errorf("drop issues.%s: %w", col, err)
+		}
+	}
+	return nil
 }
 
 func dropLegacyDictTables(db *gorm.DB) error {

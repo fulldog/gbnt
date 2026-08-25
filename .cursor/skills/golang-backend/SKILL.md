@@ -32,6 +32,7 @@ backend/
 - Envelope: `{ code, data, message, cost_ms, trace_id }` — success `code === 0`
 - Return request duration in body `cost_ms` and header `X-Response-Time`
 - Propagate `X-Request-Id` / `trace_id` through context → logs → SQL
+- **Comments required**: every new/changed exported API type, handler, and request/response field needs Chinese comments; sync `doc/api.md` (+ openapi) in the same change (see `.cursor/rules/api-comments.mdc`)
 
 ## Logging
 
@@ -46,6 +47,8 @@ backend/
 - JWT Bearer; whitelist login/health; token claims only `user_id`
 - JWT middleware loads active `UserInfo` from DB by `user_id` (status=1); failure → 401
 - Sliding renew: when remaining TTL ≤ `renew_before_hours`, middleware issues new token via headers `X-New-Token` + `X-Token-Expires-At` (no refresh token)
+- Change password: `PUT /api/auth/password` (and app mirror) — JWT only, RBAC skip; Reset: `POST /api/sys/users/:id/reset-password` → password=username
+- Logout: `POST /api/auth/logout` — ban JWT `jti` until expiry (in-process cache); password change/reset bumps `token_ver` to invalidate all tokens
 - Comments in Chinese for business intent; mark `[PRD]` where rules come from PRD
 
 ## Attachments
@@ -55,6 +58,13 @@ backend/
 - Business submits `file_uuids` (file_id 列表); backend Bind → `att_id` stored as `photo_ref_uuid`
 - Table: `attachment_ref_items` (`att_id` + `file_id`)
 
+## Issues (report / rectify)
+
+- Status: `new` / `pending` / `done`; Create derives from QuizBool → `needs_rectify` (`false`→`done`, `true`→`new`)
+- Region: four org IDs (at least one; ancestors required); QuizBool = `{value,desc,files}`
+- Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; assignee columns kept on `issues` (server-fill later)
+- Rectify only `new|pending`; `POST .../re-rectify` for `done`→`pending`; history in `issue_rectify_records`
+
 ## Docs
 
 - Project docs: `doc/`
@@ -63,7 +73,8 @@ backend/
 ## Migration
 
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
-- **`server.mode=debug`**: every startup TRUNCATE business tables + full bootstrap (orgs, roles, APIs, admin `admin/123456`)
+- **`server.mode=debug`**: every startup TRUNCATE business tables + full bootstrap (orgs, roles, APIs, super admin `admin/admin` with `is_super_admin=true`)
+- User super-admin: `sys_users.is_super_admin` (exactly one); cannot edit/delete that user; change/reset password allowed; RBAC bypass via flag
 - **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs`; seed only on empty DB when `migrate.seed=true`
 - Package layout: `migrate.go` (entry), `schema.go`, `dev_reset.go`, `seed.go`, `rbac.go`, `org_seed.go`, `sync_apis.go`
 - Soft delete: every table has `is_delete` (0/1); `Delete()` only flags, queries exclude deleted

@@ -35,9 +35,9 @@ type CaptchaService struct {
 
 // ImageCaptcha 图形验证码响应。
 type ImageCaptcha struct {
-	CaptchaID     string `json:"captcha_id"`
-	ImageBase64   string `json:"image_base64"`
-	ExpireSeconds int    `json:"expire_seconds"`
+	CaptchaID     string `json:"captcha_id"`     // 验证码会话 ID，登录时回传
+	ImageBase64   string `json:"image_base64"`   // PNG Data URI（含 data:image/png;base64, 前缀）
+	ExpireSeconds int    `json:"expire_seconds"` // 有效秒数
 }
 
 // CreateImage 生成数字图形验证码。

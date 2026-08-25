@@ -56,7 +56,7 @@ type OrgTreeNode struct {
 // UserInput 创建/更新用户入参。
 type UserInput struct {
 	Username string `json:"username"` // 登录账号（新建必填）
-	Password string `json:"password"` // 明文密码（新建必填；更新时空则不改）
+	Password string `json:"password"` // 明文密码（新建空则=账户名；更新时空则不改）
 	Name     string `json:"name"`     // 姓名
 	Phone    string `json:"phone"`    // 手机号
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
@@ -249,105 +249,93 @@ func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]
 }
 
 func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUser, error) {
-
-	if in.Username == "" || in.Password == "" {
-
-		return nil, errors.New("username 与 password 必填")
-
+	if in.Username == "" {
+		return nil, errors.New("username 必填")
 	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-
+	pwd := strings.TrimSpace(in.Password)
+	if pwd == "" {
+		pwd = in.Username // 初始化密码=账户名
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
-
 		return nil, err
-
 	}
-
 	u := &model.SysUser{
-
-		Username: in.Username,
-
-		Password: string(hash),
-
-		Name: in.Name,
-
-		Phone: in.Phone,
-
-		OrgID: in.OrgID,
-
-		RoleID: in.RoleID,
-
-		Status: 1,
+		Username:     in.Username,
+		Password:     string(hash),
+		Name:         in.Name,
+		Phone:        in.Phone,
+		OrgID:        in.OrgID,
+		RoleID:       in.RoleID,
+		Status:       1,
+		IsSuperAdmin: false, // 超管仅允许一名，由种子初始化
 	}
-
 	if in.Status != nil {
-
 		u.Status = *in.Status
-
 	}
-
 	if err := s.db(ctx).Create(u).Error; err != nil {
-
 		return nil, err
-
 	}
-
 	return u, nil
-
 }
 
 func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*model.SysUser, error) {
-
 	var u model.SysUser
-
 	if err := s.db(ctx).First(&u, id).Error; err != nil {
-
 		return nil, err
-
 	}
-
+	if u.IsSuperAdmin {
+		return nil, errors.New("超级管理员不可编辑")
+	}
 	updates := map[string]interface{}{
-
 		"name": in.Name, "phone": in.Phone, "org_id": in.OrgID, "role_id": in.RoleID,
 	}
-
 	if in.Status != nil {
-
 		updates["status"] = *in.Status
-
 	}
-
 	if in.Password != "" {
-
 		hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-
 		if err != nil {
-
 			return nil, err
-
 		}
-
 		updates["password"] = string(hash)
-
+		updates["token_ver"] = gorm.Expr("token_ver + 1")
 	}
-
 	if err := s.db(ctx).Model(&u).Updates(updates).Error; err != nil {
-
 		return nil, err
-
 	}
-
 	_ = s.db(ctx).First(&u, id)
-
 	return &u, nil
-
 }
 
 func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
-
+	var u model.SysUser
+	if err := s.db(ctx).First(&u, id).Error; err != nil {
+		return err
+	}
+	if u.IsSuperAdmin {
+		return errors.New("超级管理员不可删除")
+	}
 	return s.db(ctx).Delete(&model.SysUser{}, id).Error
+}
 
+// ResetPassword 将密码重置为账户名（username），并递增 token_ver。
+func (s *SysService) ResetPassword(ctx context.Context, id uint64) error {
+	var u model.SysUser
+	if err := s.db(ctx).First(&u, id).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+	if u.Username == "" {
+		return errors.New("账户名为空，无法重置")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(u.Username), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return s.db(ctx).Model(&u).Updates(map[string]interface{}{
+		"password":  string(hash),
+		"token_ver": gorm.Expr("token_ver + 1"),
+	}).Error
 }
 
 func (s *SysService) ListRoles() ([]model.SysRole, error) {

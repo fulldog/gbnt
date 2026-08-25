@@ -1,0 +1,30 @@
+---
+description: 后端新增/修改必须写中文注释，并同步 API 文档
+alwaysApply: true
+---
+
+# 注释与文档同步（backend / doc）
+
+凡**新增或修改** `backend/`、`doc/` 中的接口与业务代码，必须遵守：
+
+## 代码注释（必写）
+
+1. **导出类型 / 函数 / 方法**：写中文 Godoc 风格注释，说明用途与关键约束。
+2. **请求/响应结构体字段**（含 `json` / `form` / query 映射）：每个字段旁写中文行尾注释，说明含义、取值枚举、是否必填、空值语义。
+3. **业务关键规则**（状态机、权限、校验）：在实现处用简短中文注释标出意图；来自需求的可标 `[PRD]`。
+4. **禁止**：无注释的裸字段、无说明的公开 API；注释用英文凑数。
+
+## 文档同步（同一次改动）
+
+改动对外 HTTP 契约时，**同一次提交/同轮对话**更新：
+
+- `doc/api.md`（路径、参数表、行为说明）
+- 若涉及 OpenAPI：`doc/apifox/openapi.yaml`
+- 惯例摘要：`.cursor/skills/golang-backend/SKILL.md`（如适用）
+
+未更新文档 = 未完成。
+
+## 范围
+
+- 适用于：`backend/internal/handler`、`service`、`model`、请求 DTO、路由注册等。
+- **不**改 `demo/`（见 `no-demo-edits` 规则）。

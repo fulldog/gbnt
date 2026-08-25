@@ -56,7 +56,7 @@ func RBAC(svc *perm.Service, enabled bool, publicPaths []string) gin.HandlerFunc
 			c.Abort()
 			return
 		}
-		allowed, err := svc.Allow(info.RoleID, api)
+		allowed, err := svc.Allow(info.RoleID, info.IsSuperAdmin, api)
 		if err != nil {
 			response.Fail(c, 500, response.CodeServer, err.Error())
 			c.Abort()

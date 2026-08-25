@@ -16,7 +16,7 @@ go run ./cmd/server
 
 默认监听 `:8080`。健康检查：`GET /api/health`
 
-默认管理员：`admin` / `123456`（种子数据，生产务必修改）。
+默认管理员：`admin` / `admin`（种子：超级管理员，`is_super_admin=true`，org/role=0；生产务必修改）。
 
 ## 目录
 

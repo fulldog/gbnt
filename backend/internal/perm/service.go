@@ -75,9 +75,6 @@ type roleGrantCache struct {
 }
 
 func (s *Service) loadRoleGrants(roleID uint64) (*roleGrantCache, error) {
-	if roleID == SuperAdminRoleID {
-		return &roleGrantCache{ModuleActions: map[string]map[string]bool{}, APIIDs: nil}, nil
-	}
 	key := fmt.Sprintf("perm:role:%d", roleID)
 	if v, ok := s.Cache.Get(key); ok {
 		if c, ok2 := v.(*roleGrantCache); ok2 {
@@ -111,9 +108,9 @@ func (s *Service) InvalidateRole(roleID uint64) {
 	s.Cache.Delete(fmt.Sprintf("perm:role:%d", roleID))
 }
 
-// Allow 校验 role 是否可访问指定 API。
-func (s *Service) Allow(roleID uint64, api *model.SysAPI) (bool, error) {
-	if roleID == SuperAdminRoleID {
+// Allow 校验是否可访问指定 API；用户 is_super_admin 时放行全部。
+func (s *Service) Allow(roleID uint64, isSuperAdmin bool, api *model.SysAPI) (bool, error) {
+	if isSuperAdmin {
 		return true, nil
 	}
 	if api == nil {
@@ -126,11 +123,8 @@ func (s *Service) Allow(roleID uint64, api *model.SysAPI) (bool, error) {
 	return actionSatisfies(grants.ModuleActions, api.Module, api.Action), nil
 }
 
-// ListAPIIDsForRole 返回角色已授权 API id 列表；超管返回 nil 表示全部。
+// ListAPIIDsForRole 返回角色已授权 API id 列表。
 func (s *Service) ListAPIIDsForRole(roleID uint64) ([]uint64, error) {
-	if roleID == SuperAdminRoleID {
-		return nil, nil
-	}
 	grants, err := s.loadRoleGrants(roleID)
 	if err != nil {
 		return nil, err

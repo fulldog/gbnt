@@ -66,13 +66,15 @@ func (t OrgType) Valid() bool {
 
 // SysUser 工作人员。
 type SysUser struct {
-	Username string `gorm:"size:64;uniqueIndex;not null;comment:登录账号" json:"username"`
-	Password string `gorm:"size:128;not null;comment:密码 bcrypt 哈希" json:"-"`
-	Name     string `gorm:"size:64;comment:姓名" json:"name"`
-	Phone    string `gorm:"size:32;comment:手机号" json:"phone"`
-	OrgID    uint64 `gorm:"column:org_id;index;default:0;comment:所属组织主键ID" json:"org_id"`
-	RoleID   uint64 `gorm:"column:role_id;index;default:0;comment:角色主键ID" json:"role_id"`
-	Status   int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
+	Username     string `gorm:"size:64;uniqueIndex;not null;comment:登录账号" json:"username"`
+	Password     string `gorm:"size:128;not null;comment:密码 bcrypt 哈希" json:"-"`
+	Name         string `gorm:"size:64;comment:姓名" json:"name"`
+	Phone        string `gorm:"size:32;comment:手机号" json:"phone"`
+	OrgID        uint64 `gorm:"column:org_id;index;default:0;comment:所属组织主键ID" json:"org_id"`
+	RoleID       uint64 `gorm:"column:role_id;index;default:0;comment:角色主键ID" json:"role_id"`
+	Status       int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
+	IsSuperAdmin bool   `gorm:"column:is_super_admin;index;default:0;comment:是否超级管理员 全库仅允许一名" json:"is_super_admin"`
+	TokenVer     int    `gorm:"column:token_ver;default:0;comment:令牌版本 改密或强制下线时递增" json:"-"`
 	Base
 }
 
@@ -111,36 +113,38 @@ type SysRoleAPI struct {
 
 func (SysRoleAPI) TableName() string { return "sys_role_apis" }
 
-// Issue 排查/整改主表（对齐前端 issues）。
+// Issue 排查/整改主表。
 type Issue struct {
-	IssueKey            string     `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
-	Type                string     `gorm:"size:32;index;comment:问题类型 well/road/bridge/forest/transformer" json:"type"`
-	Street              string     `gorm:"size:64;index;comment:街道" json:"street"`
-	Village             string     `gorm:"size:64;index;comment:村或社区" json:"village"`
-	ProjectName         string     `gorm:"size:128;comment:项目名称" json:"project_name"`
-	Code                string     `gorm:"size:64;comment:设施编号或点位编号" json:"code"`
-	LocationText        string     `gorm:"size:255;comment:位置描述" json:"location_text"`
-	Address             string     `gorm:"size:255;comment:详细地址" json:"address"`
-	Lat                 float64    `gorm:"comment:纬度" json:"lat"`
-	Lng                 float64    `gorm:"comment:经度" json:"lng"`
-	Description         string     `gorm:"type:text;comment:问题描述" json:"description"`
-	Measures            string     `gorm:"type:text;comment:整改措施" json:"measures"`
-	PlanDate            string     `gorm:"size:16;index;comment:计划完成日 YYYY-MM-DD" json:"plan_date"`
-	Status              string     `gorm:"size:16;index;comment:状态 pending待整改 done已整改" json:"status"`
-	ReporterID          uint64     `gorm:"index;comment:上报人用户ID" json:"reporter_id"`
-	ReporterName        string     `gorm:"size:64;comment:上报人姓名" json:"reporter_name"`
-	ReporterPhone       string     `gorm:"size:32;comment:上报人电话" json:"reporter_phone"`
-	AssigneeName        string     `gorm:"size:64;comment:整改责任人" json:"assignee_name"`
-	AssigneePhone       string     `gorm:"size:32;comment:整改责任人电话" json:"assignee_phone"`
-	RectifyNote         string     `gorm:"type:text;comment:整改说明" json:"rectify_note"`
-	RectifyAt           *time.Time `gorm:"comment:整改完成时间" json:"rectify_at"`
-	TypeExt             string     `gorm:"type:json;comment:类型扩展字段JSON" json:"type_ext"`
-	PhotoRefUUID        string     `gorm:"size:36;index;comment:现场照片关联组att_id" json:"photo_ref_uuid"`
-	RectifyPhotoRefUUID string     `gorm:"size:36;index;comment:整改照片关联组att_id" json:"rectify_photo_ref_uuid"`
+	IssueKey                string  `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
+	Type                    string  `gorm:"size:32;index;comment:问题类型 well/road/bridge/forest/transformer" json:"type"`
+	ProjectYear             int     `gorm:"index;default:0;comment:项目年度 2020-2023" json:"project_year"`
+	RootOrgID               uint64  `gorm:"index;default:0;comment:区划根组织ID" json:"root_org_id"`
+	DistrictOrgID           uint64  `gorm:"index;default:0;comment:区划区级组织ID" json:"district_org_id"`
+	StreetOrgID             uint64  `gorm:"index;default:0;comment:区划街道组织ID" json:"street_org_id"`
+	VillageOrgID            uint64  `gorm:"index;default:0;comment:区划村级组织ID" json:"village_org_id"`
+	Code                    string  `gorm:"size:64;comment:设施编号或点位编号" json:"code"`
+	Address                 string  `gorm:"size:255;comment:详细地址" json:"address"`
+	Lat                     float64 `gorm:"comment:纬度" json:"lat"`
+	Lng                     float64 `gorm:"comment:经度" json:"lng"`
+	PlanDate                string  `gorm:"size:16;index;comment:计划完成日 YYYY-MM-DD" json:"plan_date"`
+	Status                  string  `gorm:"size:16;index;comment:状态 new待整改 pending整改中 done已整改" json:"status"`
+	ReporterSignatureFileID string  `gorm:"size:36;comment:排查电子签名附件file_id" json:"reporter_signature_file_id"`
+	AssigneeUser            uint64  `gorm:"default:0;comment:整改责任人" json:"assignee_name"`
+	TypeExt                 string  `gorm:"type:json;comment:类型扩展字段JSON" json:"type_ext"`
 	Base
 }
 
 func (Issue) TableName() string { return "issues" }
+
+// IssueRectifyRecord 整改记录（每次整改一条）。
+type IssueRectifyRecord struct {
+	IssueID      uint64 `gorm:"index;not null;comment:问题主键ID" json:"issue_id"`
+	Note         string `gorm:"type:text;comment:整改说明" json:"note"`
+	PhotoRefUUID string `gorm:"size:36;index;comment:整改照片关联组att_id" json:"photo_ref_uuid"`
+	Base
+}
+
+func (IssueRectifyRecord) TableName() string { return "issue_rectify_records" }
 
 // OpLog 操作日志。
 type OpLog struct {
@@ -185,14 +189,15 @@ func (AttachmentRefItem) TableName() string { return "attachment_ref_items" }
 // TableComments 表名 → 表注释（迁移时 ALTER TABLE COMMENT）。
 func TableComments() map[string]string {
 	return map[string]string{
-		"sys_orgs":             "组织架构",
-		"sys_users":            "工作人员/系统用户",
-		"sys_roles":            "角色",
-		"sys_apis":             "API目录",
-		"sys_role_apis":        "角色API授权",
-		"issues":               "排查整改问题主表",
-		"op_logs":              "操作日志",
-		"attachments":          "附件文件主表",
-		"attachment_ref_items": "附件一对多关联明细",
+		"sys_orgs":              "组织架构",
+		"sys_users":             "工作人员/系统用户",
+		"sys_roles":             "角色",
+		"sys_apis":              "API目录",
+		"sys_role_apis":         "角色API授权",
+		"issues":                "排查整改问题主表",
+		"issue_rectify_records": "问题整改记录",
+		"op_logs":               "操作日志",
+		"attachments":           "附件文件主表",
+		"attachment_ref_items":  "附件一对多关联明细",
 	}
 }

@@ -32,7 +32,7 @@ go run ./cmd/server
 
 默认监听 `:8080`。健康检查：`GET /api/health`。
 
-种子管理员：`admin` / `123456`（生产务必修改）。
+种子管理员：`admin` / `admin`（name=超级管理员，org_id=0，role_id=0，phone 空，`is_super_admin=true`；生产务必修改）。
 
 ## 3. 统一约定
 
@@ -93,7 +93,7 @@ X-Token-Expires-At: <RFC3339 过期时间>
 
 **RBAC 接口权限**（`rbac.enabled`，默认 `true`）：
 
-JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 bypass。同 `module` 下高阶 action（create/edit/delete/import/export）隐含 `view`。禁用角色（`sys_roles.status=0`）的用户无法登录，已签发 token 下次请求 401。`/api/auth/me`、`POST /api/attachments/images` 仅登录即可。**`/api/app/*` 小程序路由不入 sys_apis、不做 RBAC**（仅 JWT）。详见 [api.md · RBAC](./api.md)。
+JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 bypass。同 `module` 下高阶 action（create/edit/delete/import/export）隐含 `view`。禁用角色（`sys_roles.status=0`）的用户无法登录，已签发 token 下次请求 401。`/api/auth/me`、`PUT /api/auth/password`、`POST /api/auth/logout`、`POST /api/attachments/images` 仅登录即可。**`/api/app/*` 小程序路由不入 sys_apis、不做 RBAC**（仅 JWT）。详见 [api.md · RBAC](./api.md)。
 
 ### 3.3 日志
 

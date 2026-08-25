@@ -81,7 +81,7 @@ func (d *Deps) ListUsers(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total})
 }
 
-// CreateUser POST /api/sys/users — 新增工作人员（username/password 必填）。
+// CreateUser POST /api/sys/users — 新增工作人员（password 空则=账户名）。
 func (d *Deps) CreateUser(c *gin.Context) {
 	var req service.UserInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,6 +125,20 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
+	response.OK(c, nil)
+}
+
+// ResetUserPassword POST /api/sys/users/:id/reset-password — 重置密码为账户名。
+func (d *Deps) ResetUserPassword(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if err := d.Sys.ResetPassword(c.Request.Context(), id); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	d.OpLog.Mark(c, "重置密码", "user_id="+itoa(int(id)))
 	response.OK(c, nil)
 }
 

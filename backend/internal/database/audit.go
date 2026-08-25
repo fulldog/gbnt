@@ -16,12 +16,14 @@ var ErrUnauth = errors.New("未登录或凭证无效")
 
 // UserInfo 写入 request context 的当前登录用户（不含密码）。
 type UserInfo struct {
-	ID       uint64
-	Username string
-	Name     string
-	Phone    string
-	OrgID    uint64
-	RoleID   uint64
+	ID           uint64
+	Username     string
+	Name         string
+	Phone        string
+	OrgID        uint64
+	RoleID       uint64
+	TokenVer     int
+	IsSuperAdmin bool
 }
 
 // WithUser 把当前用户写入 context，供审计字段与业务层读取。

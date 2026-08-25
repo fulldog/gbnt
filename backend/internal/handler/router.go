@@ -47,6 +47,10 @@ func Register(r *gin.Engine, d *Deps) {
 			auth.POST("/login", d.Login)
 			// GET /api/auth/me — 当前登录用户信息
 			auth.GET("/me", d.Me)
+			// PUT /api/auth/password — 本人修改密码（JWT，不做 RBAC）
+			auth.PUT("/password", d.ChangePassword)
+			// POST /api/auth/logout — 退出登录（拉黑当前 token；JWT，不做 RBAC）
+			auth.POST("/logout", d.Logout)
 		}
 
 		// GET /api/workbench/stats — 工作台统计（上报/待整改/已整改/完成率）
@@ -68,6 +72,8 @@ func Register(r *gin.Engine, d *Deps) {
 			issues.DELETE("/:id", d.DeleteIssue)
 			// POST /api/issues/:id/rectify — 提交整改结果（照片 UUID 闭环）
 			issues.POST("/:id/rectify", d.RectifyIssue)
+			// POST /api/issues/:id/re-rectify — 重新整改（done → pending）
+			issues.POST("/:id/re-rectify", d.ReRectifyIssue)
 		}
 
 		// GET /api/ledger/street — 街道台账聚合
@@ -92,6 +98,8 @@ func Register(r *gin.Engine, d *Deps) {
 			sys.POST("/users", d.CreateUser)
 			// PUT /api/sys/users/:id — 更新工作人员
 			sys.PUT("/users/:id", d.UpdateUser)
+			// POST /api/sys/users/:id/reset-password — 重置密码为账户名
+			sys.POST("/users/:id/reset-password", d.ResetUserPassword)
 			// DELETE /api/sys/users/:id — 删除工作人员
 			sys.DELETE("/users/:id", d.DeleteUser)
 

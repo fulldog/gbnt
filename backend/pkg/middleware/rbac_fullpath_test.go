@@ -93,8 +93,9 @@ func TestRBACSkipsAppPrefix(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("app route skips RBAC but still needs JWT, got %d", w.Code)
+	// /api/app/* 整段跳过 RBAC；本用例未挂 JWT，故应直接放行到 handler。
+	if w.Code != http.StatusOK {
+		t.Fatalf("app route should skip RBAC (JWT is separate), got %d", w.Code)
 	}
 }
 

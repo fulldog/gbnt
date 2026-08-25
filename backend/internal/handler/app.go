@@ -23,21 +23,27 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 			auth.POST("/login", d.AppLogin)
 			// GET /api/app/auth/me — 当前登录用户
 			auth.GET("/me", d.AppMe)
+			// PUT /api/app/auth/password — 本人修改密码（JWT）
+			auth.PUT("/password", d.ChangePassword)
+			// POST /api/app/auth/logout — 退出登录
+			auth.POST("/logout", d.Logout)
 		}
 
-		// GET /api/app/todos — 待办列表（默认 status=pending）
+		// GET /api/app/todos — 待办列表（默认 status=new）
 		app.GET("/todos", d.AppListTodos)
 		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
 
 		issues := app.Group("/issues")
 		{
-			// POST /api/app/issues — 上报问题（提交即待整改；file_uuids → photo_ref_uuid）
+			// POST /api/app/issues — 上报问题（按 quiz 推导 new/done）
 			issues.POST("", d.AppCreateIssue)
 			// GET /api/app/issues/:id — 问题详情（含 lat/lng，地图页可复用）
 			issues.GET("/:id", d.AppGetIssue)
 			// POST /api/app/issues/:id/rectify — 页内提交整改（照片闭环）
 			issues.POST("/:id/rectify", d.AppRectifyIssue)
+			// POST /api/app/issues/:id/re-rectify — 重新整改（done → pending）
+			issues.POST("/:id/re-rectify", d.AppReRectifyIssue)
 		}
 
 		mine := app.Group("/mine")
@@ -125,18 +131,23 @@ func (d *Deps) AppMe(c *gin.Context) {
 	d.Me(c)
 }
 
-// AppListTodos 小程序待办：筛选 type/status/street/village/keyword/page/size。
-// 未传 status 时默认 pending；传 status=all 表示不限状态。
+// AppListTodos 小程序待办：筛选 type/status/*_org_id/project_year/keyword/page/size。
+// 未传 status 时默认 new；传 status=all 表示不限状态。
 func (d *Deps) AppListTodos(c *gin.Context) {
 	rawStatus := c.Query("status")
 	q := service.IssueQuery{
-		Type:    c.Query("type"),
-		Status:  rawStatus,
-		Street:  c.Query("street"),
-		Village: c.Query("village"),
-		Keyword: c.Query("keyword"),
-		Page:    atoiDefault(c.Query("page"), 1),
-		Size:    atoiDefault(c.Query("size"), 20),
+		Type:          c.Query("type"),
+		Status:        rawStatus,
+		Street:        c.Query("street"),
+		Village:       c.Query("village"),
+		RootOrgID:     parseUint64Query(c.Query("root_org_id")),
+		DistrictOrgID: parseUint64Query(c.Query("district_org_id")),
+		StreetOrgID:   parseUint64Query(c.Query("street_org_id")),
+		VillageOrgID:  parseUint64Query(c.Query("village_org_id")),
+		ProjectYear:   atoiDefault(c.Query("project_year"), 0),
+		Keyword:       c.Query("keyword"),
+		Page:          atoiDefault(c.Query("page"), 1),
+		Size:          atoiDefault(c.Query("size"), 20),
 	}
 	list, total, err := d.Issue.ListTodos(q)
 	if err != nil {
@@ -145,7 +156,7 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 	}
 	status := rawStatus
 	if status == "" {
-		status = "pending"
+		status = "new"
 	}
 	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size, "status": status})
 }
@@ -165,7 +176,7 @@ func (d *Deps) AppGetIssue(c *gin.Context) {
 	d.GetIssue(c)
 }
 
-// AppCreateIssue 小程序上报（提交即待整改）。
+// AppCreateIssue 小程序上报（按 quiz 推导 new/done）。
 func (d *Deps) AppCreateIssue(c *gin.Context) {
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -203,6 +214,21 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 		return
 	}
 	d.OpLog.Mark(c, "小程序整改", item.Type+" · "+item.Code)
+	response.OK(c, item)
+}
+
+// AppReRectifyIssue 小程序重新整改（done → pending）。
+func (d *Deps) AppReRectifyIssue(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	item, err := d.Issue.ReRectify(c.Request.Context(), id)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	d.OpLog.Mark(c, "小程序重新整改", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 

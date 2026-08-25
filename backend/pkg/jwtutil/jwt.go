@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-// Claims 业务声明（仅 user_id，其余用户信息由中间件实时查库）。
+// Claims 业务声明；用户详情由中间件按 user_id 查库，token_ver 须与库一致。
 type Claims struct {
-	UserID uint64 `json:"user_id"`
+	UserID   uint64 `json:"user_id"`
+	TokenVer int    `json:"token_ver"`
 	jwt.RegisteredClaims
 }
 
@@ -46,14 +48,17 @@ func (m *Manager) Expire() time.Duration { return m.expire }
 // RenewBefore 返回滑动续期窗口。
 func (m *Manager) RenewBefore() time.Duration { return m.renewBefore }
 
-// Sign 签发 access token。
-func (m *Manager) Sign(userID uint64) (string, time.Time, error) {
-	exp := time.Now().Add(m.expire)
+// Sign 签发 access token（含 jti 与 token_ver）。
+func (m *Manager) Sign(userID uint64, tokenVer int) (string, time.Time, error) {
+	now := time.Now()
+	exp := now.Add(m.expire)
 	claims := Claims{
-		UserID: userID,
+		UserID:   userID,
+		TokenVer: tokenVer,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			ExpiresAt: jwt.NewNumericDate(exp),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -61,12 +66,12 @@ func (m *Manager) Sign(userID uint64) (string, time.Time, error) {
 	return s, exp, err
 }
 
-// Resign 按已有 claims 重新签发（滑动续期），有效期重新起算。
+// Resign 滑动续期：保留 user_id/token_ver，换新 jti 与过期时间。
 func (m *Manager) Resign(c *Claims) (string, time.Time, error) {
 	if c == nil {
 		return "", time.Time{}, errors.New("nil claims")
 	}
-	return m.Sign(c.UserID)
+	return m.Sign(c.UserID, c.TokenVer)
 }
 
 // NeedRenew 是否处于滑动续期窗口（仍有效，但剩余时间 < renewBefore）。
@@ -76,6 +81,18 @@ func (m *Manager) NeedRenew(c *Claims) bool {
 	}
 	remain := time.Until(c.ExpiresAt.Time)
 	return remain > 0 && remain <= m.renewBefore
+}
+
+// RemainTTL 返回 token 剩余有效期；无效或已过期返回 0。
+func (m *Manager) RemainTTL(c *Claims) time.Duration {
+	if c == nil || c.ExpiresAt == nil {
+		return 0
+	}
+	d := time.Until(c.ExpiresAt.Time)
+	if d < 0 {
+		return 0
+	}
+	return d
 }
 
 // Parse 解析 token。

@@ -2,7 +2,8 @@
 
 Base URL：`http://127.0.0.1:8080`  
 鉴权：`Authorization: Bearer <token>`（标注「公开」的除外）。  
-滑动续期：剩余有效期进入窗口时响应头带回 `X-New-Token`、`X-Token-Expires-At`，前端应替换本地 token。
+滑动续期：剩余有效期进入窗口时响应头带回 `X-New-Token`、`X-Token-Expires-At`，前端应替换本地 token。  
+退出：`POST /api/auth/logout`（或 app 镜像）将当前 token `jti` 拉黑；改密/重置密码会递增 `token_ver`，旧 token 全部失效。
 
 统一响应见 [README.md](./README.md) §3.1。
 
@@ -20,7 +21,28 @@ Base URL：`http://127.0.0.1:8080`
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/auth/me` | 当前用户（含 `role_id`、`apis`；超管 `apis` 为 `"*"`） |
+| GET | `/api/auth/me` | 当前用户（含 `role_id`、`is_super_admin`、`apis`；超管 `apis` 为 `"*"`） |
+| PUT | `/api/auth/password` | 本人改密（JWT，不做 RBAC） |
+| POST | `/api/auth/logout` | 退出登录：当前 token 的 `jti` 入黑名单至过期（JWT，不做 RBAC） |
+
+### `PUT /api/auth/password` 参数
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `old_password` | string | 是 | 原密码 |
+| `new_password` | string | 是 | 新密码：6–14 位，须同时含字母与数字，仅字母数字，区分大小写 |
+| `confirm_password` | string | 是 | 确认新密码，须与 `new_password` 一致 |
+
+成功后递增 `token_ver`，该用户全部旧 token 失效。
+
+### `GET /api/auth/me` 主要返回字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` / `username` / `name` / `phone` | 用户基本信息 |
+| `org_id` / `role_id` | 组织、角色；可为 0 |
+| `is_super_admin` | 是否超级管理员 |
+| `apis` | 授权 API id 列表；超管为 `"*"` |
 
 ### RBAC 接口权限
 
@@ -28,11 +50,11 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 | 项 | 说明 |
 | --- | --- |
-| 超管 | `sys_roles.id = 1`，拥有全部 API，不写 `sys_role_apis` |
-| 管理员保护 | `role_id = 1` 不可删改（含 API 授权） |
+| 超管 | `sys_users.is_super_admin=true`（全库仅一名，种子 id=1）；拥有全部 API（`apis="*"`）；不可编辑/删除，可改密与重置密码 |
+| 管理员保护 | `sys_roles.id = 1` 角色记录不可删改（含 API 授权） |
 | 角色状态 | `sys_roles.status`：`1` 启用 / `0` 禁用；禁用后该角色用户无法登录且 token 失效 |
 | action 继承 | 同 `module` 下 `create/edit/delete/import/export` 均隐含 `view` |
-| 登录即可 | `/api/auth/me`、`POST /api/attachments/images` 不做 RBAC |
+| 登录即可 | `/api/auth/me`、`PUT /api/auth/password`、`POST /api/auth/logout`、`POST /api/attachments/images` 不做 RBAC |
 | 小程序 | **`/api/app/*` 整段仅 JWT**，不入 `sys_apis`、不做 RBAC |
 
 ## 工作台
@@ -45,12 +67,13 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/issues` | 列表，query: type/status/street/village/keyword/page/size |
-| GET | `/api/issues/:id` | 详情 |
-| POST | `/api/issues` | 新增（对齐 report.html 必填；`file_uuids` → `photo_ref_uuid`；`type_ext` 按类型） |
-| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按 type 校验；是/否为 boolean） |
+| GET | `/api/issues` | 列表，query: type/status/`*_org_id`/project_year/street/village/keyword/page/size；status=`new`\|`pending`\|`done` |
+| GET | `/api/issues/:id` | 详情（含 `photos` / `rectify_photos` / `rectify_records`） |
+| POST | `/api/issues` | 新增；四级区划 ID + QuizBool；无问题 → `done`，有问题 → `new` |
+| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按 type 校验 QuizBool） |
 | DELETE | `/api/issues/:id` | 删除（软删） |
-| POST | `/api/issues/:id/rectify` | 整改闭环 `{note, file_uuids, rectify_photo_ref_uuid}` |
+| POST | `/api/issues/:id/rectify` | 整改：仅 `needs_rectify` 且 status∈{`new`,`pending`}；写入 `issue_rectify_records` 后 → `done` |
+| POST | `/api/issues/:id/re-rectify` | 重新整改：仅 `done` 且 `needs_rectify=true` → `pending` |
 | POST | `/api/issues/import` | 批量导入 `{rows:[]}` |
 
 ## 台账
@@ -74,9 +97,22 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/sys/users` | 列表，query: org_id/keyword/page/size |
-| POST | `/api/sys/users` | 新增 `{username,password,name,phone,org_id,role_id,status}` |
-| PUT | `/api/sys/users/:id` | 更新（password 空则不改） |
-| DELETE | `/api/sys/users/:id` | 删除 |
+| POST | `/api/sys/users` | 新增；`password` 空则初始化为账户名；不可创建超管 |
+| PUT | `/api/sys/users/:id` | 更新（password 空则不改）；**超管用户不可编辑** |
+| POST | `/api/sys/users/:id/reset-password` | 重置密码为账户名（username），并递增 `token_ver`（超管可用） |
+| DELETE | `/api/sys/users/:id` | 删除；**超管用户不可删除** |
+
+### `POST/PUT /api/sys/users` 参数（UserInput）
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `username` | string | 登录账号（新建必填） |
+| `password` | string | 明文密码；新建空则=账户名；更新空则不改 |
+| `name` | string | 姓名 |
+| `phone` | string | 手机号 |
+| `org_id` | uint64 | 所属组织 ID |
+| `role_id` | uint64 | 角色 ID |
+| `status` | int | 1 启用 / 0 禁用；新建省略默认 1 |
 
 ## 系统 · 角色
 
@@ -124,23 +160,50 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 3. 新建 Issue：`file_uuids` 必填 → 后台内部建关联组，落库 **`photo_ref_uuid`**（实为 `att_id`）
 4. 修改 Issue：`photo_ref_uuid` 非空 = 附件不变；为空则须重新传 `file_uuids`
 5. 整改：`file_uuids` / `rectify_photo_ref_uuid` 规则同上
-6. 查询：返回 `photo_ref_uuid` + **`photos:[{file_id,url}]`**（整改同理 `rectify_photos`）
+6. 查询：返回 `photo_ref_uuid` + **`photos:[{file_id,url}]`**（整改同理 `rectify_photos`）；详情另含 **`rectify_records[]`**
+7. QuizBool 题内 `files`（file_id 列表）在规范化 `type_ext` 时内部 Bind，回填 `att_id`
 
 ### 上报 `IssueInput` / `type_ext`
 
-公共字段与 `demo/miniapp/report.html` 对齐。新建必填：`type`、`street`、`village`、`project_name`、`description`、定位（`address` 或 `location_text`）、`measures`、`plan_date`、`assignee_name`、`assignee_phone`、`file_uuids`（≥1）、`type_ext`。`code` 选填。
+新建核心：`type`、`project_year`（2020–2023）、四级区划 ID（至少一级）、`address`、`file_uuids`（≥1）、`reporter_signature_file_id`、`type_ext`。`code` 选填。
 
-`type_ext` 随 `type` 使用不同对象；**是/否题为 JSON boolean**（`true`=是，`false`=否，未传视为未填）。
+| 字段 | 说明 |
+| --- | --- |
+| `type` | well / road / bridge / forest / transformer |
+| `project_year` | 2020–2023 |
+| `root_org_id` / `district_org_id` / `street_org_id` / `village_org_id` | 四级区划，至少一级；子级有值则上级必填 |
+| `code` | 设施编号（选填） |
+| `address` | 定位地址（必填） |
+| `lat` / `lng` | 经纬度 |
+| `plan_date` | YYYY-MM-DD；需整改时必填 |
+| `reporter_signature_file_id` | 排查电子签名 file_id |
+| `file_uuids` | 现场照片 file_id 列表 |
+| `photo_ref_uuid` | 仅更新：有值=附件不变 |
+| `type_ext` | 类型扩展（见下表 QuizBool） |
+| `status` | 仅更新用 |
 
-| type | 扩展对象 | 布尔字段 | 其它要点 |
+**已从入参移除**（对齐 miniapp 上报向导）：`project_name`、`location_text`、`description`、`measures`、`reporter_name` / `reporter_phone`、`assignee_name` / `assignee_phone`。其中责任人列仍保留在 `issues` 表（接口不传，可空，后续由服务端填充）；其余字段已从表结构删除。
+
+**区划**：`root_org_id` / `district_org_id` / `street_org_id` / `village_org_id`（可空，未填为 0）。至少填 1 个；填了子级则其全部上级必填；组织须存在且类型匹配，相邻级须父子关系。名称冗余写入 `street` / `village`。
+
+**状态推导**：按 quiz 算 `needs_rectify`——无任何问题 → `needs_rectify=false`、`status=done`；有问题 → `true`、`status=new`。有问题时 `plan_date` 必填。
+
+**QuizBool**（是/否题）：`{value, desc, files}`；缺键视为未答。导致需整改的答题须 `desc` + `files` 非空。正向题（出水/路肩等）`value=false` 为异常；负向题（断带/私拉乱接/桥涵需整改）`value=true` 为异常。
+
+| type | 扩展对象 | QuizBool 字段 | 其它要点 |
 | --- | --- | --- | --- |
-| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数 |
-| `road` | `RoadExt` | `has_shoulder` `has_ash` | 长宽厚、林网存活数量 |
-| `bridge` | `BridgeExt` | — | `kind`=`bridge`\|`culvert`\|`gate` |
-| `forest` | `ForestExt` | `broken_belt` `dead_trees` `pest` | 存活率 0–100 |
-| `transformer` | `TransformerExt` | `powered` `device_ok` `cabinet_ok` `illegal_wire` | `voltage`=`10kv`\|`0.4kv`；`model` 选填 |
+| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` `transformer_ok`（正向） | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数；损坏>0 亦需整改 |
+| `road` | `RoadExt` | `has_shoulder` `has_ash`（正向） | 长宽厚、林网存活数量 |
+| `bridge` | `BridgeExt` | `needs_rectify`（负向） | `kind`=`bridge`\|`culvert`\|`gate` |
+| `forest` | `ForestExt` | `broken_belt` `dead_trees` `pest`（负向） | 存活率 0–100 |
+| `transformer` | `TransformerExt` | `powered` `device_ok` `cabinet_ok`（正向）；`illegal_wire`（负向） | `voltage`=`10kv`\|`0.4kv`；`model` 选填 |
 
-各类型 `keeper_name` / `keeper_phone` 选填。整改措施与计划日在顶层，不进 `type_ext`。
+各类型 `keeper_name` / `keeper_phone` 选填。`plan_date` 在顶层。
+
+### 整改 / 重新整改
+
+- **Rectify**：`needs_rectify==true` 且 `status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。成功：插入 `issue_rectify_records`，issue → `done`，并更新最近一次 `rectify_note` / `rectify_at` / `rectify_photo_ref_uuid`。
+- **Re-rectify**：仅 `status==done` 且 `needs_rectify==true` → `pending`；不删历史记录。无问题上报（`needs_rectify=false`）不可调用。
 
 ### 图片水印
 
@@ -176,12 +239,15 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 | POST | `/api/app/auth/slider/finish` | 完成滑动，body: `{slider_id,duration_ms}` → `{pass_token,expire_seconds}`（公开；耗时须在配置区间内） |
 | POST | `/api/app/auth/login` | 登录，body: `{username,password,pass_token}` → JWT（公开；`captcha.enabled=false` 时可省略 pass_token） |
 | GET | `/api/app/auth/me` | 当前用户（含 `role_id`、`apis`） |
-| GET | `/api/app/todos` | 待办列表；query: type/status/street/village/keyword/page/size；**未传 status 默认 pending**；`status=all` 不限 |
+| PUT | `/api/app/auth/password` | 本人改密（同管理端） |
+| POST | `/api/app/auth/logout` | 退出登录（同管理端） |
+| GET | `/api/app/todos` | 待办；query: type/status/`*_org_id`/project_year/keyword/page/size；**未传 status 默认 `new`**；`status=all` 不限 |
 | GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
-| GET | `/api/app/issues/:id` | 问题详情（含 lat/lng，地图页复用） |
-| POST | `/api/app/issues` | 上报（规则同管理端新建；提交即 pending） |
+| GET | `/api/app/issues/:id` | 问题详情（含 lat/lng、`rectify_records`） |
+| POST | `/api/app/issues` | 上报（规则同管理端；按 quiz 推导 `new`/`done`） |
 | POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` / `rectify_photo_ref_uuid` |
-| GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}` |
+| POST | `/api/app/issues/:id/re-rectify` | 重新整改（`done` → `pending`） |
+| GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}`（pending 对齐 status=`new`） |
 | GET | `/api/app/mine/issues` | 清单；query: `scope=reported\|pending\|done` + page/size |
 
 ### 我的 scope 规则
@@ -189,7 +255,7 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 | scope | 含义 |
 | --- | --- |
 | `reported` | `reporter_id` = 当前用户 |
-| `pending` | 状态 pending，且本人上报或 `assignee_name` = 当前用户姓名 |
+| `pending` | 状态 **`new`（待整改）**，且本人上报或 `assignee_name` = 当前用户姓名 |
 | `done` | 状态 done，且本人上报或整改责任人同名 |
 
 Apifox：导入 [apifox/openapi.yaml](./apifox/openapi.yaml)（tag「小程序」）。
