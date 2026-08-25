@@ -1,0 +1,11 @@
+---
+description: 禁止修改 demo/ 目录下任何内容
+alwaysApply: true
+---
+
+# 禁止改动 demo/
+
+- **严禁**创建、修改、删除、重命名 `demo/` 及其子路径下的任何文件或目录。
+- 包含但不限于：`demo/web/`、`demo/miniapp/`、`demo/frontend/`、`demo/AGENTS.md`、`demo/media/` 等。
+- 即使用户口头要求「顺手改一下演示页 / 种子 / 前端」，也应**拒绝改 demo**，仅说明约束，并只改 `backend/`、`doc/` 等非 demo 范围（或请用户先撤销本规则）。
+- 需要对照演示行为时：**只读**查看 `demo/`，不得写入。

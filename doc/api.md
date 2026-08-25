@@ -64,10 +64,10 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/sys/orgs` | 扁平列表 |
-| POST | `/api/sys/orgs` | 新增 `{name,parent_id,sort}` |
-| PUT | `/api/sys/orgs/:id` | 更新 `{name,parent_id,sort}` |
-| DELETE | `/api/sys/orgs/:id` | 删除（根节点 parent_id=0 不可删） |
+| GET | `/api/sys/orgs` | 扁平列表（含 `type`：`root`/`district`/`street`/`village`） |
+| POST | `/api/sys/orgs` | 新增 `{name,parent_id,sort?}`；`parent_id=0` 建根（`root`）；否则按上级逐级推导 `district→street→village`；村下不可再增 |
+| PUT | `/api/sys/orgs/:id` | 仅改名称 `{name}` |
+| DELETE | `/api/sys/orgs/:id` | 删除（根不可删；有下级时拒绝） |
 
 ## 系统 · 人员
 

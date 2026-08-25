@@ -10,7 +10,7 @@ import (
 	"gbnt/backend/pkg/response"
 )
 
-// ListOrgs GET /api/sys/orgs — 组织扁平列表（含 parent_id/sort）。
+// ListOrgs GET /api/sys/orgs — 组织扁平列表（含 type/parent_id/sort）。
 func (d *Deps) ListOrgs(c *gin.Context) {
 	list, err := d.Sys.ListOrgs()
 	if err != nil {
@@ -20,41 +20,41 @@ func (d *Deps) ListOrgs(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// CreateOrg POST /api/sys/orgs — 新增组织。
+// CreateOrg POST /api/sys/orgs — 新增组织（parent_id=0 为根；否则按上级逐级推导类型）。
 func (d *Deps) CreateOrg(c *gin.Context) {
-	var req service.OrgInput
+	var req service.OrgCreateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	o := req.ToModel(0)
-	if err := d.Sys.CreateOrg(c.Request.Context(), o); err != nil {
+	o, err := d.Sys.CreateOrg(c.Request.Context(), req)
+	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	response.OK(c, o)
 }
 
-// UpdateOrg PUT /api/sys/orgs/:id — 更新组织名称/上级/排序。
+// UpdateOrg PUT /api/sys/orgs/:id — 仅更新组织名称。
 func (d *Deps) UpdateOrg(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req service.OrgInput
+	var req service.OrgUpdateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	o := req.ToModel(id)
-	if err := d.Sys.UpdateOrg(c.Request.Context(), o); err != nil {
+	o, err := d.Sys.UpdateOrg(c.Request.Context(), id, req)
+	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	response.OK(c, o)
 }
 
-// DeleteOrg DELETE /api/sys/orgs/:id — 删除组织（parent_id=0 的根节点不可删）。
+// DeleteOrg DELETE /api/sys/orgs/:id — 删除组织（根不可删；有下级时拒绝）。
 func (d *Deps) DeleteOrg(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {

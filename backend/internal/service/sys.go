@@ -2,17 +2,14 @@ package service
 
 import (
 	"context"
-
+	"database/sql"
 	"errors"
-
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
-
 	"gorm.io/gorm"
 
 	"gbnt/backend/internal/model"
-
 	"gbnt/backend/internal/perm"
 )
 
@@ -50,6 +47,7 @@ func (s *SysService) ListOrgs() ([]model.SysOrg, error) {
 type OrgTreeNode struct {
 	ID       uint64        `json:"id"`        // 组织主键
 	Name     string        `json:"name"`      // 组织名称
+	Type     model.OrgType `json:"type"`      // root/district/street/village
 	ParentID uint64        `json:"parent_id"` // 上级组织 ID，根为 0
 	Sort     int           `json:"sort"`      // 排序号
 	Children []OrgTreeNode `json:"children"`  // 子组织
@@ -66,15 +64,17 @@ type UserInput struct {
 	Status   *int   `json:"status"`   // 1 启用 / 0 禁用；空则新建默认 1
 }
 
-// OrgInput 创建/更新组织入参。
-type OrgInput struct {
+// OrgCreateInput 新增组织。
+// parent_id=0 创建根节点；否则挂在上级之下，类型由上级逐级推导。
+type OrgCreateInput struct {
 	Name     string `json:"name"`      // 组织名称（必填）
-	ParentID uint64 `json:"parent_id"` // 上级组织 ID，根为 0
-	Sort     int    `json:"sort"`      // 排序号，越小越靠前
+	ParentID uint64 `json:"parent_id"` // 上级组织 ID；0 表示新增根节点
+	Sort     int    `json:"sort"`      // 排序号，越小越靠前；0 表示追加到末尾
 }
 
-func (in OrgInput) ToModel(id uint64) *model.SysOrg {
-	return &model.SysOrg{Name: in.Name, ParentID: in.ParentID, Sort: in.Sort, Base: model.Base{ID: id}}
+// OrgUpdateInput 编辑组织：仅允许改名称。
+type OrgUpdateInput struct {
+	Name string `json:"name"` // 组织名称（必填）
 }
 
 // RoleInput 创建/更新角色入参。
@@ -118,7 +118,7 @@ func BuildOrgTree(list []model.SysOrg) []OrgTreeNode {
 				children = []OrgTreeNode{}
 			}
 			out = append(out, OrgTreeNode{
-				ID: o.ID, Name: o.Name, ParentID: o.ParentID, Sort: o.Sort, Children: children,
+				ID: o.ID, Name: o.Name, Type: o.Type, ParentID: o.ParentID, Sort: o.Sort, Children: children,
 			})
 		}
 		return out
@@ -130,45 +130,92 @@ func BuildOrgTree(list []model.SysOrg) []OrgTreeNode {
 	return tree
 }
 
-func (s *SysService) CreateOrg(ctx context.Context, o *model.SysOrg) error {
-
-	if strings.TrimSpace(o.Name) == "" {
-
-		return errors.New("组织名称必填")
-
+func (s *SysService) CreateOrg(ctx context.Context, in OrgCreateInput) (*model.SysOrg, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, errors.New("组织名称必填")
 	}
 
-	return s.db(ctx).Create(o).Error
+	var (
+		parentID  uint64
+		childType model.OrgType
+	)
+	if in.ParentID == 0 {
+		// 允许新增根节点
+		parentID = 0
+		childType = model.OrgTypeRoot
+	} else {
+		// 非根：只能挂在已有上级下，按 root→district→street→village 逐级推导
+		var parent model.SysOrg
+		if err := s.db(ctx).First(&parent, in.ParentID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("上级组织不存在")
+			}
+			return nil, err
+		}
+		next, ok := model.ChildOrgType(parent.Type)
+		if !ok {
+			return nil, errors.New("村为末级节点，不能再向下新增")
+		}
+		parentID = in.ParentID
+		childType = next
+	}
 
+	sort := in.Sort
+	if sort == 0 {
+		var maxSort sql.NullInt64
+		_ = s.db(ctx).Model(&model.SysOrg{}).Where("parent_id = ?", parentID).
+			Select("MAX(sort)").Scan(&maxSort)
+		if maxSort.Valid {
+			sort = int(maxSort.Int64) + 1
+		} else {
+			sort = 1
+		}
+	}
+	o := &model.SysOrg{
+		ParentID: parentID,
+		Name:     name,
+		Type:     childType,
+		Sort:     sort,
+	}
+	if err := s.db(ctx).Create(o).Error; err != nil {
+		return nil, err
+	}
+	return o, nil
 }
 
-func (s *SysService) UpdateOrg(ctx context.Context, o *model.SysOrg) error {
-
-	return s.db(ctx).Model(&model.SysOrg{}).Where("id = ?", o.ID).Updates(map[string]interface{}{
-
-		"name": o.Name, "sort": o.Sort, "parent_id": o.ParentID,
-	}).Error
-
+func (s *SysService) UpdateOrg(ctx context.Context, id uint64, in OrgUpdateInput) (*model.SysOrg, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, errors.New("组织名称必填")
+	}
+	var o model.SysOrg
+	if err := s.db(ctx).First(&o, id).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db(ctx).Model(&o).Update("name", name).Error; err != nil {
+		return nil, err
+	}
+	o.Name = name
+	return &o, nil
 }
 
 func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
-
 	var o model.SysOrg
-
 	if err := s.db(ctx).First(&o, id).Error; err != nil {
-
 		return err
-
 	}
-
-	if o.ParentID == 0 {
-
+	if o.Type == model.OrgTypeRoot || o.ParentID == 0 {
 		return errors.New("根节点不可删除")
-
 	}
-
+	var childCount int64
+	if err := s.db(ctx).Model(&model.SysOrg{}).Where("parent_id = ?", id).Count(&childCount).Error; err != nil {
+		return err
+	}
+	if childCount > 0 {
+		return errors.New("请先删除下级组织")
+	}
 	return s.db(ctx).Delete(&model.SysOrg{}, id).Error
-
 }
 
 func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {

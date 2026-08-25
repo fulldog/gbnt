@@ -198,11 +198,18 @@ components:
         address: { type: string, example: 程麻新村西排灌沟桥, description: 地址（仅 watermark 开启时写入水印） }
     Org:
       type: object
-      description: 创建/更新组织
+      description: 新增组织。parent_id=0 创建根；否则类型由上级逐级推导
+      required: [name]
       properties:
         name: { type: string, description: 组织名称（必填） }
-        parent_id: { type: integer, format: int64, description: 上级组织 ID，根为 0 }
-        sort: { type: integer, description: 排序号，越小越靠前 }
+        parent_id: { type: integer, format: int64, description: 上级组织 ID；0 或不传表示新增根节点 }
+        sort: { type: integer, description: 排序号；省略或 0 则追加到同级末尾 }
+    OrgUpdate:
+      type: object
+      description: 编辑组织（仅名称）
+      required: [name]
+      properties:
+        name: { type: string, description: 组织名称（必填） }
     RoleInput:
       type: object
       description: 创建/更新角色
@@ -469,6 +476,10 @@ paths:
     post:
       tags: [组织]
       summary: 新增组织
+      description: |
+        - `parent_id=0`（或不传）：创建根节点 `root`
+        - 指定上级：按 root→district→street→village 逐级推导类型
+        - 村为末级，不可再向下新增
       requestBody:
         required: true
         content:
@@ -483,14 +494,14 @@ paths:
   /api/sys/orgs/{id}:
     put:
       tags: [组织]
-      summary: 更新组织
+      summary: 更新组织名称
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Org" }
+            schema: { $ref: "#/components/schemas/OrgUpdate" }
       responses:
         "200":
           description: ok
@@ -800,10 +811,10 @@ paths:
     get:
       tags: [小程序]
       summary: 组织树
-      description: 按 sys_orgs.parent_id 嵌套 children，供上报/待办区划选择。
+      description: 按 sys_orgs.parent_id 嵌套 children（含 type），供上报/待办区划选择。
       responses:
         "200":
-          description: data.list = [{id,name,parent_id,sort,children:[...]}]
+          description: data.list = [{id,name,type,parent_id,sort,children:[...]}]
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }

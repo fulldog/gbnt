@@ -77,13 +77,13 @@ func Register(r *gin.Engine, d *Deps) {
 
 		sys := api.Group("/sys")
 		{
-			// GET /api/sys/orgs — 组织架构列表
+			// GET /api/sys/orgs — 组织架构列表（含 type）
 			sys.GET("/orgs", d.ListOrgs)
-			// POST /api/sys/orgs — 新增组织
+			// POST /api/sys/orgs — 新增（parent_id=0 为根；否则逐级向下）
 			sys.POST("/orgs", d.CreateOrg)
-			// PUT /api/sys/orgs/:id — 更新组织
+			// PUT /api/sys/orgs/:id — 仅更新组织名称
 			sys.PUT("/orgs/:id", d.UpdateOrg)
-			// DELETE /api/sys/orgs/:id — 删除组织（根节点不可删）
+			// DELETE /api/sys/orgs/:id — 删除组织（根不可删；有下级拒绝）
 			sys.DELETE("/orgs/:id", d.DeleteOrg)
 
 			// GET /api/sys/users — 工作人员列表

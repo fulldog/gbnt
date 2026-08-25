@@ -19,15 +19,50 @@ type Base struct {
 	IsDelete  soft_delete.DeletedAt `gorm:"column:is_delete;softDelete:flag;index;default:0;comment:软删标记 0正常 1已删" json:"is_delete"`
 }
 
-// SysOrg 组织架构（对齐 demo/web/sys-org.html · sysDepartments）。
+// SysOrg 组织架构：类型层级 root > district > street > village。
 type SysOrg struct {
-	ParentID uint64 `gorm:"index;default:0;comment:上级组织主键ID 0为根" json:"parent_id"`
-	Name     string `gorm:"size:128;not null;uniqueIndex;comment:组织名称" json:"name"`
-	Sort     int    `gorm:"default:0;comment:排序号 越小越靠前" json:"sort"`
+	ParentID uint64  `gorm:"index;default:0;comment:上级组织主键ID 0为根" json:"parent_id"`
+	Name     string  `gorm:"size:128;not null;uniqueIndex;comment:组织名称" json:"name"`
+	Type     OrgType `gorm:"size:16;index;not null;comment:组织类型 root/district/street/village" json:"type"`
+	Sort     int     `gorm:"default:0;comment:排序号 越小越靠前" json:"sort"`
 	Base
 }
 
 func (SysOrg) TableName() string { return "sys_orgs" }
+
+// OrgType 组织类型英文枚举（层级：根 > 区 > 街道 > 村）。
+type OrgType string
+
+const (
+	OrgTypeRoot     OrgType = "root"     // 根
+	OrgTypeDistrict OrgType = "district" // 区
+	OrgTypeStreet   OrgType = "street"   // 街道
+	OrgTypeVillage  OrgType = "village"  // 村（末级，不可再向下新增）
+)
+
+// ChildOrgType 返回上级类型下允许创建的子类型；末级或非法上级返回空与 false。
+func ChildOrgType(parent OrgType) (OrgType, bool) {
+	switch parent {
+	case OrgTypeRoot:
+		return OrgTypeDistrict, true
+	case OrgTypeDistrict:
+		return OrgTypeStreet, true
+	case OrgTypeStreet:
+		return OrgTypeVillage, true
+	default:
+		return "", false
+	}
+}
+
+// Valid 是否合法组织类型。
+func (t OrgType) Valid() bool {
+	switch t {
+	case OrgTypeRoot, OrgTypeDistrict, OrgTypeStreet, OrgTypeVillage:
+		return true
+	default:
+		return false
+	}
+}
 
 // SysUser 工作人员。
 type SysUser struct {
