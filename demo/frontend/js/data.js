@@ -9,7 +9,7 @@
     forest: '林网',
     transformer: '变压器',
   };
-  var STATUS_LABEL = { pending: '待整改', done: '已整改' };
+  var STATUS_LABEL = { pending: '待整改', done: '已整改', inspected: '已排查' };
 
   function getIssues() {
     return global.AppStorage.get('issues', []) || [];
@@ -90,6 +90,66 @@
     global.AppStorage.remove('session');
   }
 
+  /**
+   * 修改当前登录用户密码（6～14 位）；成功后清除会话。
+   * @returns {{ ok: boolean, message?: string }}
+   */
+  function changePassword(oldPassword, newPassword, confirmPassword) {
+    var session = global.AppStorage.get('session', null);
+    if (!session) return { ok: false, message: '请先登录' };
+    var oldPwd = String(oldPassword || '');
+    var newPwd = String(newPassword || '');
+    var confirmPwd = String(confirmPassword || '');
+    if (!oldPwd) return { ok: false, message: '请输入旧密码' };
+    if (newPwd.length < 6 || newPwd.length > 14) {
+      return { ok: false, message: '新密码须为 6～14 位' };
+    }
+    if (newPwd !== confirmPwd) {
+      return { ok: false, message: '两次输入的新密码不一致' };
+    }
+    if (newPwd === oldPwd) {
+      return { ok: false, message: '新密码不能与旧密码相同' };
+    }
+    var staff = getStaff();
+    var user = null;
+    var i;
+    for (i = 0; i < staff.length; i++) {
+      if (
+        (session.staffId && staff[i].id === session.staffId) ||
+        staff[i].username === session.username
+      ) {
+        user = staff[i];
+        break;
+      }
+    }
+    if (!user) return { ok: false, message: '账号不存在' };
+    if (String(user.password || '') !== oldPwd) {
+      return { ok: false, message: '旧密码不正确' };
+    }
+    user.password = newPwd;
+    saveStaff(staff);
+    if (global.LadsStorage && typeof global.LadsStorage.get === 'function') {
+      var users = global.LadsStorage.get('sysUsers', []) || [];
+      var changed = false;
+      users.forEach(function (u) {
+        if (
+          (user.id && u.id === user.id) ||
+          (u.account && u.account === user.username)
+        ) {
+          /* 系统配置用户表无独立密码字段时仅同步 staff；有则一并写 */
+          if ('password' in u) {
+            u.password = newPwd;
+            changed = true;
+          }
+        }
+      });
+      if (changed) global.LadsStorage.set('sysUsers', users);
+    }
+    pushLog('修改密码', user.username, user.name);
+    logout();
+    return { ok: true };
+  }
+
   function issuesByType(type) {
     return getIssues().filter(function (i) {
       return !type || i.type === type;
@@ -104,10 +164,14 @@
     var done = list.filter(function (i) {
       return i.status === 'done';
     }).length;
+    var inspected = list.filter(function (i) {
+      return i.status === 'inspected';
+    }).length;
     return {
       total: list.length,
       pending: pending,
       done: done,
+      inspected: inspected,
       byType: {
         well: list.filter(function (i) {
           return i.type === 'well';
@@ -131,20 +195,35 @@
   function addIssue(payload) {
     var list = getIssues();
     var id = global.AppSeed ? global.AppSeed.uid('issue') : 'issue-' + Date.now();
+    var now = new Date();
     var item = Object.assign(
       {
         id: id,
         status: 'pending',
-        createdAt: new Date().toISOString(),
+        createdAt: now.toISOString(),
+        inspectionDate: toDateKey(now),
         rectifyPhotos: [],
         rectifyAt: '',
         rectifyNote: '',
       },
       payload
     );
+    if (!item.inspectionDate && item.createdAt) {
+      item.inspectionDate = toDateKey(item.createdAt);
+    }
     list.unshift(item);
-    saveIssues(list);
+    if (!saveIssues(list)) {
+      if (global.AppLog) global.AppLog.error('data', 'issues 写入失败，可能超出 localStorage 容量');
+      return null;
+    }
     pushLog('上报问题', TYPE_LABEL[item.type] + ' · ' + (item.code || item.id));
+    if (
+      item.status === 'pending' &&
+      global.AppWellSubmitRules &&
+      typeof AppWellSubmitRules.notifyAssignee === 'function'
+    ) {
+      AppWellSubmitRules.notifyAssignee(item);
+    }
     return item;
   }
 
@@ -219,11 +298,78 @@
     };
   }
 
-  /**
-   * 待办角标文案：剩余X天X时 / 逾期X天X时 / MM-DD 完成（跨年带 YYYY-）
-   */
+  /** 计划日期展示：YYYY-MM-DD → YYYY年MM月DD日（入库仍用 ISO 日期） */
+  function formatPlanDateDisplay(iso) {
+    if (!iso) return '';
+    var m = String(iso).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (!m) return String(iso);
+    return (
+      m[1] +
+      '年' +
+      String(m[2]).padStart(2, '0') +
+      '月' +
+      String(m[3]).padStart(2, '0') +
+      '日'
+    );
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, '0');
+  }
+
+  /** ISO / Date → 入库键 YYYY-MM-DD */
+  function toDateKey(input) {
+    var d = input instanceof Date ? input : new Date(input);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  /** 排查日期展示：优先 inspectionDate，否则 createdAt 当日 */
+  function formatInspectionDate(item) {
+    if (!item) return '—';
+    if (item.inspectionDate) {
+      var shown = formatPlanDateDisplay(item.inspectionDate);
+      return shown || '—';
+    }
+    if (item.createdAt) {
+      var key = toDateKey(item.createdAt);
+      if (key) return formatPlanDateDisplay(key) || '—';
+    }
+    return '—';
+  }
+
+  function formatIssueListTitle(item) {
+    if (!item) return '';
+    var region = String(item.naturalVillage || item.village || '').trim();
+    var year = String(item.projectYear || '').trim();
+    if (!year && item.projectName) {
+      var ym = String(item.projectName).match(/(\d{4})/);
+      if (ym) year = ym[1];
+    }
+    var code = String(item.code || '').trim();
+    var out = '';
+    if (region) out += region;
+    if (year) out += year + '年';
+    if (code) out += code;
+    return out;
+  }
+
+  /** 行政区划展示：街道 + 村/社区 + 自然村（有则拼出） */
+  function formatRegion(item) {
+    if (!item) return '—';
+    return [item.street, item.village, item.naturalVillage]
+      .map(function (s) {
+        return String(s || '').trim();
+      })
+      .filter(Boolean)
+      .join('');
+  }
+
   function formatPlanStatus(item) {
     if (!item) return { level: 'pending', text: '—' };
+    if (item.status === 'inspected') {
+      return { level: 'ok', text: '已排查' };
+    }
     if (item.status === 'done') {
       var doneAt = item.rectifyAt || item.createdAt;
       var d = doneAt ? new Date(doneAt) : null;
@@ -283,6 +429,34 @@
     return d + '°' + m + '′' + s + '″' + hemi;
   }
 
+  function isAssigneeMatch(issue, session) {
+    if (global.AppWellSubmitRules && typeof AppWellSubmitRules.isAssigneeMatch === 'function') {
+      return AppWellSubmitRules.isAssigneeMatch(issue, session);
+    }
+    if (!issue || !session) return false;
+    var phone = String(session.phone || '').trim();
+    var staffId = String(session.staffId || '').trim();
+    var name = String(session.name || '').trim();
+    if (phone && String(issue.assigneePhone || '').trim() === phone) return true;
+    if (staffId && String(issue.assigneeId || '').trim() === staffId) return true;
+    if (name && String(issue.assigneeName || '').trim() === name) return true;
+    return false;
+  }
+
+  /** 是否当前登录人上报（演示：上报人可在待办看到自己提交的记录） */
+  function isReporterMatch(issue, session) {
+    if (!issue || !session) return false;
+    var phone = String(session.phone || '').trim();
+    var staffId = String(session.staffId || '').trim();
+    var name = String(session.name || '').trim();
+    var username = String(session.username || '').trim();
+    if (staffId && String(issue.reporterId || '').trim() === staffId) return true;
+    if (phone && String(issue.reporterPhone || '').trim() === phone) return true;
+    if (name && String(issue.reporterName || '').trim() === name) return true;
+    if (username && String(issue.reporterId || '').trim() === username) return true;
+    return false;
+  }
+
   global.AppData = {
     TYPE_LABEL: TYPE_LABEL,
     STATUS_LABEL: STATUS_LABEL,
@@ -297,6 +471,7 @@
     pushLog: pushLog,
     login: login,
     logout: logout,
+    changePassword: changePassword,
     issuesByType: issuesByType,
     stats: stats,
     addIssue: addIssue,
@@ -306,7 +481,14 @@
     importIssues: importIssues,
     daysLeft: daysLeft,
     planRemain: planRemain,
+    formatIssueListTitle: formatIssueListTitle,
+    formatRegion: formatRegion,
     formatPlanStatus: formatPlanStatus,
+    formatPlanDateDisplay: formatPlanDateDisplay,
+    formatInspectionDate: formatInspectionDate,
+    toDateKey: toDateKey,
+    isAssigneeMatch: isAssigneeMatch,
+    isReporterMatch: isReporterMatch,
     formatTime: formatTime,
     toDms: toDms,
     findStaffByUsername: findStaffByUsername,

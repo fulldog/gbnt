@@ -55,12 +55,15 @@
       ? global.AppData.STATUS_LABEL[status] || status
       : status === 'done'
         ? '已整改'
-        : '待整改';
+        : status === 'inspected'
+          ? '已排查'
+          : '待整改';
   }
 
   function parseStatus(val) {
     var s = String(val || '').trim();
     if (s === '已整改' || s === 'done') return 'done';
+    if (s === '已排查' || s === 'inspected') return 'inspected';
     return 'pending';
   }
 

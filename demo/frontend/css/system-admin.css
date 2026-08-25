@@ -1119,7 +1119,7 @@
 
 .sys-oplog-time-range > span {
   color: var(--sys-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .sys-oplog-time-range input {
@@ -1871,7 +1871,7 @@
   top: 50%;
   transform: translateY(-50%);
   color: var(--sys-muted);
-  font-size: 13px;
+  font-size: 14px;
   pointer-events: none;
 }
 
@@ -1992,7 +1992,7 @@
   border-radius: 6px;
   background: rgba(8, 18, 32, 0.92);
   color: var(--sys-text);
-  font-size: 13px;
+  font-size: 14px;
   box-sizing: border-box;
   outline: none;
 }
@@ -2014,7 +2014,7 @@
   background: rgba(45, 106, 173, 0.35);
   color: var(--sys-text);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 #global-modal .modal-card--device-split .dm-device-map-search button:hover {
@@ -2242,7 +2242,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   color: var(--sys-muted);
   flex-shrink: 0;
@@ -2618,7 +2618,7 @@
 
 #global-modal .modal-card--rule-config .modal-card__header h3 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   color: #ffffff;
   letter-spacing: 0.02em;
@@ -2682,7 +2682,7 @@
 }
 
 #global-modal .modal-card--rule-config .rc-rule-modal__namebar-text {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   color: #ffffff;
 }

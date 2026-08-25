@@ -48,7 +48,7 @@
   }
 
   function isReportedByMe(i) {
-    return i.reporterId === session.staffId || i.reporterName === session.name;
+    return AppData.isReporterMatch(i, session);
   }
 
   function collect() {
@@ -177,11 +177,10 @@
   }
 
   function card(i) {
-    var typeLabel = AppData.TYPE_LABEL[i.type] || i.type || '';
     var urg = AppData.formatPlanStatus(i);
     var name = i.reporterName || '上报人';
     var time = formatPubTime(i.createdAt);
-    var desc = (i.description || '').trim();
+    var desc = AppData.formatIssueListTitle(i);
     var loc = i.locationText || i.address || '';
     var region = [(i.street || ''), (i.village || '')].filter(Boolean).join('');
     var photos = issuePhotos(i);
@@ -218,12 +217,11 @@
       '</div>' +
       (desc ? '<div class="m-todo-card__desc">' + desc + '</div>' : '') +
       photosHtml(photos) +
-      '<div class="m-todo-card__tags">' +
-      '<span class="m-todo-card__type">' +
-      typeLabel +
-      '</span>' +
-      (region ? '<span class="m-todo-card__region">' + region + '</span>' : '') +
-      '</div>' +
+      (region
+        ? '<div class="m-todo-card__tags"><span class="m-todo-card__region">' +
+          region +
+          '</span></div>'
+        : '') +
       (loc
         ? '<button type="button" class="m-todo-card__loc" data-map-id="' +
           encodeURIComponent(i.id) +

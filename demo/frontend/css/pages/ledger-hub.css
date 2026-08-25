@@ -113,7 +113,7 @@
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
-  font-size: 13px;
+  font-size: 14px;
   color: #333;
 }
 
@@ -131,7 +131,7 @@
   border-right: 1px solid #e8e8e8;
   border-bottom: 1px solid #e8e8e8;
   padding: 8px 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: #333;
   text-align: center;
   vertical-align: middle;
@@ -159,7 +159,7 @@
 }
 
 #combined-table-ld .ledger-sheet-table .ledger-title-row th {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   padding: 14px 12px;
   background: #fff;
@@ -172,7 +172,7 @@
   text-align: left;
   padding: 12px 14px;
   color: #666;
-  font-size: 13px;
+  font-size: 14px;
   white-space: normal;
 }
 

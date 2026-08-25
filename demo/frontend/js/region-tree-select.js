@@ -15,7 +15,65 @@
     return out;
   }
 
-  function buildRegionTree() {
+  /** 优先用 2023 区划（含蒋官屯自然村三级）；否则回退 orgs 二级树 */
+  function buildRegionTreeFrom2023() {
+    if (!global.HSFRegion2023 || typeof global.HSFRegion2023.buildTree !== 'function') {
+      return null;
+    }
+    var src = global.HSFRegion2023.buildTree() || [];
+    var tree = [
+      {
+        id: 'all',
+        label: '全部',
+        level: 1,
+        street: '',
+        village: '',
+        naturalVillage: '',
+        children: [],
+      },
+    ];
+    src.forEach(function (street) {
+      var streetName = street.value || street.label || '';
+      var streetNode = {
+        id: 'street:' + streetName,
+        label: street.label || streetName,
+        level: 1,
+        street: streetName,
+        village: '',
+        naturalVillage: '',
+        children: [],
+      };
+      (street.children || []).forEach(function (unit) {
+        var villageName = unit.value || unit.label || '';
+        var villageNode = {
+          id: 'village:' + streetName + ':' + villageName,
+          label: unit.label || villageName,
+          level: 2,
+          street: streetName,
+          village: villageName,
+          naturalVillage: '',
+          children: [],
+        };
+        (unit.children || []).forEach(function (nat) {
+          var natName = nat.value || nat.label || '';
+          villageNode.children.push({
+            id: 'natural:' + streetName + ':' + villageName + ':' + natName,
+            label: nat.label || natName,
+            level: 3,
+            street: streetName,
+            village: villageName,
+            naturalVillage: natName,
+            children: [],
+          });
+        });
+        streetNode.children.push(villageNode);
+      });
+      tree.push(streetNode);
+    });
+    return tree;
+  }
+
+  function buildRegionTreeFromOrgs() {
     var orgs = (global.AppStorage && global.AppStorage.get('orgs', [])) || [];
     var tree = [
       {
@@ -24,6 +82,7 @@
         level: 1,
         street: '',
         village: '',
+        naturalVillage: '',
         children: [],
       },
     ];
@@ -35,6 +94,7 @@
         level: 1,
         street: street.name,
         village: '',
+        naturalVillage: '',
         children: [],
       };
       orgs.forEach(function (child) {
@@ -48,6 +108,7 @@
             level: 2,
             street: street.name,
             village: child.name,
+            naturalVillage: '',
             children: [],
           });
         }
@@ -57,13 +118,17 @@
     return tree;
   }
 
+  function buildRegionTree() {
+    return buildRegionTreeFrom2023() || buildRegionTreeFromOrgs();
+  }
+
   function create(rootId, opts) {
     opts = opts || {};
     var root = document.getElementById(rootId);
     if (!root) return null;
 
     var placeholder = opts.placeholder || '请选择行政区划';
-    var searchPh = opts.searchPlaceholder || '搜索街道或村/社区';
+    var searchPh = opts.searchPlaceholder || '搜索街道 / 村社区 / 自然村';
 
     root.classList.add('atomic-tree-select', 'hsf-tree-select');
     root.innerHTML =
@@ -120,7 +185,7 @@
       return ids;
     }
 
-    if (!expandedIds.length && opts.expandStreets !== false) {
+    if (!expandedIds.length && opts.expandStreets === true) {
       expandedIds = buildDefaultExpandedIds();
     }
 
@@ -200,8 +265,12 @@
         }
       }
       if (node && node.id !== 'all' && selectedId) {
-        display.textContent =
-          node.village && node.street ? node.street + ' / ' + node.village : node.label;
+        var parts = [node.street, node.village, node.naturalVillage]
+          .map(function (s) {
+            return String(s || '').trim();
+          })
+          .filter(Boolean);
+        display.textContent = parts.length ? parts.join(' / ') : node.label;
         root.classList.add('has-val');
       } else {
         display.textContent = '';
@@ -335,10 +404,14 @@
         rebuildFlat();
         for (var i = 0; i < flatData.length; i++) {
           if (flatData[i].id === selectedId) {
-            return { street: flatData[i].street || '', village: flatData[i].village || '' };
+            return {
+              street: flatData[i].street || '',
+              village: flatData[i].village || '',
+              naturalVillage: flatData[i].naturalVillage || '',
+            };
           }
         }
-        return { street: '', village: '' };
+        return { street: '', village: '', naturalVillage: '' };
       },
       reset: function () {
         selectedId = opts.includeAll === false ? '' : 'all';

@@ -4,7 +4,7 @@
 (function (global) {
   var PREFIX = "hsf:sys.v1.";
   var SCHEMA_KEY = PREFIX + "schema";
-  var CURRENT_SCHEMA = 9;
+  var CURRENT_SCHEMA = 12;
 
   function buildSeedPayload() {
     if (global.HSFSysSeed && global.HSFSysSeed.buildSeed) {

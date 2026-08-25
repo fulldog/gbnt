@@ -31,9 +31,35 @@
     return r ? r.id : "org-gov";
   }
 
-  function isVillageLevel(d) {
-    var t = String((d && d.remark) || "").trim();
-    return t === "village" || t === "community";
+  function isNaturalLevel(d) {
+    return String((d && d.remark) || "").trim() === "natural";
+  }
+
+  function findDept(list, id) {
+    return list.find(function (d) {
+      return d.id === id;
+    });
+  }
+
+  /** 挂在村/社区下的新建单位记为自然村 */
+  function inferRemark(list, parentId, existingRemark) {
+    var parent = findDept(list, parentId);
+    var pr = parent ? String(parent.remark || "").trim() : "";
+    if (pr === "village" || pr === "community") return "natural";
+    return existingRemark || "";
+  }
+
+  function syncOrgsFromDepartments(list) {
+    if (!global.AppStorage) return;
+    var orgs = (list || []).map(function (d) {
+      return {
+        id: d.id,
+        name: d.name,
+        parentId: d.parentId || null,
+        type: d.remark || "unit",
+      };
+    });
+    global.AppStorage.set("orgs", orgs);
   }
 
   function loadDepts() {
@@ -44,6 +70,7 @@
 
   function saveDepts(list) {
     global.LadsStorage.set("sysDepartments", list);
+    syncOrgsFromDepartments(list);
   }
 
   function sortDepts(list) {
@@ -184,7 +211,7 @@
                     "</span>"
                   : '<span class="dm-tree-toggle dm-tree-toggle--leaf" aria-hidden="true"></span>';
                 var rootId = rootDeptId(list);
-                var addDisabled = isVillageLevel(d);
+                var addDisabled = isNaturalLevel(d);
                 var addChildBtn =
                   '<button type="button" class="dl-link sys-dept-add-child' +
                   (addDisabled ? ' is-disabled" disabled aria-disabled="true" tabindex="-1"' : '"') +
@@ -368,7 +395,9 @@
         parentId: parentId,
         name: name,
         enabled: true,
-        remark: data.remark || "",
+        remark: isRootEdit
+          ? data.remark || "gov"
+          : inferRemark(list, parentId, data.remark || ""),
         sort: isRootEdit ? (data.sort != null ? data.sort : 0) : sortVal,
         created: data.created,
       };

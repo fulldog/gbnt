@@ -17,7 +17,6 @@ tags:
   - name: 组织
   - name: 人员
   - name: 角色
-  - name: 字典
   - name: 操作日志
   - name: 附件
   - name: 小程序
@@ -190,9 +189,13 @@ components:
           type: array
           items: { type: string, format: binary }
           description: 多图字段名 files；单图可用 file
-        lat: { type: number, example: 36.4489 }
-        lng: { type: number, example: 115.982 }
-        address: { type: string, example: 程麻新村西排灌沟桥 }
+        watermark:
+          type: string
+          description: 是否烧录水印；1/true/yes/on 或 0/false/no/off；省略默认打水印
+          example: "1"
+        lat: { type: number, example: 36.4489, description: 纬度（仅 watermark 开启时写入水印） }
+        lng: { type: number, example: 115.982, description: 经度（仅 watermark 开启时写入水印） }
+        address: { type: string, example: 程麻新村西排灌沟桥, description: 地址（仅 watermark 开启时写入水印） }
     Org:
       type: object
       description: 创建/更新组织
@@ -207,14 +210,6 @@ components:
         name: { type: string, description: 角色名称 }
         desc: { type: string, description: 角色说明 }
         status: { type: integer, description: 1 启用 / 0 禁用；新建为 0 时默认 1 }
-    DictItemInput:
-      type: object
-      description: 创建/更新字典选项
-      properties:
-        field_id: { type: integer, format: int64, description: 所属字典字段主键 }
-        label: { type: string, description: 选项展示文案 }
-        value: { type: string, description: 选项存储值 }
-        sort: { type: integer, description: 排序号 }
     RoleAPIsInput:
       type: object
       required: [api_ids]
@@ -668,86 +663,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/dict/types:
-    get:
-      tags: [字典]
-      summary: 字典类型
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/dict/fields:
-    get:
-      tags: [字典]
-      summary: 字典字段
-      parameters:
-        - in: query
-          name: type_code
-          schema: { type: string }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/dict/items:
-    get:
-      tags: [字典]
-      summary: 字典选项
-      parameters:
-        - in: query
-          name: field_id
-          schema: { type: integer }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-    post:
-      tags: [字典]
-      summary: 新增选项
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/DictItemInput" }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/sys/dict/items/{id}:
-    put:
-      tags: [字典]
-      summary: 更新选项
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/DictItemInput" }
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-    delete:
-      tags: [字典]
-      summary: 删除选项
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/op-logs:
     get:
       tags: [操作日志]
@@ -771,10 +686,10 @@ paths:
   /api/attachments/images:
     post:
       tags: [附件]
-      summary: 批量直传图片（逐张打水印）
+      summary: 批量直传图片（可选水印）
       description: |
         当前唯一附件 HTTP 接口。分片 init/chunk/complete、bind、download 等未实现。
-        静态访问返回的 url（/uploads/...）。一次最多 20 张。
+        表单 watermark=1|0 控制是否烧录水印（省略默认打水印）。静态访问返回的 url（/uploads/...）。一次最多 20 张。
       requestBody:
         required: true
         content:

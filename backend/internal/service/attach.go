@@ -43,9 +43,10 @@ type FileItem struct {
 
 // WatermarkInput 图片水印参数（姓名取自登录上下文）。
 type WatermarkInput struct {
-	Lat     *float64 `json:"lat" form:"lat"`         // 纬度（可选）
-	Lng     *float64 `json:"lng" form:"lng"`         // 经度（可选）
-	Address string   `json:"address" form:"address"` // 定位地址（可选）
+	Enabled bool     `json:"watermark" form:"watermark"` // 是否烧录水印；默认 true
+	Lat     *float64 `json:"lat" form:"lat"`             // 纬度（可选；仅 Enabled 时使用）
+	Lng     *float64 `json:"lng" form:"lng"`             // 经度（可选；仅 Enabled 时使用）
+	Address string   `json:"address" form:"address"`     // 定位地址（可选；仅 Enabled 时使用）
 }
 
 func (w WatermarkInput) toMeta(userName string) watermark.Meta {
@@ -164,7 +165,7 @@ func (s *AttachService) db(ctx context.Context) *gorm.DB {
 	return s.DB.WithContext(ctx)
 }
 
-// SaveImages 批量直传：逐张打水印、落盘、写库，返回 file_id + 可访问 url。
+// SaveImages 批量直传：落盘、写库；meta.Enabled 为 true 时逐张烧录水印。返回 file_id + 可访问 url。
 func (s *AttachService) SaveImages(ctx context.Context, headers []*multipart.FileHeader, meta WatermarkInput) ([]FileItem, error) {
 	user, err := database.UserFromContext(ctx)
 	if err != nil {
@@ -245,9 +246,11 @@ func (s *AttachService) saveOneImage(ctx context.Context, fh *multipart.FileHead
 		return empty, errors.New("空文件")
 	}
 
-	if err := s.renderer().ApplyFile(finalPath, ctype, storedName, meta.toMeta(user.Name)); err != nil {
-		_ = os.Remove(finalPath)
-		return empty, fmt.Errorf("watermark: %w", err)
+	if meta.Enabled {
+		if err := s.renderer().ApplyFile(finalPath, ctype, storedName, meta.toMeta(user.Name)); err != nil {
+			_ = os.Remove(finalPath)
+			return empty, fmt.Errorf("watermark: %w", err)
+		}
 	}
 
 	md5Val, err := fileMD5(finalPath)

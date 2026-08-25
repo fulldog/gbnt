@@ -1,7 +1,8 @@
 /**
- * 问题详情
- * - 需我处理（待整改且整改人手机号/账号匹配）：字段 + 整改说明 + 附件 + 底栏提交
- * - 仅查看：字段展示（含已整改结果）
+ * 巡查详情
+ * - 基本信息（填写页字段 + 定位）→ 排查清单 → 电子签名（排查上报签，三态均可显）
+ * - 待整改且匹配责任人：底栏「整改反馈」（说明+照片，无签名）
+ * - 已整改：展示「整改反馈」，无整改措施板块
  */
 (function () {
   var MAX_RECTIFY = 6;
@@ -21,7 +22,10 @@
 
   if (window.HSFDevice) HSFDevice.setNavBack(backHref);
   var vp = document.getElementById('app-viewport');
-  if (vp) vp.setAttribute('data-mp-back', backHref);
+  if (vp) {
+    vp.setAttribute('data-mp-back', backHref);
+    vp.setAttribute('data-mp-title', '巡查详情');
+  }
 
   if (window.AppLog) AppLog.info('m-issue-detail', 'page ready', { id: id });
 
@@ -32,8 +36,6 @@
   if (empty) empty.hidden = true;
 
   var rectifyPhotos = [];
-  var slideIndex = 0;
-  var autoTimer = null;
   var photoStrip = null;
 
   var YN = {
@@ -42,8 +44,62 @@
     new: '新建',
     match: '配套',
     build: '新建配套',
+    '10kv': '10kV',
+    '0.4kv': '0.4kV',
   };
   var BRIDGE_KIND = { bridge: '桥', culvert: '涵', gate: '闸' };
+
+  var QUIZ_META = {
+    well: {
+      blockKey: 'well',
+      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'],
+      names: {
+        waterOut: '机井是否出水',
+        pipeOk: '管道是否按要求连接',
+        wiringOk: '走线是否规范',
+        boxOk: '配电箱及电表等设施是否完好',
+        coverOk: '井台、井盖是否完整',
+        transformerOk: '变压器是否正常使用',
+      },
+      hints: { waterOut: '(≥5分钟)' },
+    },
+    road: {
+      blockKey: 'road',
+      fields: ['hasShoulder', 'hasAsh'],
+      names: {
+        hasShoulder: '是否有路肩',
+        hasAsh: '是否有灰土层',
+      },
+      hints: {},
+    },
+    bridge: {
+      blockKey: 'bridge',
+      fields: ['needsRectify'],
+      names: { needsRectify: '是否需要整改' },
+      hints: {},
+    },
+    forest: {
+      blockKey: 'forest',
+      fields: ['brokenBelt', 'deadTrees', 'pest'],
+      names: {
+        brokenBelt: '林带是否断带',
+        deadTrees: '是否有枯死木',
+        pest: '是否发现病虫害',
+      },
+      hints: {},
+    },
+    transformer: {
+      blockKey: 'transformer',
+      fields: ['powered', 'deviceOk', 'cabinetOk', 'illegalWire'],
+      names: {
+        powered: '是否通电',
+        deviceOk: '设备是否完好',
+        cabinetOk: '配电设施是否完好',
+        illegalWire: '是否私拉乱接',
+      },
+      hints: {},
+    },
+  };
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -59,17 +115,11 @@
     return String(v);
   }
 
-  function issuePhotos(i) {
-    var list = [];
-    if (i.photos && i.photos.length) {
-      i.photos.forEach(function (p) {
-        if (p) list.push(p);
-      });
-    } else {
-      if (i.photoSrc) list.push(i.photoSrc);
-      if (i.damagePhotoSrc) list.push(i.damagePhotoSrc);
-    }
-    return list;
+  function normalizeAnswer(v) {
+    if (v === 'yes' || v === 'no') return v;
+    if (v === '是') return 'yes';
+    if (v === '否') return 'no';
+    return v ? String(v) : '';
   }
 
   function needsMyAction(i) {
@@ -93,156 +143,68 @@
     );
   }
 
-  function orgNameByStaffId(staffId) {
-    if (!staffId) return '';
-    var staff = (AppData.getStaff() || []).find(function (s) {
-      return s.id === staffId;
-    });
-    if (!staff || !staff.orgId) return '';
-    var org = (AppData.getOrgs() || []).find(function (o) {
-      return o.id === staff.orgId;
-    });
-    return org ? org.name : '';
+  function sectionTitle(text) {
+    return '<h2 class="m-issue-detail__section-title">' + esc(text) + '</h2>';
+  }
+
+  function sectionHead(title, trailing) {
+    return (
+      '<div class="m-issue-detail__section-hd">' +
+      sectionTitle(title) +
+      (trailing || '') +
+      '</div>'
+    );
+  }
+
+  function rule() {
+    return '<div class="m-issue-detail__rule" role="presentation"></div>';
   }
 
   function regionLine(i) {
-    return [(i.street || ''), (i.village || '')].filter(Boolean).join('') || '';
+    return [(i.street || ''), (i.village || ''), (i.naturalVillage || '')]
+      .filter(Boolean)
+      .join('');
   }
 
-  function personCard(name, role, phone, sub) {
-    var tel = String(phone || '').trim();
-    if (!name && !tel) return '';
-    return (
-      '<article class="m-issue-detail__person' +
-      (tel ? ' is-call"' : '"') +
-      (tel ? ' data-call="' + esc(tel) + '"' : '') +
-      ' role="button" tabindex="0">' +
-      '<div class="m-issue-detail__person-top">' +
-      '<div class="m-issue-detail__person-who">' +
-      '<span class="m-issue-detail__person-name">' +
-      esc(name || '—') +
-      '</span>' +
-      (role
-        ? '<span class="m-issue-detail__person-tag">' + esc(role) + '</span>'
-        : '') +
-      '</div>' +
-      (tel
-        ? '<div class="m-issue-detail__person-phone">' +
-          '<span class="m-issue-detail__person-num">' +
-          esc(tel) +
-          '</span>' +
-          '<span class="m-issue-detail__person-call">立即呼叫</span></div>'
-        : '') +
-      '</div>' +
-      (sub
-        ? '<div class="m-issue-detail__person-sub">' + esc(sub) + '</div>'
-        : '') +
-      '</article>'
-    );
+  function formatProjectYear(i) {
+    if (i.projectYear) return String(i.projectYear).replace(/年$/, '') + '年';
+    return '—';
   }
 
-  function buildContacts(i) {
-    var cards = '';
-    cards += personCard(
-      i.reporterName,
-      '上报人',
-      i.reporterPhone,
-      orgNameByStaffId(i.reporterId) || regionLine(i)
-    );
-    cards += personCard(
-      i.assigneeName,
-      '整改责任人',
-      i.assigneePhone,
-      orgNameByStaffId(i.assigneeId) || regionLine(i)
-    );
-    var keeperRole = '相关负责人';
-    var keeperName = '';
-    var keeperPhone = '';
-    if (i.type === 'well' && i.well) {
-      keeperRole = '井长及分管负责人';
-      keeperName = i.well.keeperName;
-      keeperPhone = i.well.keeperPhone;
-    } else if (i.type === 'road' && i.road) {
-      keeperRole = '道路负责人';
-      keeperName = i.road.keeperName;
-      keeperPhone = i.road.keeperPhone;
-    } else if (i.type === 'bridge' && i.bridge) {
-      keeperRole = '设施负责人';
-      keeperName = i.bridge.keeperName;
-      keeperPhone = i.bridge.keeperPhone;
-    } else if (i.type === 'forest' && i.forest) {
-      keeperRole = '林网负责人';
-      keeperName = i.forest.keeperName;
-      keeperPhone = i.forest.keeperPhone;
-    } else if (i.type === 'transformer' && i.transformer) {
-      keeperRole = '配电负责人';
-      keeperName = i.transformer.keeperName;
-      keeperPhone = i.transformer.keeperPhone;
+  function typeBlock(i) {
+    var meta = QUIZ_META[i.type];
+    if (!meta) return null;
+    return i[meta.blockKey] || null;
+  }
+
+  function getQuizSlot(i, field, block) {
+    if (block && block.quizSteps && block.quizSteps[field]) {
+      return block.quizSteps[field];
     }
-    cards += personCard(keeperName, keeperRole, keeperPhone, regionLine(i));
-    if (!cards) return '';
-    return (
-      '<div class="m-issue-detail__rule" role="presentation"></div>' +
-      '<section class="m-issue-detail__contacts" aria-label="联系人">' +
-      cards +
-      '</section>' +
-      '<div class="m-issue-detail__rule" role="presentation"></div>'
-    );
-  }
-
-  function formatPlanDateZh(ymd) {
-    var s = String(ymd || '').trim();
-    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
-    if (!m) return s || '暂无';
-    function pad(n) {
-      return String(n).padStart(2, '0');
+    var ans = block && block[field] != null ? block[field] : i[field];
+    if (field === 'needsRectify' && block && block.needsRectify) {
+      ans = block.needsRectify;
     }
-    return m[1] + '年' + pad(m[2]) + '月' + pad(m[3]) + '日';
+    ans = normalizeAnswer(ans);
+    if (!ans) return null;
+    return { answer: ans, desc: '', photos: [] };
   }
 
-  function buildNarrative(i) {
-    var desc = (i.description || '').trim() || '暂无';
-    var measure =
-      (i.measures || (i.well && i.well.rectifyMeasure) || '').trim() || '暂无';
-    var planDate = formatPlanDateZh(i.planDate);
-    var icon =
-      '<span class="m-issue-detail__block-icon" data-icon="brush" aria-hidden="true"></span>';
-    return (
-      '<section class="m-issue-detail__story" aria-label="问题与措施">' +
-      '<div class="m-issue-detail__block">' +
-      '<h2 class="m-issue-detail__block-title">' +
-      icon +
-      '问题描述</h2>' +
-      '<p class="m-issue-detail__block-body">' +
-      esc(desc) +
-      '</p></div>' +
-      '<div class="m-issue-detail__block">' +
-      '<h2 class="m-issue-detail__block-title">' +
-      icon +
-      '整改措施</h2>' +
-      '<p class="m-issue-detail__block-body">' +
-      esc(measure) +
-      '</p></div>' +
-      '<p class="m-issue-detail__block-plan"><span class="k">计划完成时间：</span>' +
-      esc(planDate) +
-      '</p></section>'
-    );
-  }
-
-  function buildFields(i) {
+  function buildBasicFields(i) {
     var html = '';
     html += row('行政区划', regionLine(i) || '—');
-    html += row('项目名称', i.projectName || '—');
+    html += row('项目年度', formatProjectYear(i));
     html += row('编号', i.code || '—');
+    html += row(
+      '排查日期',
+      window.AppData && typeof AppData.formatInspectionDate === 'function'
+        ? AppData.formatInspectionDate(i)
+        : '—'
+    );
 
-    if (i.type === 'well' && i.well) {
-      var w = i.well;
-      html += row('建设类型', yn(w.buildKind));
-      html += row('出水口', yn(w.waterOut));
-      html += row('管道连接', yn(w.pipeOk));
-      html += row('线路规范', yn(w.wiringOk));
-      html += row('配电箱', yn(w.boxOk));
-      html += row('井盖完好', yn(w.coverOk));
+    if (i.type === 'well') {
+      var w = i.well || {};
+      html += row('设施类型', yn(w.buildKind));
       html += row('出水口总数', w.outletTotal != null ? w.outletTotal + ' 个' : '—');
       html += row('出水口损坏', w.outletDamaged != null ? w.outletDamaged + ' 个' : '—');
       html += row('护筒总数', w.casingTotal != null ? w.casingTotal + ' 个' : '—');
@@ -256,12 +218,7 @@
       html += row('长度', len != null && len !== '' ? len + ' 千米' : '—');
       html += row('宽度', wid != null && wid !== '' ? wid + ' 米' : '—');
       html += row('厚度', thk != null && thk !== '' ? thk + ' 米' : '—');
-      html += row(
-        '路肩',
-        r.hasShoulder ? yn(r.hasShoulder) : i.hasShoulder || '—'
-      );
-      html += row('灰土层', r.hasAsh ? yn(r.hasAsh) : i.hasAsh || '—');
-      html += row('林网存活', trees != null && trees !== '' ? trees + ' 棵' : '—');
+      html += row('林网存活率', trees != null && trees !== '' ? trees + ' 棵' : '—');
     } else if (i.type === 'bridge') {
       var b = i.bridge || {};
       var bl = b.length != null ? b.length : i.length;
@@ -269,28 +226,233 @@
       html += row('设施类型', BRIDGE_KIND[b.kind] || i.bridgeKindLabel || '—');
       html += row('长度', bl != null && bl !== '' ? bl + ' 米' : '—');
       html += row('宽度', bw != null && bw !== '' ? bw + ' 米' : '—');
-    } else if (i.type === 'forest' && i.forest) {
-      var f = i.forest;
+    } else if (i.type === 'forest') {
+      var f = i.forest || {};
       html += row('移交株数', f.handoverCount != null ? f.handoverCount + ' 株' : '—');
       html += row('现有株数', f.existingCount != null ? f.existingCount + ' 株' : '—');
       html += row('存活率', f.surviveRate != null ? f.surviveRate + '%' : '—');
-      html += row('林带断带', yn(f.brokenBelt));
-      html += row('枯死木', yn(f.deadTrees));
-      html += row('病虫害', yn(f.pest));
-    } else if (i.type === 'transformer' && i.transformer) {
-      var t = i.transformer;
+    } else if (i.type === 'transformer') {
+      var t = i.transformer || {};
       html += row('容量', t.capacity != null ? t.capacity + ' kVA' : '—');
       html += row('型号', t.model || '—');
-      html += row('电压', t.voltage || '—');
-      html += row('通电', yn(t.powered));
-      html += row('设备完好', yn(t.deviceOk));
-      html += row('配电完好', yn(t.cabinetOk));
-      html += row('私拉乱接', yn(t.illegalWire));
+      html += row('电压等级', yn(t.voltage) || t.voltage || '—');
     }
 
     return html;
   }
 
+  function buildLocationRow(i, mapHref) {
+    var locText = i.locationText || i.address || '查看位置';
+    var hasCoord = i.lng != null && i.lat != null;
+    return (
+      '<div class="m-issue-detail__loc-bar">' +
+      '<button type="button" class="m-issue-detail__loc" id="mDetailLoc">' +
+      '<span class="m-issue-detail__loc-icon" data-icon="mapPin" aria-hidden="true"></span>' +
+      '<span class="m-issue-detail__loc-text">' +
+      esc(locText) +
+      '</span></button>' +
+      (hasCoord
+        ? '<button type="button" class="m-issue-detail__dist-btn" id="mDetailDist" aria-label="查看地图与距离">定位中…</button>'
+        : '') +
+      '</div>'
+    );
+  }
+
+  function haversineM(lng1, lat1, lng2, lat2) {
+    var R = 6371000;
+    var toRad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * toRad;
+    var dLng = (lng2 - lng1) * toRad;
+    var a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function formatDist(m) {
+    if (m == null || isNaN(m)) return '—';
+    if (m < 1000) return Math.round(m) + 'm';
+    return (m / 1000).toFixed(2) + 'km';
+  }
+
+  function setupDistanceButton(mapHref) {
+    var distBtn = document.getElementById('mDetailDist');
+    if (!distBtn || item.lng == null || item.lat == null) return;
+    var targetLng = Number(item.lng);
+    var targetLat = Number(item.lat);
+
+    function goMap(e) {
+      if (e) e.stopPropagation();
+      if (window.HSFNav) HSFNav.go(mapHref);
+      else location.href = mapHref;
+    }
+
+    distBtn.addEventListener('click', goMap);
+
+    if (!navigator.geolocation) {
+      distBtn.textContent = '—';
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        distBtn.textContent = formatDist(
+          haversineM(pos.coords.longitude, pos.coords.latitude, targetLng, targetLat)
+        );
+      },
+      function () {
+        distBtn.textContent = '—';
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    );
+  }
+
+  function mediaCell(src, extraClass, imgAttrs) {
+    if (window.AppMpMedia && typeof AppMpMedia.mediaCellHtml === 'function') {
+      return AppMpMedia.mediaCellHtml(src, {
+        extraClass: extraClass,
+        imgAttrs: imgAttrs || '',
+      });
+    }
+    if (!src) {
+      return (
+        '<div class="m-media is-empty' +
+        (extraClass ? ' ' + extraClass : '') +
+        '"><span class="m-media__ph" aria-hidden="true">img</span></div>'
+      );
+    }
+    return (
+      '<div class="m-media is-loading' +
+      (extraClass ? ' ' + extraClass : '') +
+      '"><span class="m-media__ph" aria-hidden="true">img</span>' +
+      '<div class="m-media__skel" aria-hidden="true"></div>' +
+      '<img src="' +
+      esc(src) +
+      '" alt="" loading="lazy"' +
+      (imgAttrs || '') +
+      ' /></div>'
+    );
+  }
+
+  function thumbHtml(photos, dataAttr) {
+    if (!photos || !photos.length) return '';
+    return (
+      '<div class="m-issue-detail__thumbs" aria-label="现场照片">' +
+      photos
+        .map(function (src, idx) {
+          return mediaCell(
+            src,
+            'm-issue-detail__thumb',
+            ' data-' + dataAttr + '="' + idx + '"'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function formatWaterProofMeta(slot, issue) {
+    if (!slot || slot.answer !== 'yes') return '';
+    var parts = [];
+    if (issue.lat != null && issue.lng != null && AppData.toDms) {
+      parts.push(AppData.toDms(issue.lat, true) + ', ' + AppData.toDms(issue.lng, false));
+    }
+    var proof = slot.photoProof || {};
+    if (proof.firstCapturedAt && proof.lastCapturedAt) {
+      var ms =
+        new Date(proof.lastCapturedAt).getTime() -
+        new Date(proof.firstCapturedAt).getTime();
+      if (ms > 0) {
+        var sec = Math.round(ms / 1000);
+        var m = Math.floor(sec / 60);
+        var s = sec % 60;
+        parts.push('拍摄间隔 ' + m + '分' + String(s).padStart(2, '0') + '秒');
+      }
+    }
+    if (!parts.length) return '';
+    return (
+      '<p class="m-issue-detail__quiz-proof">' + esc(parts.join(' · ')) + '</p>'
+    );
+  }
+
+  function canDeleteIssue(i) {
+    return AppData.isReporterMatch(i, session);
+  }
+
+  function buildDeleteAction() {
+    if (!canDeleteIssue(item)) return '';
+    return (
+      '<div class="m-issue-detail__delete-wrap">' +
+      '<button type="button" class="m-issue-detail__delete" id="mDetailDelete">删除上报</button>' +
+      '</div>'
+    );
+  }
+
+  function buildChecklist(i) {
+    var meta = QUIZ_META[i.type];
+    if (!meta) return '';
+    var block = typeBlock(i);
+    var items = '';
+
+    meta.fields.forEach(function (field) {
+      var slot = getQuizSlot(i, field, block);
+      if (!slot || !slot.answer) return;
+      var hint = (meta.hints && meta.hints[field]) || '';
+      var label = (meta.names && meta.names[field]) || field;
+      var ansText = yn(slot.answer);
+      var ansCls =
+        slot.answer === 'yes'
+          ? 'm-issue-detail__quiz-ans--yes'
+          : 'm-issue-detail__quiz-ans--no';
+      var desc = (slot.desc || '').trim();
+      var photos = [];
+      if (slot.photos && slot.photos.length) {
+        slot.photos.forEach(function (p) {
+          if (p) photos.push(p);
+        });
+      }
+
+      items +=
+        '<article class="m-issue-detail__quiz-item">' +
+        '<div class="m-issue-detail__quiz-hd">' +
+        '<span class="m-issue-detail__quiz-q">' +
+        esc(label + hint) +
+        '</span>' +
+        '<span class="m-issue-detail__quiz-ans ' +
+        ansCls +
+        '">' +
+        esc(ansText) +
+        '</span></div>' +
+        (desc ? '<p class="m-issue-detail__quiz-desc">' + esc(desc) + '</p>' : '') +
+        (field === 'waterOut' ? formatWaterProofMeta(slot, i) : '') +
+        thumbHtml(photos, 'quiz-preview') +
+        '</article>';
+    });
+
+    if (!items) return '';
+    return (
+      '<section class="m-issue-detail__section" aria-label="排查清单">' +
+      sectionHead('排查清单') +
+      '<div class="m-issue-detail__quiz-list">' +
+      items +
+      '</div></section>'
+    );
+  }
+
+  /** 排查上报签名；待整改/已整改/已排查均可展示（整改环节不另签） */
+  function buildSignature(i) {
+    var src = i.reporterSignature || '';
+    if (!src) return '';
+    return (
+      '<section class="m-issue-detail__section" aria-label="电子签名">' +
+      sectionHead('电子签名') +
+      '<div class="m-issue-detail__sign-board">' +
+      mediaCell(src, 'm-issue-detail__sign-media', ' class="m-issue-detail__sign-img"') +
+      '</div></section>'
+    );
+  }
+
+  /** 已整改：仅展示整改反馈（说明+照片），无整改措施、无整改签名 */
   function buildResult(i) {
     if (!i || i.status !== 'done') return '';
     var note = (i.rectifyNote || '').trim() || '—';
@@ -301,22 +463,21 @@
         '<div class="m-issue-detail__result-photos" aria-label="整改后照片">' +
         i.rectifyPhotos
           .map(function (src, idx) {
-            return (
-              '<img src="' +
-              esc(src) +
-              '" alt="" data-rectify-preview="' +
-              idx +
-              '" />'
+            return mediaCell(
+              src,
+              'm-issue-detail__result-thumb',
+              ' data-rectify-preview="' + idx + '"'
             );
           })
           .join('') +
         '</div>';
     }
     return (
-      '<section class="m-issue-detail__result" aria-label="整改结果">' +
+      rule() +
+      '<section class="m-issue-detail__result" aria-label="整改反馈">' +
       '<div class="m-issue-detail__result-hd">' +
       '<span class="m-issue-detail__result-icon" data-icon="check" aria-hidden="true"></span>' +
-      '<h2 class="m-issue-detail__result-title">整改结果</h2>' +
+      '<h2 class="m-issue-detail__result-title">整改反馈</h2>' +
       '<span class="m-issue-detail__result-badge">已完成</span></div>' +
       '<p class="m-issue-detail__result-note">' +
       esc(note) +
@@ -335,90 +496,8 @@
     }
   }
 
-  function bindCarousel(photos) {
-    var track = document.getElementById('mDetailTrack');
-    var dots = document.getElementById('mDetailDots');
-    var countEl = document.getElementById('mDetailCount');
-    if (!track || photos.length < 1) return;
-
-    function go(i) {
-      slideIndex = (i + photos.length) % photos.length;
-      track.style.transform = 'translateX(-' + slideIndex * 100 + '%)';
-      if (dots) {
-        Array.prototype.forEach.call(dots.children, function (d, idx) {
-          d.classList.toggle('is-on', idx === slideIndex);
-        });
-      }
-      if (countEl) countEl.textContent = slideIndex + 1 + '/' + photos.length;
-    }
-
-    function stopAuto() {
-      if (autoTimer) {
-        clearInterval(autoTimer);
-        autoTimer = null;
-      }
-    }
-
-    function startAuto() {
-      stopAuto();
-      if (photos.length < 2) return;
-      autoTimer = setInterval(function () {
-        go(slideIndex + 1);
-      }, 3000);
-    }
-
-    track.querySelectorAll('.m-issue-detail__slide').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var idx = Number(btn.getAttribute('data-index'));
-        if (!isNaN(idx) && photos[idx]) openPreview(photos[idx]);
-      });
-    });
-
-    if (photos.length < 2) return;
-
-    var startX = 0;
-    var deltaX = 0;
-    var dragging = false;
-    track.addEventListener(
-      'touchstart',
-      function (e) {
-        if (!e.touches || !e.touches[0]) return;
-        dragging = true;
-        stopAuto();
-        startX = e.touches[0].clientX;
-        deltaX = 0;
-        track.style.transition = 'none';
-      },
-      { passive: true }
-    );
-    track.addEventListener(
-      'touchmove',
-      function (e) {
-        if (!dragging || !e.touches || !e.touches[0]) return;
-        deltaX = e.touches[0].clientX - startX;
-        track.style.transform =
-          'translateX(calc(-' + slideIndex * 100 + '% + ' + deltaX + 'px))';
-      },
-      { passive: true }
-    );
-    track.addEventListener('touchend', function () {
-      if (!dragging) return;
-      dragging = false;
-      track.style.transition = '';
-      if (deltaX < -40) go(slideIndex + 1);
-      else if (deltaX > 40) go(slideIndex - 1);
-      else go(slideIndex);
-      startAuto();
-    });
-
-    startAuto();
-  }
-
   var canAct = needsMyAction(item);
-  var photos = issuePhotos(item);
-  var typeLabel = AppData.TYPE_LABEL[item.type] || item.type || '';
   var plan = AppData.formatPlanStatus(item);
-  var locText = item.locationText || item.address || '查看位置';
   var mapHref =
     './issue-map.html?id=' +
     encodeURIComponent(item.id) +
@@ -429,82 +508,42 @@
         (params.get('back') ? '&back=' + encodeURIComponent(params.get('back')) : '')
     );
 
-  var carouselHtml = '';
-  if (!photos.length) {
-    carouselHtml =
-      '<div class="m-issue-detail__carousel m-issue-detail__carousel--empty">暂无照片</div>';
-  } else {
-    carouselHtml =
-      '<div class="m-issue-detail__carousel">' +
-      '<div class="m-issue-detail__track" id="mDetailTrack">' +
-      photos
-        .map(function (src, i) {
-          return (
-            '<button type="button" class="m-issue-detail__slide" data-index="' +
-            i +
-            '"><img src="' +
-            esc(src) +
-            '" alt="" /></button>'
-          );
-        })
-        .join('') +
-      '</div>' +
-      (photos.length >= 2
-        ? '<div class="m-issue-detail__dots" id="mDetailDots">' +
-          photos
-            .map(function (_, i) {
-              return (
-                '<span class="m-issue-detail__dot' +
-                (i === 0 ? ' is-on' : '') +
-                '"></span>'
-              );
-            })
-            .join('') +
-          '</div><span class="m-issue-detail__count" id="mDetailCount">1/' +
-          photos.length +
-          '</span>'
-        : '') +
-      '</div>';
-  }
+  var basicSection =
+    '<section class="m-issue-detail__section" aria-label="基本信息">' +
+    sectionHead(
+      '基本信息',
+      '<div class="m-issue-detail__meta-inline">' +
+        '<span class="m-issue-detail__meta-time is-' +
+        esc(plan.level || 'pending') +
+        '">' +
+        esc(plan.text || '—') +
+        '</span></div>'
+    ) +
+    '<div class="m-issue-detail__panel"><div class="m-issue-detail__dl">' +
+    buildBasicFields(item) +
+    '</div>' +
+    buildLocationRow(item, mapHref) +
+    '</div></section>';
 
-  var headHtml =
-    '<div class="m-issue-detail__head">' +
-    '<button type="button" class="m-issue-detail__loc" id="mDetailLoc">' +
-    '<span class="m-issue-detail__loc-icon" data-icon="mapPin" aria-hidden="true"></span>' +
-    '<span class="m-issue-detail__loc-text">' +
-    esc(locText) +
-    '</span></button>' +
-    '<div class="m-issue-detail__meta">' +
-    '<span class="m-issue-detail__meta-type">' +
-    esc(typeLabel) +
-    '</span>' +
-    '<span class="m-issue-detail__meta-time is-' +
-    esc(plan.level || 'pending') +
-    '">' +
-    esc(plan.text || '—') +
-    '</span></div></div>' +
-    '<div class="m-issue-detail__rule" role="presentation"></div>';
+  var checklistHtml = buildChecklist(item);
 
   root.className = 'm-page m-issue-detail' + (canAct ? ' is-action' : '');
   root.innerHTML =
     '<div class="m-issue-detail__scroll">' +
-    carouselHtml +
-    headHtml +
-    buildNarrative(item) +
-    '<div class="m-issue-detail__rule" role="presentation"></div>' +
-    '<div class="m-issue-detail__panel"><div class="m-issue-detail__dl">' +
-    buildFields(item) +
-    '</div></div>' +
+    basicSection +
+    (checklistHtml ? rule() + checklistHtml : '') +
+    (buildSignature(item) ? rule() + buildSignature(item) : '') +
     buildResult(item) +
-    buildContacts(item) +
     (canAct
-      ? '<section class="m-issue-detail__action" aria-label="提交整改">' +
+      ? rule() +
+        '<section class="m-issue-detail__action" aria-label="提交整改">' +
         '<div class="m-issue-detail__action-title">整改反馈</div>' +
         '<div class="m-issue-detail__note" id="mDetailNote">' +
         '<textarea class="m-issue-detail__note-input" id="mDetailNoteInput" placeholder="填写整改说明" rows="4"></textarea>' +
         '<div class="m-report__photos" id="rPhotos" aria-label="整改后照片"></div>' +
         '</div></section>'
       : '') +
+    (canDeleteIssue(item) ? rule() + buildDeleteAction() : '') +
     '</div>' +
     (canAct
       ? '<div class="m-issue-detail__foot">' +
@@ -513,7 +552,10 @@
       : '');
 
   AppIcons.injectAll(root);
-  bindCarousel(photos);
+
+  if (window.AppMpMedia && typeof AppMpMedia.bindMedia === 'function') {
+    AppMpMedia.bindMedia(root);
+  }
 
   var locBtn = document.getElementById('mDetailLoc');
   if (locBtn) {
@@ -522,22 +564,11 @@
       else location.href = mapHref;
     });
   }
+  setupDistanceButton(mapHref);
 
-  function dial(phone) {
-    var tel = String(phone || '').trim();
-    if (!tel) return;
-    location.href = 'tel:' + tel;
-  }
-
-  root.querySelectorAll('[data-call]').forEach(function (el) {
-    el.addEventListener('click', function () {
-      dial(el.getAttribute('data-call'));
-    });
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        dial(el.getAttribute('data-call'));
-      }
+  root.querySelectorAll('[data-quiz-preview]').forEach(function (img) {
+    img.addEventListener('click', function () {
+      openPreview(img.getAttribute('src') || img.src);
     });
   });
 
@@ -546,6 +577,28 @@
       openPreview(img.getAttribute('src') || img.src);
     });
   });
+
+  var deleteBtn = document.getElementById('mDetailDelete');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', function () {
+      AppUI.modal({
+        title: '删除上报',
+        content: '确定删除「' + (item.code || item.id) + '」吗？删除后不可恢复。',
+        okText: '删除',
+        cancelText: '取消',
+      }).then(function (ok) {
+        if (!ok) return;
+        AppData.removeIssue(item.id);
+        AppData.pushLog('删除上报', item.code || item.id);
+        AppUI.toast('已删除');
+        if (window.AppLog) AppLog.info('m-issue-detail', 'deleted', { id: item.id });
+        setTimeout(function () {
+          if (window.HSFNav) HSFNav.go(backHref);
+          else location.href = backHref;
+        }, 350);
+      });
+    });
+  }
 
   if (canAct) {
     var photosEl = document.getElementById('rPhotos');
@@ -587,10 +640,6 @@
   }
 
   document.addEventListener('hsf-page-leave', function onLeave() {
-    if (autoTimer) {
-      clearInterval(autoTimer);
-      autoTimer = null;
-    }
     if (photoStrip) {
       photoStrip.destroy();
       photoStrip = null;

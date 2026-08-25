@@ -16,7 +16,7 @@ import (
 	"gbnt/backend/internal/perm"
 )
 
-// SysService 系统配置：组织/用户/角色/字典。
+// SysService 系统配置：组织/用户/角色。
 
 type SysService struct {
 	DB *gorm.DB
@@ -86,18 +86,6 @@ type RoleInput struct {
 
 func (in RoleInput) ToModel(id uint64) *model.SysRole {
 	return &model.SysRole{Name: in.Name, Desc: in.Desc, Status: in.Status, Base: model.Base{ID: id}}
-}
-
-// DictItemInput 创建/更新字典选项入参。
-type DictItemInput struct {
-	FieldID uint64 `json:"field_id"` // 所属字典字段主键
-	Label   string `json:"label"`    // 选项展示文案
-	Value   string `json:"value"`    // 选项存储值
-	Sort    int    `json:"sort"`     // 排序号
-}
-
-func (in DictItemInput) ToModel(id uint64) *model.SysDictItem {
-	return &model.SysDictItem{FieldID: in.FieldID, Label: in.Label, Value: in.Value, Sort: in.Sort, Base: model.Base{ID: id}}
 }
 
 // RoleAPIsInput 覆盖角色 API 授权。
@@ -459,72 +447,5 @@ func (s *SysService) InvalidateRoleCache(roleID uint64) {
 		s.Perm.InvalidateRole(roleID)
 
 	}
-
-}
-
-func (s *SysService) ListDictTypes() ([]model.SysDictType, error) {
-
-	var list []model.SysDictType
-
-	err := s.DB.Order("sort ASC").Find(&list).Error
-
-	return list, err
-
-}
-
-func (s *SysService) ListDictFields(typeCode string) ([]model.SysDictField, error) {
-
-	q := s.DB.Model(&model.SysDictField{})
-
-	if typeCode != "" {
-
-		q = q.Where("type_code = ?", typeCode)
-
-	}
-
-	var list []model.SysDictField
-
-	err := q.Order("sort ASC").Find(&list).Error
-
-	return list, err
-
-}
-
-func (s *SysService) ListDictItems(fieldID uint64) ([]model.SysDictItem, error) {
-
-	q := s.DB.Model(&model.SysDictItem{})
-
-	if fieldID > 0 {
-
-		q = q.Where("field_id = ?", fieldID)
-
-	}
-
-	var list []model.SysDictItem
-
-	err := q.Order("sort ASC").Find(&list).Error
-
-	return list, err
-
-}
-
-func (s *SysService) CreateDictItem(ctx context.Context, item *model.SysDictItem) error {
-
-	return s.db(ctx).Create(item).Error
-
-}
-
-func (s *SysService) UpdateDictItem(ctx context.Context, item *model.SysDictItem) error {
-
-	return s.db(ctx).Model(&model.SysDictItem{}).Where("id = ?", item.ID).Updates(map[string]interface{}{
-
-		"label": item.Label, "value": item.Value, "sort": item.Sort,
-	}).Error
-
-}
-
-func (s *SysService) DeleteDictItem(ctx context.Context, id uint64) error {
-
-	return s.db(ctx).Delete(&model.SysDictItem{}, id).Error
 
 }

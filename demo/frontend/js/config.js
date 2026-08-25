@@ -3,13 +3,13 @@
  */
 (function (global) {
   global.AppConfig = {
-    appName: '高标农田专项整治平台',
+    appName: '农田专项整治平台',
     storagePrefix: 'hsf:',
     /** [PRD/演示登录] 固定账密 */
     demoAccount: {
       username: 'admin',
       password: '123456',
-      name: '李强',
+      name: 'Administrator',
       phone: '13800000000',
       orgId: 'org-gov',
     },

@@ -13,8 +13,11 @@
     return document.getElementById(id);
   }
 
-  function regionIdFrom(street, village) {
+  function regionIdFrom(street, village, naturalVillage) {
     if (!street) return '';
+    if (naturalVillage && village) {
+      return 'natural:' + street + ':' + village + ':' + naturalVillage;
+    }
     if (!village) return 'street:' + street;
     return 'village:' + street + ':' + village;
   }
@@ -43,7 +46,9 @@
         idPrefix: 'rf-',
         logScope: 'rectify-form',
         getRegion: function () {
-          return regionSelect ? regionSelect.getRegion() : { street: '', village: '' };
+          return regionSelect
+            ? regionSelect.getRegion()
+            : { street: '', village: '', naturalVillage: '' };
         },
       });
     }
@@ -59,14 +64,16 @@
       document.body.appendChild(overlay);
     }
     if ($('rf-form-title')) {
-      $('rf-form-title').textContent = editingId ? '编辑问题' : '新增问题';
+      $('rf-form-title').textContent = editingId ? '编辑巡查' : '新增巡查';
     }
     if (!engine && global.HSFReportFormEngine) {
       engine = global.HSFReportFormEngine.create({
         idPrefix: 'rf-',
         logScope: 'rectify-form',
         getRegion: function () {
-          return regionSelect ? regionSelect.getRegion() : { street: '', village: '' };
+          return regionSelect
+            ? regionSelect.getRegion()
+            : { street: '', village: '', naturalVillage: '' };
         },
       });
     }
@@ -75,7 +82,9 @@
     if (row) {
       engine.fill(row);
       if (regionSelect) {
-        regionSelect.setValue(regionIdFrom(row.street, row.village));
+        regionSelect.setValue(
+          regionIdFrom(row.street, row.village, row.naturalVillage)
+        );
       }
     } else {
       engine.reset();
@@ -83,23 +92,20 @@
     }
     engine.syncTypeBlocks();
     toggle(true);
+    /* 弹层可见后再挂签名，避免 canvas 尺寸为 0 */
+    engine.init();
   }
 
   function close() {
     toggle(false);
   }
 
-  function submit() {
-    var eng = ensureEngine();
-    if (!eng) return;
-    var session = (global.AppStorage && global.AppStorage.get('session', null)) || {};
-    var payload = eng.validateAndCollect(session);
-    if (!payload) return;
+  function finishSave(payload) {
     if (editingId) {
       delete payload.status;
       global.AppData.updateIssue(editingId, payload);
       global.AppData.pushLog(
-        '编辑问题',
+        '编辑巡查',
         global.AppData.TYPE_LABEL[payload.type] + ' · ' + (payload.code || editingId)
       );
       if (global.AppUI) global.AppUI.toast('已保存');
@@ -111,6 +117,39 @@
     if (typeof onSaved === 'function') onSaved();
   }
 
+  function submit() {
+    var eng = ensureEngine();
+    if (!eng) return;
+    var session = (global.AppStorage && global.AppStorage.get('session', null)) || {};
+    var payload = eng.validateAndCollect(session);
+    if (!payload) return;
+
+    var confirmBtn = $('rf-form-confirm');
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    function done(err) {
+      if (confirmBtn) confirmBtn.disabled = false;
+      if (err) return;
+      finishSave(payload);
+    }
+
+    if (global.AppImageCompress && typeof AppImageCompress.compressIssuePayload === 'function') {
+      AppImageCompress.compressIssuePayload(payload)
+        .then(function (p) {
+          payload = p;
+          done();
+        })
+        .catch(function (err) {
+          if (global.AppLog) AppLog.error('rectify-form', 'compress before save', err);
+          if (global.AppUI) global.AppUI.toast('图片处理失败，请重试', 'error');
+          done(err);
+        });
+      return;
+    }
+
+    done();
+  }
+
   function init() {
     var overlay = $('rf-form-overlay');
     if (overlay && overlay.parentNode !== document.body) {
@@ -118,10 +157,10 @@
     }
     if (global.HSFRegionTreeSelect && !regionSelect) {
       regionSelect = global.HSFRegionTreeSelect.create('rf-f-region', {
-        placeholder: '请选择街道 / 村社区',
-        searchPlaceholder: '搜索街道或村/社区',
+        placeholder: '请选择街道 / 村社区 / 自然村',
+        searchPlaceholder: '搜索街道 / 村社区 / 自然村',
         includeAll: false,
-        expandStreets: true,
+        expandStreets: false,
       });
     }
     var cancel = $('rf-form-cancel');

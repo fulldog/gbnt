@@ -1,18 +1,26 @@
 .content-container:has(.wb-page),
 .app-main__content:has(.wb-page) {
   padding: 14px;
+  overflow: hidden;
 }
 
 .wb-page {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto min-content minmax(0, 1fr);
   gap: 14px;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.wb-page.page-container {
+  min-height: 0;
 }
 
 .wb-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -85,7 +93,8 @@
 
 .wb-panel {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
 .wb-panel__toolbar {
@@ -256,11 +265,13 @@
 .wb-chart {
   width: 100%;
   min-width: 0;
+  min-height: 220px;
 }
 
 .wb-rank-list {
   display: flex;
   flex-direction: column;
+  min-height: calc(6 * 38px);
 }
 
 .wb-rank-row {
@@ -314,8 +325,31 @@
   font-variant-numeric: tabular-nums;
 }
 
+.wb-todo {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .wb-todo .page-hd {
   margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.wb-todo .app-table-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.wb-todo .app-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fafafa;
+  box-shadow: 0 1px 0 var(--app-border);
 }
 
 .wb-todo .page-hd__title {
@@ -330,6 +364,12 @@
 
 .wb-todo .app-table .app-tag {
   margin: 0 auto;
+}
+
+@media (max-width: 1400px) {
+  .wb-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1200px) {

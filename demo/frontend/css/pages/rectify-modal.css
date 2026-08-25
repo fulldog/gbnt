@@ -5,7 +5,7 @@
 }
 
 #rf-detail-overlay .rf-detail-box {
-  width: min(960px, 96vw);
+  width: min(1120px, 96vw);
   max-width: 96vw;
   max-height: 88vh;
   margin-top: 6vh;
@@ -211,10 +211,37 @@
   border-bottom: 1px solid #b7eb8f;
 }
 
+/* 整改后 · 已排查 */
+#rf-detail-overlay .rf-detail-panel--after.is-inspected {
+  border: 1px solid #d4e6d9;
+  background: #f7fbf8;
+}
+
+#rf-detail-overlay .rf-detail-panel--after.is-inspected .rf-detail-panel__hd {
+  background: #eef7f1;
+  color: var(--app-accent, #1a7f4b);
+  border-bottom: 1px solid #d4e6d9;
+}
+
+#rf-detail-overlay .rf-detail-wait--inspected {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 24px;
+}
+
+#rf-detail-overlay .rf-detail-wait--inspected .rf-detail-wait__hint {
+  margin: 0;
+  color: var(--app-accent, #1a7f4b);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 #rf-detail-overlay .rf-detail-panel__hd {
   flex-shrink: 0;
   padding: 10px 14px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--rf-detail-fg);
   border-bottom: 1px solid #eef2f6;
@@ -222,7 +249,7 @@
 }
 
 #rf-detail-overlay .rf-detail-panel__bd {
-  padding: 0 0 14px;
+  padding: 20px 0 14px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -247,8 +274,7 @@
 }
 
 #rf-detail-overlay .rf-detail-block:first-child {
-  padding: 0;
-  margin-bottom: 14px;
+  margin-top: 0;
 }
 
 #rf-detail-overlay .rf-detail-block:last-child {
@@ -410,6 +436,198 @@
   border-top: 1px solid #eef2f6;
 }
 
+#rf-detail-overlay .rf-detail-meta__split {
+  height: 0;
+  margin: 10px 0;
+  border: none;
+  border-top: 1px solid #eef2f6;
+}
+
+/* 排查清单（对齐移动端逐题） */
+#rf-detail-overlay .rf-detail-quiz-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#rf-detail-overlay .rf-detail-quiz-item {
+  padding: 10px 12px;
+  border: 1px solid #e8ecf1;
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+#rf-detail-overlay .rf-detail-quiz-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#rf-detail-overlay .rf-detail-quiz-q {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.4;
+}
+
+#rf-detail-overlay .rf-detail-quiz-ans {
+  flex-shrink: 0;
+  min-width: 36px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 22px;
+}
+
+#rf-detail-overlay .rf-detail-quiz-ans--yes {
+  background: rgba(1, 92, 187, 0.1);
+  color: var(--app-primary, #015cbb);
+}
+
+#rf-detail-overlay .rf-detail-quiz-ans--no {
+  background: rgba(207, 19, 34, 0.1);
+  color: #cf1322;
+}
+
+#rf-detail-overlay .rf-detail-quiz-desc {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#rf-detail-overlay .rf-detail-quiz-proof {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #999;
+  line-height: 1.4;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .rf-detail-media {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f0f2f5;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .m-media__ph {
+  display: none;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .m-media__skel {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #f0f2f5;
+  overflow: hidden;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .m-media__skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-100%);
+  animation: rfDetailMediaSkelShimmer 1.5s infinite;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .rf-detail-media.is-ready .m-media__skel,
+#rf-detail-overlay .rf-detail-photos--quiz .rf-detail-media.is-error .m-media__skel {
+  display: none;
+}
+
+#rf-detail-overlay .rf-detail-photos--quiz .rf-detail-thumb {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+/* 电子签名 · 扫光骨架（加载失败持续骨架，不露裂图） */
+#rf-detail-overlay .rf-detail-sign-board {
+  border: 1px solid #e5d4a8;
+  border-radius: 6px;
+  background: #fffef8;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+#rf-detail-overlay .rf-detail-sign-media {
+  position: relative;
+  width: 100%;
+  min-height: 120px;
+  background: #fffef8;
+  overflow: hidden;
+}
+
+#rf-detail-overlay .rf-detail-sign-media .m-media__skel {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #f5f0e4;
+  overflow: hidden;
+}
+
+#rf-detail-overlay .rf-detail-sign-media .m-media__skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: translateX(-100%);
+  animation: rfDetailMediaSkelShimmer 1.5s infinite;
+}
+
+#rf-detail-overlay .rf-detail-sign-media.is-ready .m-media__skel {
+  display: none;
+}
+
+#rf-detail-overlay .rf-detail-sign-img {
+  display: block;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  background: transparent;
+}
+
+#rf-detail-overlay .rf-detail-sign-media.is-loading .rf-detail-sign-img {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#rf-detail-overlay .rf-detail-sign-media.is-ready .rf-detail-sign-img {
+  opacity: 1;
+}
+
+/* 通用：加载中隐藏裂图；失败保持骨架 */
+#rf-detail-overlay .m-media.is-loading img {
+  opacity: 0;
+}
+
+#rf-detail-overlay .m-media.is-ready img {
+  opacity: 1;
+}
+
 #rf-detail-overlay .rf-detail-rows .rf-detail-row:first-child {
   padding-top: 0;
 }
@@ -464,7 +682,7 @@
 }
 
 #rf-detail-overlay .rf-detail-wait-count__label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--rf-detail-muted);
   margin-bottom: 8px;
@@ -516,7 +734,7 @@
 #rf-detail-overlay .rf-detail-wait-count__plan,
 #rf-detail-overlay .rf-detail-wait-count__plan-only {
   margin-top: 10px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--rf-detail-muted);
 }
 
@@ -543,7 +761,7 @@
 
 #rf-detail-overlay .rf-detail-wait__hint {
   margin: 10px 0 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--rf-detail-muted);
   line-height: 1.5;
 }
@@ -634,7 +852,7 @@
   border-radius: 6px;
   background: #f0f5ff;
   color: var(--app-primary, #015cbb);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 20px;
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s;

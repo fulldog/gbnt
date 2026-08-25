@@ -1,10 +1,71 @@
 /**
  * 专项整改详情弹窗（整改前 / 整改后 双栏）
+ * 左栏对齐移动端巡查详情字段结构；Web 额外展示整改责任人
  */
 (function (global) {
   'use strict';
 
   var BRIDGE_KIND = { bridge: '桥', culvert: '涵', gate: '闸' };
+  var YN_MAP = {
+    yes: '是',
+    no: '否',
+    new: '新建',
+    match: '配套',
+    '10kv': '10kV',
+    '0.4kv': '0.4kV',
+  };
+
+  var QUIZ_META = {
+    well: {
+      blockKey: 'well',
+      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'],
+      names: {
+        waterOut: '机井是否出水',
+        pipeOk: '管道是否按要求连接',
+        wiringOk: '走线是否规范',
+        boxOk: '配电箱及电表等设施是否完好',
+        coverOk: '井台、井盖是否完整',
+        transformerOk: '变压器是否正常使用',
+      },
+      hints: { waterOut: '(≥5分钟)' },
+    },
+    road: {
+      blockKey: 'road',
+      fields: ['hasShoulder', 'hasAsh'],
+      names: {
+        hasShoulder: '是否有路肩',
+        hasAsh: '是否有灰土层',
+      },
+      hints: {},
+    },
+    bridge: {
+      blockKey: 'bridge',
+      fields: ['needsRectify'],
+      names: { needsRectify: '是否需要整改' },
+      hints: {},
+    },
+    forest: {
+      blockKey: 'forest',
+      fields: ['brokenBelt', 'deadTrees', 'pest'],
+      names: {
+        brokenBelt: '林带是否断带',
+        deadTrees: '是否有枯死木',
+        pest: '是否发现病虫害',
+      },
+      hints: {},
+    },
+    transformer: {
+      blockKey: 'transformer',
+      fields: ['powered', 'deviceOk', 'cabinetOk', 'illegalWire'],
+      names: {
+        powered: '是否通电',
+        deviceOk: '设备是否完好',
+        cabinetOk: '配电设施是否完好',
+        illegalWire: '是否私拉乱接',
+      },
+      hints: {},
+    },
+  };
 
   function $(id) {
     return document.getElementById(id);
@@ -23,11 +84,43 @@
   }
 
   function yn(val) {
-    if (val === 'yes' || val === true || val === '是') return '是';
-    if (val === 'no' || val === false || val === '否') return '否';
-    if (val === 'new') return '新建';
-    if (val === 'match') return '配套';
+    if (val == null || val === '') return '—';
+    if (YN_MAP[val] != null) return YN_MAP[val];
+    if (val === true || val === '是') return '是';
+    if (val === false || val === '否') return '否';
     return displayText(val);
+  }
+
+  function normalizeAnswer(v) {
+    if (v === 'yes' || v === 'no') return v;
+    if (v === '是') return 'yes';
+    if (v === '否') return 'no';
+    return v ? String(v) : '';
+  }
+
+  function regionLine(item) {
+    return [item.street || '', item.village || '', item.naturalVillage || '']
+      .filter(Boolean)
+      .join('');
+  }
+
+  function formatProjectYear(item) {
+    if (item.projectYear) return String(item.projectYear).replace(/年$/, '') + '年';
+    return '—';
+  }
+
+  function formatInspectionDate(item) {
+    if (global.AppData && typeof AppData.formatInspectionDate === 'function') {
+      return AppData.formatInspectionDate(item) || '—';
+    }
+    return '—';
+  }
+
+  function formatPlanDate(item) {
+    if (global.AppData && typeof AppData.formatPlanDateDisplay === 'function') {
+      return AppData.formatPlanDateDisplay(item.planDate) || displayText(item.planDate);
+    }
+    return displayText(item.planDate);
   }
 
   function renderRow(label, value, opts) {
@@ -64,7 +157,7 @@
         '<div class="rf-detail-media m-media is-loading" data-wm-src="' +
         escapeHtml(src) +
         '">' +
-        '<span class="m-media__ph" aria-hidden="true">img</span>' +
+        '<span class="m-media__ph" aria-hidden="true"></span>' +
         '<div class="m-media__skel" aria-hidden="true"></div>' +
         '<img class="rf-detail-thumb" alt="" /></div>'
       );
@@ -83,6 +176,7 @@
     if (!photos || !photos.length) return '';
     var cls = 'rf-detail-photos';
     if (variant === 'hero') cls += ' rf-detail-photos--hero';
+    if (variant === 'quiz') cls += ' rf-detail-photos--quiz';
     var cells = photos
       .slice(0, 6)
       .map(function (src) {
@@ -92,11 +186,13 @@
     return '<div class="' + cls + '">' + cells + '</div>';
   }
 
-  function renderMetaFooter(rowsHtml) {
+  function renderMetaFooter(title, rowsHtml) {
     if (!rowsHtml) return '';
     return (
       '<div class="rf-detail-meta">' +
-      '<div class="rf-detail-meta__title">联系与时限</div>' +
+      '<div class="rf-detail-meta__title">' +
+      escapeHtml(title || '责任与时限') +
+      '</div>' +
       '<div class="rf-detail-rows">' +
       rowsHtml +
       '</div></div>'
@@ -120,135 +216,199 @@
     return meta;
   }
 
-  function buildTypeFields(item) {
-    var html = '';
-    var i = item;
+  function typeBlock(item) {
+    var meta = QUIZ_META[item.type];
+    if (!meta) return null;
+    return item[meta.blockKey] || null;
+  }
 
-    if (i.type === 'well' && i.well) {
-      var w = i.well;
-      html += renderRow('建设类型', yn(w.buildKind));
-      html += renderRow('机井出水', yn(w.waterOut));
-      html += renderRow('管道连接', yn(w.pipeOk));
-      html += renderRow('走线规范', yn(w.wiringOk));
-      html += renderRow('配电箱', yn(w.boxOk));
-      html += renderRow('井盖完好', yn(w.coverOk));
+  function getQuizSlot(item, field, block) {
+    if (item.quizSteps && item.quizSteps[field]) {
+      return item.quizSteps[field];
+    }
+    if (block && block.quizSteps && block.quizSteps[field]) {
+      return block.quizSteps[field];
+    }
+    var ans = block && block[field] != null ? block[field] : item[field];
+    if (field === 'needsRectify' && block && block.needsRectify) {
+      ans = block.needsRectify;
+    }
+    ans = normalizeAnswer(ans);
+    if (!ans) return null;
+    return { answer: ans, desc: '', photos: [] };
+  }
+
+  function collectQuizPhotoSrcs(item) {
+    var meta = QUIZ_META[item.type];
+    if (!meta) return [];
+    var block = typeBlock(item);
+    var out = [];
+    meta.fields.forEach(function (field) {
+      var slot = getQuizSlot(item, field, block);
+      if (!slot || !slot.photos) return;
+      slot.photos.forEach(function (p) {
+        if (p) out.push(p);
+      });
+    });
+    return out;
+  }
+
+  function buildFillFields(item) {
+    var html = '';
+    if (item.type === 'well') {
+      var w = item.well || {};
+      html += renderRow('设施类型', yn(w.buildKind));
       html += renderRow('出水口总数', w.outletTotal != null ? w.outletTotal + ' 个' : '');
       html += renderRow('出水口损坏', w.outletDamaged != null ? w.outletDamaged + ' 个' : '');
       html += renderRow('护筒总数', w.casingTotal != null ? w.casingTotal + ' 个' : '');
       html += renderRow('护筒损坏', w.casingDamaged != null ? w.casingDamaged + ' 个' : '');
-      html += renderRow('井长及负责人', w.keeperName);
-      html += renderRow('联系电话', w.keeperPhone);
-    } else if (i.type === 'road') {
-      var r = i.road || {};
-      var len = r.length != null ? r.length : i.length;
-      var wid = r.width != null ? r.width : i.width;
-      var thk = r.thickness != null ? r.thickness : i.thickness;
-      var trees = r.treeSurvive != null ? r.treeSurvive : i.treeSurvive;
-      html += renderRow('长度', len != null && len !== '' ? len + ' km' : '');
-      html += renderRow('宽度', wid != null && wid !== '' ? wid + ' m' : '');
-      html += renderRow('厚度', thk != null && thk !== '' ? thk + ' m' : '');
-      html += renderRow('路肩', r.hasShoulder ? yn(r.hasShoulder) : i.hasShoulder);
-      html += renderRow('灰土层', r.hasAsh ? yn(r.hasAsh) : i.hasAsh);
-      html += renderRow('林网存活', trees != null && trees !== '' ? trees + ' 棵' : '');
-      html += renderRow('负责人', r.keeperName);
-      html += renderRow('联系电话', r.keeperPhone);
-    } else if (i.type === 'bridge') {
-      var b = i.bridge || {};
-      var bl = b.length != null ? b.length : i.length;
-      var bw = b.width != null ? b.width : i.width;
-      html += renderRow('设施类型', BRIDGE_KIND[b.kind] || i.bridgeKindLabel || '');
-      html += renderRow('长度', bl != null && bl !== '' ? bl + ' m' : '');
-      html += renderRow('宽度', bw != null && bw !== '' ? bw + ' m' : '');
-      html += renderRow('负责人', b.keeperName);
-      html += renderRow('联系电话', b.keeperPhone);
-    } else if (i.type === 'forest' && i.forest) {
-      var f = i.forest;
+    } else if (item.type === 'road') {
+      var r = item.road || {};
+      var len = r.length != null ? r.length : item.length;
+      var wid = r.width != null ? r.width : item.width;
+      var thk = r.thickness != null ? r.thickness : item.thickness;
+      var trees = r.treeSurvive != null ? r.treeSurvive : item.treeSurvive;
+      html += renderRow('长度', len != null && len !== '' ? len + ' 千米' : '');
+      html += renderRow('宽度', wid != null && wid !== '' ? wid + ' 米' : '');
+      html += renderRow('厚度', thk != null && thk !== '' ? thk + ' 米' : '');
+      html += renderRow('林网存活率', trees != null && trees !== '' ? trees + ' 棵' : '');
+    } else if (item.type === 'bridge') {
+      var b = item.bridge || {};
+      var bl = b.length != null ? b.length : item.length;
+      var bw = b.width != null ? b.width : item.width;
+      html += renderRow('设施类型', BRIDGE_KIND[b.kind] || item.bridgeKindLabel || '');
+      html += renderRow('长度', bl != null && bl !== '' ? bl + ' 米' : '');
+      html += renderRow('宽度', bw != null && bw !== '' ? bw + ' 米' : '');
+    } else if (item.type === 'forest') {
+      var f = item.forest || {};
       html += renderRow('移交株数', f.handoverCount != null ? f.handoverCount + ' 株' : '');
       html += renderRow('现有株数', f.existingCount != null ? f.existingCount + ' 株' : '');
       html += renderRow('存活率', f.surviveRate != null ? f.surviveRate + '%' : '');
-      html += renderRow('断带', yn(f.brokenBelt));
-      html += renderRow('枯死木', yn(f.deadTrees));
-      html += renderRow('病虫害', yn(f.pest));
-      html += renderRow('负责人', f.keeperName);
-      html += renderRow('联系电话', f.keeperPhone);
-    } else if (i.type === 'transformer' && i.transformer) {
-      var t = i.transformer;
+    } else if (item.type === 'transformer') {
+      var t = item.transformer || {};
       html += renderRow('容量', t.capacity != null ? t.capacity + ' kVA' : '');
       html += renderRow('型号', t.model);
-      html += renderRow('电压', t.voltage);
-      html += renderRow('通电', yn(t.powered));
-      html += renderRow('设备完好', yn(t.deviceOk));
-      html += renderRow('配电完好', yn(t.cabinetOk));
-      html += renderRow('私拉乱接', yn(t.illegalWire));
-      html += renderRow('负责人', t.keeperName);
-      html += renderRow('联系电话', t.keeperPhone);
+      html += renderRow('电压等级', yn(t.voltage) || t.voltage);
     }
-
     return html;
   }
 
-  function buildBeforePanel(item, plan, sources, photoLoading) {
-    sources = sources || [];
-    var measures =
-      (item.measures || (item.well && item.well.rectifyMeasure) || item.rectifyPlan || '').trim();
-    var typeLabel = global.AppData.TYPE_LABEL[item.type] || item.type;
-    var typeFields = buildTypeFields(item);
+  function buildChecklist(item, photoLoading) {
+    var meta = QUIZ_META[item.type];
+    if (!meta) return '';
+    var block = typeBlock(item);
+    var items = '';
 
+    meta.fields.forEach(function (field) {
+      var slot = getQuizSlot(item, field, block);
+      if (!slot || !slot.answer) return;
+      var hint = (meta.hints && meta.hints[field]) || '';
+      var label = (meta.names && meta.names[field]) || field;
+      var ansText = yn(slot.answer);
+      var ansCls =
+        slot.answer === 'yes' ? 'rf-detail-quiz-ans--yes' : 'rf-detail-quiz-ans--no';
+      var desc = (slot.desc || '').trim();
+      var photos = [];
+      if (slot.photos && slot.photos.length) {
+        slot.photos.forEach(function (p) {
+          if (p) photos.push(p);
+        });
+      }
+
+      items +=
+        '<article class="rf-detail-quiz-item">' +
+        '<div class="rf-detail-quiz-hd">' +
+        '<span class="rf-detail-quiz-q">' +
+        escapeHtml(label + hint) +
+        '</span>' +
+        '<span class="rf-detail-quiz-ans ' +
+        ansCls +
+        '">' +
+        escapeHtml(ansText) +
+        '</span></div>' +
+        (desc
+          ? '<p class="rf-detail-quiz-desc">' + escapeHtml(desc) + '</p>'
+          : '') +
+        (photos.length ? renderPhotos(photos, 'quiz', photoLoading) : '') +
+        '</article>';
+    });
+
+    if (!items) return '';
+    return renderBlock('排查清单', '<div class="rf-detail-quiz-list">' + items + '</div>');
+  }
+
+  /** 排查上报签名；三态均可展示（整改责任人不另签） */
+  function buildSignature(item) {
+    var src = item.reporterSignature || '';
+    if (!src) return '';
+    return renderBlock(
+      '电子签名',
+      '<div class="rf-detail-sign-board">' +
+        '<div class="rf-detail-media m-media is-loading rf-detail-sign-media">' +
+        '<div class="m-media__skel" aria-hidden="true"></div>' +
+        '<img class="rf-detail-sign-img" src="' +
+        escapeHtml(src) +
+        '" alt="" />' +
+        '</div></div>'
+    );
+  }
+
+  function buildBasicBlock(item) {
+    var typeLabel = (global.AppData && AppData.TYPE_LABEL[item.type]) || item.type;
+    var rows =
+      renderRow('问题类型', typeLabel) +
+      renderRow('行政区划', regionLine(item)) +
+      renderRow('项目年度', formatProjectYear(item)) +
+      renderRow('项目编号', item.code) +
+      renderRow('排查日期', formatInspectionDate(item)) +
+      buildFillFields(item) +
+      renderRow('现场地址', item.address || item.locationText);
+    return renderBlock('基本信息', '<div class="rf-detail-rows">' + rows + '</div>');
+  }
+
+  function buildLegacyFallback(item, sources, photoLoading) {
+    var html = '';
+    if (sources.length) {
+      html += renderBlock('', renderPhotos(sources, 'hero', photoLoading));
+    }
+    var desc = (item.description || '').trim();
+    if (desc) {
+      html += renderBlock(
+        '问题描述',
+        '<p class="rf-detail-block__text">' + escapeHtml(desc) + '</p>'
+      );
+    }
+    return html;
+  }
+
+  function buildBeforePanel(item, plan, photoLoading) {
+    var quizHtml = buildChecklist(item, photoLoading);
+    var quizPhotos = collectQuizPhotoSrcs(item);
+    var legacySrc = quizPhotos.length ? [] : photoSources(item, 'before');
     var body = '';
 
-    if (sources.length) {
-      body += renderBlock('', renderPhotos(sources, 'hero', photoLoading));
+    body += buildBasicBlock(item);
+
+    if (quizHtml) {
+      body += quizHtml;
     } else {
-      body += renderBlock(
-        '',
-        '<div class="rf-detail-photos rf-detail-photos--hero rf-detail-photos--empty">暂无现场照片</div>'
-      );
+      body += buildLegacyFallback(item, legacySrc, photoLoading);
     }
 
-    body += renderBlock(
-      '问题描述',
-      '<p class="rf-detail-block__text">' + escapeHtml(displayText(item.description)) + '</p>'
-    );
-
-    body += renderBlock(
-      '现场地址',
-      '<p class="rf-detail-block__text">' +
-        escapeHtml(displayText(item.address || item.locationText)) +
-        '</p>'
-    );
-
-    body += renderBlock(
-      '基本信息',
-      '<div class="rf-detail-rows">' +
-        renderRow('问题类型', typeLabel) +
-        renderRow('项目名称', item.projectName) +
-        renderRow('问题编号', item.code) +
-        renderRow('街道', item.street) +
-        renderRow('村/社区', item.village) +
-        '</div>'
-    );
-
-    if (typeFields) {
-      body += renderBlock('问题明细', '<div class="rf-detail-rows">' + typeFields + '</div>');
-    }
-
-    if (measures) {
-      body += renderBlock(
-        '整改措施',
-        '<p class="rf-detail-block__text">' + escapeHtml(measures) + '</p>'
-      );
-    }
+    body += buildSignature(item);
 
     body += renderMetaFooter(
+      '责任与时限',
       renderRow('整改责任人', item.assigneeName) +
         renderRow('联系电话', item.assigneePhone) +
-        renderRow('计划完成', item.planDate) +
-        renderRow('倒计时', plan.text, {
-          valueClass: plan.level === 'overdue' ? 'rf-detail-countdown--overdue' : '',
-        }) +
+        renderRow('计划完成', formatPlanDate(item)) +
+        '<div class="rf-detail-meta__split" role="presentation"></div>' +
         renderRow('上报人', item.reporterName) +
         renderRow('上报电话', item.reporterPhone) +
-        renderRow('上报时间', global.AppData.formatTime(item.createdAt))
+        renderRow(
+          '上报时间',
+          global.AppData ? AppData.formatTime(item.createdAt) : item.createdAt
+        )
     );
 
     return (
@@ -286,14 +446,14 @@
         '</span><span class="rf-detail-wait-count__u">时</span></span>' +
         '</div>' +
         '<div class="rf-detail-wait-count__plan">计划完成 ' +
-        escapeHtml(displayText(item.planDate)) +
+        escapeHtml(formatPlanDate(item)) +
         '</div></div>';
     } else {
       countdownBlock =
         '<div class="rf-detail-wait-count">' +
         '<div class="rf-detail-wait-count__label">计划完成</div>' +
         '<div class="rf-detail-wait-count__plan-only">' +
-        escapeHtml(displayText(item.planDate)) +
+        escapeHtml(formatPlanDate(item)) +
         '</div></div>';
     }
 
@@ -313,14 +473,26 @@
     );
   }
 
+  function buildInspectedAfter() {
+    return (
+      '<div class="rf-detail-wait rf-detail-wait--inspected">' +
+      '<p class="rf-detail-wait__hint">排查无问题，无需整改</p>' +
+      '</div>'
+    );
+  }
+
   function buildAfterPanel(item, plan, sources, photoLoading) {
     sources = sources || [];
     var isDone = item.status === 'done';
+    var isInspected = item.status === 'inspected';
     var panelClass =
-      'rf-detail-panel rf-detail-panel--after' + (isDone ? ' is-done' : ' is-pending');
+      'rf-detail-panel rf-detail-panel--after' +
+      (isDone ? ' is-done' : isInspected ? ' is-inspected' : ' is-pending');
     var body = '';
 
-    if (!isDone) {
+    if (isInspected) {
+      body = buildInspectedAfter();
+    } else if (!isDone) {
       body = buildPendingAfter(item, plan);
     } else {
       var note = (item.rectifyNote || '').trim();
@@ -334,17 +506,21 @@
         );
       }
 
+      /* 已整改右栏：仅整改反馈 + 完成信息（无整改措施、无整改签名） */
       body += renderBlock(
-        '整改说明',
+        '整改反馈',
         '<p class="rf-detail-block__text">' + escapeHtml(displayText(note)) + '</p>'
       );
 
       body += renderMetaFooter(
+        '完成信息',
         renderRow(
           '完成时间',
-          item.rectifyAt ? global.AppData.formatTime(item.rectifyAt) : '—',
+          item.rectifyAt ? AppData.formatTime(item.rectifyAt) : '—',
           { valueClass: 'rf-detail-value--done' }
-        )
+        ) +
+          renderRow('整改责任人', item.assigneeName) +
+          renderRow('联系电话', item.assigneePhone)
       );
     }
 
@@ -370,19 +546,73 @@
           if (!overlay || !overlay.classList.contains('open') || !cell.isConnected) return;
           var img = cell.querySelector('img');
           if (!img) return;
+          function onOk() {
+            if (!cell.isConnected) return;
+            img.setAttribute('data-preview-src', baked);
+            cell.classList.remove('is-loading', 'is-error');
+            cell.classList.add('is-ready');
+            cell.removeAttribute('data-wm-src');
+          }
+          function onFail() {
+            if (!cell.isConnected) return;
+            keepMediaSkeleton(cell, img);
+            cell.removeAttribute('data-wm-src');
+          }
+          img.onload = onOk;
+          img.onerror = onFail;
           img.src = baked;
-          img.setAttribute('data-preview-src', baked);
-          cell.classList.remove('is-loading');
-          cell.classList.add('is-ready');
-          cell.removeAttribute('data-wm-src');
+          if (img.complete && img.naturalWidth > 0) onOk();
         })
         .catch(function () {
           if (!cell.isConnected) return;
           if (global.AppLog) global.AppLog.warn('rectify-detail', 'watermark fail', src);
-          cell.classList.remove('is-loading');
-          cell.classList.add('is-error');
+          var img = cell.querySelector('img');
+          keepMediaSkeleton(cell, img);
           cell.removeAttribute('data-wm-src');
         });
+    });
+  }
+
+  /** 加载失败：不露裂图，持续骨架屏 */
+  function keepMediaSkeleton(wrap, img) {
+    if (!wrap) return;
+    wrap.classList.remove('is-ready', 'is-error');
+    wrap.classList.add('is-loading');
+    if (img) {
+      img.removeAttribute('src');
+      img.removeAttribute('data-preview-src');
+    }
+  }
+
+  /** 非水印图（如电子签名）：成功→ready，失败→持续骨架 */
+  function bindPlainMediaSkeletons(root) {
+    if (!root) return;
+    root.querySelectorAll('.m-media.is-loading img').forEach(function (img) {
+      var wrap = img.closest('.m-media');
+      if (!wrap || wrap.hasAttribute('data-wm-src')) return;
+      if (wrap.dataset.rfSkelBound === '1') return;
+      wrap.dataset.rfSkelBound = '1';
+
+      function done(ok) {
+        if (!wrap.isConnected) return;
+        if (ok) {
+          wrap.classList.remove('is-loading', 'is-error');
+          wrap.classList.add('is-ready');
+          return;
+        }
+        keepMediaSkeleton(wrap, img);
+      }
+
+      if (img.complete) {
+        done(img.naturalWidth > 0);
+        return;
+      }
+      img.addEventListener('load', function () {
+        done(true);
+      });
+      img.addEventListener('error', function () {
+        done(false);
+      });
     });
   }
 
@@ -424,6 +654,9 @@
       document.body.appendChild(overlay);
     }
 
+    var titleEl = overlay && overlay.querySelector('.v50-modal-title');
+    if (titleEl) titleEl.textContent = '巡查详情';
+
     var plan = global.AppData.formatPlanStatus(item);
     var panelsEl = $('rf-detail-panels');
     if (!panelsEl) {
@@ -431,23 +664,25 @@
       return;
     }
 
-    var beforeSrc = photoSources(item, 'before');
+    var quizPhotos = collectQuizPhotoSrcs(item);
+    var beforeSrc = quizPhotos.length ? quizPhotos : photoSources(item, 'before');
     var afterSrc = item.status === 'done' ? photoSources(item, 'after') : [];
-    var hasPhotos = beforeSrc.length || afterSrc.length;
+    var hasBeforePhotos = beforeSrc.length > 0;
+    var hasAfterPhotos = afterSrc.length > 0;
 
     panelsEl.innerHTML =
-      buildBeforePanel(item, plan, beforeSrc, hasPhotos) +
-      buildAfterPanel(item, plan, afterSrc, hasPhotos && item.status === 'done');
+      buildBeforePanel(item, plan, hasBeforePhotos) +
+      buildAfterPanel(item, plan, afterSrc, hasAfterPhotos);
     toggle(true);
 
-    if (!hasPhotos) return;
+    bindPlainMediaSkeletons(panelsEl);
 
     var beforePanel = panelsEl.querySelector('.rf-detail-panel--before');
     var afterPanel = panelsEl.querySelector('.rf-detail-panel--after');
-    if (beforeSrc.length) {
+    if (hasBeforePhotos) {
       applyWatermarksInPanel(beforePanel, photoMeta(item, 'before'));
     }
-    if (afterSrc.length) {
+    if (hasAfterPhotos) {
       applyWatermarksInPanel(afterPanel, photoMeta(item, 'after'));
     }
   }

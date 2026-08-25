@@ -1,4 +1,8 @@
 (function () {
+  if (!window.AppIcons || typeof window.AppIcons.injectAll !== 'function') {
+    if (window.AppLog) AppLog.error('m-login', 'AppIcons 未就绪，滑块验证无法初始化');
+    return;
+  }
   AppIcons.injectAll(document);
 
   var form = document.getElementById('mLoginForm');

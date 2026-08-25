@@ -505,7 +505,7 @@
 
                         .vben-table-std {
                             width: 100%;
-                            min-width: 1200px; /* 固定最小宽度，防止内容溢出 */
+                            min-width: 1700px; /* 固定最小宽度，防止内容溢出 */
                             border-collapse: collapse;
                             border-spacing: 0;
                             font-size: 14px;
@@ -518,6 +518,26 @@
                         .vben-table-std td.col-countdown {
                             width: 180px;
                             min-width: 180px;
+                            max-width: none;
+                            white-space: nowrap;
+                            overflow: visible;
+                            text-overflow: clip;
+                        }
+
+                        .vben-table-std th.col-date,
+                        .vben-table-std td.col-date {
+                            width: 160px;
+                            min-width: 160px;
+                            max-width: none;
+                            white-space: nowrap;
+                            overflow: visible;
+                            text-overflow: clip;
+                        }
+
+                        .vben-table-std th.col-region,
+                        .vben-table-std td.col-region {
+                            width: 220px;
+                            min-width: 220px;
                             max-width: none;
                             white-space: nowrap;
                             overflow: visible;
@@ -1072,6 +1092,10 @@
   padding-left: 26px;
 }
 
+#query-group-rf .atomic-tree-select .tree-node.level-3 {
+  padding-left: 44px;
+}
+
 #query-group-rf .atomic-tree-select .node-arrow {
   width: 14px;
   height: 14px;
@@ -1101,5 +1125,5 @@
   padding: 20px;
   text-align: center;
   color: #999;
-  font-size: 13px;
+  font-size: 14px;
 }

@@ -37,13 +37,7 @@ var Registry = []Entry{
 	{Method: "GET", Path: "/api/sys/roles/:id/apis", Name: "角色API权限", Module: "web.sys-roles", Action: "view", Sort: 23},
 	{Method: "PUT", Path: "/api/sys/roles/:id/apis", Name: "设置角色API权限", Module: "web.sys-roles", Action: "edit", Sort: 24},
 	{Method: "GET", Path: "/api/sys/apis", Name: "API目录列表", Module: "web.sys-roles", Action: "view", Sort: 25},
-	{Method: "GET", Path: "/api/sys/dict/types", Name: "字典类型", Module: "web.sys-dict", Action: "view", Sort: 26},
-	{Method: "GET", Path: "/api/sys/dict/fields", Name: "字典字段", Module: "web.sys-dict", Action: "view", Sort: 27},
-	{Method: "GET", Path: "/api/sys/dict/items", Name: "字典选项", Module: "web.sys-dict", Action: "view", Sort: 28},
-	{Method: "POST", Path: "/api/sys/dict/items", Name: "新增字典项", Module: "web.sys-dict", Action: "create", Sort: 29},
-	{Method: "PUT", Path: "/api/sys/dict/items/:id", Name: "更新字典项", Module: "web.sys-dict", Action: "edit", Sort: 30},
-	{Method: "DELETE", Path: "/api/sys/dict/items/:id", Name: "删除字典项", Module: "web.sys-dict", Action: "delete", Sort: 31},
-	{Method: "GET", Path: "/api/sys/op-logs", Name: "操作日志", Module: "web.sys-logs", Action: "view", Sort: 32},
+	{Method: "GET", Path: "/api/sys/op-logs", Name: "操作日志", Module: "web.sys-logs", Action: "view", Sort: 26},
 }
 
 // RBACSkipPaths 登录即可、不做 RBAC 的路径。

@@ -191,6 +191,14 @@
   color: #6b7a90;
 }
 
+.m-mine__row--pwd {
+  margin: 0 16px 8px;
+  padding-left: 0;
+  padding-right: 0;
+  border-bottom: 1px solid #eef2f6;
+  box-sizing: border-box;
+}
+
 .m-mine__list {
   margin: 0 16px;
 }
@@ -1213,6 +1221,67 @@ a.m-mine__row:visited {
   margin: 0 0 10px;
 }
 
+/* —— 修改密码 —— */
+.m-pwd {
+  padding: 16px 16px 32px;
+  background: #fff;
+  overflow-y: auto;
+}
+
+.m-pwd__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.m-pwd__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.m-pwd__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+.m-pwd__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f0f4f8;
+  font: inherit;
+  font-size: 14px;
+  color: var(--app-text);
+  outline: none;
+}
+
+.m-pwd__input:focus {
+  background: #fff;
+  border-color: var(--app-primary);
+}
+
+.m-pwd__submit {
+  margin-top: 8px;
+  height: 44px;
+  border: 1px solid var(--app-primary);
+  border-radius: 8px;
+  background: var(--app-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.m-pwd__submit:active {
+  opacity: 0.9;
+}
+
 /* ---------- 待办主界面 ---------- */
 .m-todo {
   background:
@@ -1495,6 +1564,13 @@ a.m-mine__row:visited {
   aspect-ratio: 1;
 }
 
+/* 图片格公共壳（待办 / 巡查详情 / 整改详情等） */
+.m-media {
+  position: relative;
+  overflow: hidden;
+  background: #f0f2f5;
+}
+
 /* 列表图：空/失败浅灰「img」；加载中扫光（对齐 PFF loading-skeleton-v73） */
 .m-media__ph {
   position: absolute;
@@ -1559,7 +1635,6 @@ a.m-mine__row:visited {
   opacity: 1;
 }
 
-.m-media.is-error .m-media__skel,
 .m-media.is-empty .m-media__skel {
   display: none;
 }
@@ -2128,6 +2203,27 @@ a.m-mine__row:visited {
   border-color: var(--app-primary);
 }
 
+.m-report__add--countdown {
+  border-style: solid;
+  border-color: #e8edf3;
+  background: #f0f4f8;
+  cursor: not-allowed;
+}
+
+.m-report__add--countdown:active {
+  background: #f0f4f8;
+  color: #666;
+  border-color: #e8edf3;
+}
+
+.m-report__add-countdown {
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: #666;
+  letter-spacing: 0.04em;
+}
+
 /* 上报 · 拍照/上传底栏 */
 .m-sheet {
   position: absolute;
@@ -2459,7 +2555,7 @@ a.m-mine__row:visited {
 }
 
 .m-report__meta {
-  margin: 0 16px;
+  margin: 0 16px 8px;
   border-top: none;
 }
 
@@ -2481,8 +2577,50 @@ a.m-mine__row:visited {
 }
 
 .m-report__row--input,
-.m-report__row--loc {
+.m-report__row--loc,
+.m-report__row--year {
   cursor: default;
+}
+
+.m-report__row--year {
+  gap: 8px;
+}
+
+.m-year-group {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.m-year-btn {
+  flex: 1;
+  max-width: 52px;
+  height: 32px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: #f0f4f8;
+  color: #666;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  line-height: 32px;
+  text-align: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.m-year-btn.is-active {
+  background: var(--app-primary);
+  color: #fff;
+  font-weight: var(--font-weight-bold);
+}
+
+.m-year-btn:active {
+  opacity: 0.92;
 }
 
 .m-report__row--loc {
@@ -2495,6 +2633,250 @@ a.m-mine__row:visited {
   box-sizing: border-box;
 }
 
+.m-report__well-fill-extra {
+  margin: 0 16px;
+}
+
+.m-report__row--loc-in-fill {
+  margin: 0;
+  width: 100%;
+  border-bottom: none;
+}
+
+.m-report.is-well-quiz .m-report__well-quiz {
+  display: block;
+}
+
+.m-report.is-well-sign .m-report__well-sign {
+  display: block;
+}
+
+.m-report__well-head {
+  display: none;
+}
+
+.m-report.is-well-quiz .m-report__well-head,
+.m-report.is-well-sign .m-report__well-head {
+  display: block;
+}
+
+.m-report__well-quiz {
+  padding: 0 0 8px;
+}
+
+.m-report__progress {
+  padding: 12px 16px 4px;
+}
+
+.m-report__progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #e8edf3;
+  overflow: hidden;
+}
+
+.m-report__progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: var(--app-primary);
+  transition: width 0.25s ease;
+}
+
+.m-report__quiz-title {
+  margin: 12px 16px 20px;
+  font-size: 24px;
+  font-weight: var(--font-weight-bold);
+  color: var(--app-text);
+  line-height: 1.35;
+}
+
+.m-report__quiz-title .m-report__yn-hint {
+  font-size: 24px;
+  font-weight: var(--font-weight-regular);
+  color: var(--app-text);
+}
+
+.m-report__quiz-yn {
+  margin: 0 16px 16px;
+}
+
+.m-yn-group--quiz {
+  display: flex;
+  gap: 12px;
+}
+
+.m-yn-item--quiz {
+  flex: 1;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #f0f4f8;
+}
+
+.m-yn-item--quiz .m-yn-text {
+  font-size: 24px;
+  font-weight: var(--font-weight-bold);
+}
+
+.m-yn-item--quiz .m-yn-box {
+  width: 24px;
+  height: 24px;
+}
+
+/* 单选题页 24px 圆钮 · 勾/叉放大；填写页仍用上方默认 18px 尺寸 */
+.m-yn-item--quiz .m-yn-box--yes::after {
+  top: 3px;
+  left: 7px;
+  width: 5px;
+  height: 10px;
+}
+
+.m-yn-item--quiz .m-yn-box--no::before,
+.m-yn-item--quiz .m-yn-box--no::after {
+  top: 9px;
+  left: 4px;
+  width: 14px;
+  height: 3px;
+}
+
+.m-yn-item--quiz:has(input:checked) {
+  background: rgba(1, 92, 187, 0.08);
+}
+
+.m-report__well-sign {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 0 8px;
+}
+
+.m-report.is-well-sign .m-report__body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.m-report.is-well-sign .m-report__well-sign {
+  display: flex;
+}
+
+.m-report__sign-title {
+  margin: 12px 16px 12px;
+  font-size: 24px;
+  font-weight: var(--font-weight-bold);
+  color: var(--app-text);
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+.m-report__sign-board {
+  position: relative;
+  flex: 1;
+  margin: 0 16px;
+  min-height: 480px;
+  border: 1px solid #e5d4a8;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.m-report__sign-canvas {
+  display: block;
+  width: 100%;
+  height: 480px;
+  touch-action: none;
+  cursor: crosshair;
+  background: transparent;
+}
+
+.m-report__sign-clear {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--app-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  cursor: pointer;
+}
+
+.m-report__sign-clear:active {
+  background: #f0f4f8;
+}
+
+.m-report__foot--dual {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.m-report__foot--dual .m-report__prev {
+  flex: 1;
+  height: 46px;
+  margin: 0;
+  border: 1px solid var(--app-primary);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--app-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.m-report__foot--dual .m-report__prev:active {
+  background: var(--app-primary-soft);
+}
+
+.m-report__foot--dual .m-report__submit {
+  flex: 1;
+  width: auto;
+}
+
+.m-report.is-wizard-mode #rLegacyFlow {
+  display: none !important;
+}
+
+.m-report.is-well-mode #rLegacyFlow {
+  display: none !important;
+}
+
+#rFacilityKindRow .m-yn-item {
+  position: relative;
+  z-index: 1;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rWellQuizPanel,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rWellFillExtra,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rRoadFillExtra,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rBridgeFillExtra,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rForestFillExtra,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rTransformerFillExtra,
+.m-report:not(.is-wizard-mode):not(.is-well-mode) #rWizardFillTail {
+  display: none !important;
+}
+
+.m-report:not(.is-wizard-mode) #rWellQuizPanel {
+  display: none !important;
+}
+
+.m-report:not(.is-well-mode) #rWellFillExtra {
+  display: none !important;
+}
+
 .m-report__split {
   height: 10px;
   margin: 0;
@@ -2502,7 +2884,7 @@ a.m-mine__row:visited {
 }
 
 .m-report__types {
-  margin: 12px 0 4px;
+  margin: 0 0 4px;
   padding: 0 16px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -2583,6 +2965,11 @@ a.m-mine__row:visited {
   color: #000;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
+}
+
+.m-picker--region3 .m-picker__item {
+  font-size: 14px;
+  padding: 0 6px;
 }
 
 .m-report__row-value {
@@ -2752,6 +3139,13 @@ a.m-mine__row:visited {
   box-sizing: border-box;
 }
 
+.m-report__well-fill-extra .m-report__plan-row {
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+  max-width: none;
+}
+
 .m-report__sec-title {
   margin: 12px 0 4px;
   font-size: var(--font-size-min);
@@ -2760,6 +3154,7 @@ a.m-mine__row:visited {
   letter-spacing: 0.04em;
 }
 
+.m-report__meta .m-report__row--yn,
 .m-report__row--yn,
 .m-report__row--nums {
   cursor: default;
@@ -2963,5 +3358,65 @@ a.m-mine__row:visited {
   outline: none;
   background: #fff;
   border-color: var(--app-primary);
+}
+
+/* 页内确认框（AppUI.modal · 小程序未引 layout.css） */
+.app-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.app-modal {
+  width: 100%;
+  max-width: 300px;
+  background: #fff;
+  border-radius: 8px;
+}
+
+.app-modal__hd {
+  padding: 14px 16px;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.app-modal__bd {
+  padding: 16px;
+  color: #595959;
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+}
+
+.app-modal__ft {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--app-border);
+}
+
+.app-btn {
+  min-width: 72px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--app-text);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+}
+
+.app-btn--primary {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+  color: #fff;
 }
 

@@ -12,17 +12,27 @@
 
   var navBusy = false;
   /**  bump 后软跳转会强制重载 watermark 等公共脚本，避免旧水印逻辑残留 */
-  var FRAMEWORK_ASSET_VER = 'mp-photos-2';
+  /**  bump 后软跳转会强制重载 watermark / mp-photos / well-water-photos 等公共脚本 */
+  var FRAMEWORK_ASSET_VER = 'well-sign-2';
   var FRAMEWORK_SCRIPT_HINTS = [
     'logger.js',
     'icons.js',
     'config.js',
     'storage.js',
+    'region-2023.js',
+    'mp-region-picker.js',
     'seed.js',
     'data.js',
+    'project-code.js',
     'ui.js',
     'watermark.js',
     'mp-photos.js',
+    'mp-media.js',
+    'image-compress.js',
+    'picker-date-loop.js',
+    'mp-signature.js',
+    'well-submit-rules.js',
+    'well-water-photos.js',
     'device-shell.js',
     'mp-nav.js',
     'fluid-bg',
@@ -161,18 +171,26 @@
     }
   }
 
-  /** 公共脚本：首屏未引入的依赖在软跳转时补载；watermark 带版本号可热更新 */
+  /** 公共脚本：首屏未引入的依赖在软跳转时补载；关键模块带版本号热更新 */
   function ensureFrameworkScript(absSrc) {
-    var isWatermark = /watermark\.js$/i.test(scriptPathname(absSrc) || absSrc);
-    if (isWatermark) {
+    var path = scriptPathname(absSrc) || absSrc;
+    var isHotReload = /(?:watermark|well-water-photos|well-submit-rules|mp-photos|mp-signature)\.js$/i.test(path);
+    var isIcons = /icons\.js$/i.test(path);
+    if (isHotReload) {
       removeFrameworkScript(absSrc);
     } else if (scriptAlreadyLoaded(absSrc)) {
-      return Promise.resolve();
+      if (isIcons && (!global.AppIcons || typeof global.AppIcons.injectAll !== 'function')) {
+        removeFrameworkScript(absSrc);
+      } else {
+        return Promise.resolve();
+      }
+    } else if (isIcons && global.AppIcons && typeof global.AppIcons.injectAll !== 'function') {
+      removeFrameworkScript(absSrc);
     }
     return new Promise(function (resolve, reject) {
       var script = document.createElement('script');
       var src = absSrc;
-      if (isWatermark) {
+      if (isHotReload) {
         src =
           absSrc +
           (absSrc.indexOf('?') >= 0 ? '&' : '?') +

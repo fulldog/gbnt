@@ -76,38 +76,6 @@ type SysRoleAPI struct {
 
 func (SysRoleAPI) TableName() string { return "sys_role_apis" }
 
-// SysDictType 字典排查类型。
-type SysDictType struct {
-	Code string `gorm:"size:64;uniqueIndex;comment:类型编码 well/road/bridge/forest/transformer" json:"code"`
-	Name string `gorm:"size:64;comment:类型名称" json:"name"`
-	Sort int    `gorm:"comment:排序号" json:"sort"`
-	Base
-}
-
-func (SysDictType) TableName() string { return "sys_dict_types" }
-
-// SysDictField 字典字段。
-type SysDictField struct {
-	TypeCode string `gorm:"size:64;index;uniqueIndex:uk_type_field;comment:所属字典类型编码" json:"type_code"`
-	Code     string `gorm:"size:64;uniqueIndex:uk_type_field;comment:字段编码" json:"code"`
-	Name     string `gorm:"size:64;comment:字段名称" json:"name"`
-	Sort     int    `gorm:"comment:排序号" json:"sort"`
-	Base
-}
-
-func (SysDictField) TableName() string { return "sys_dict_fields" }
-
-// SysDictItem 字典选项值。
-type SysDictItem struct {
-	FieldID uint64 `gorm:"index;comment:所属字典字段主键ID" json:"field_id"`
-	Label   string `gorm:"size:128;comment:选项展示文案" json:"label"`
-	Value   string `gorm:"size:128;comment:选项存储值" json:"value"`
-	Sort    int    `gorm:"comment:排序号" json:"sort"`
-	Base
-}
-
-func (SysDictItem) TableName() string { return "sys_dict_items" }
-
 // Issue 排查/整改主表（对齐前端 issues）。
 type Issue struct {
 	IssueKey            string     `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
@@ -187,9 +155,6 @@ func TableComments() map[string]string {
 		"sys_roles":            "角色",
 		"sys_apis":             "API目录",
 		"sys_role_apis":        "角色API授权",
-		"sys_dict_types":       "数据字典-排查类型",
-		"sys_dict_fields":      "数据字典-字段定义",
-		"sys_dict_items":       "数据字典-选项值",
 		"issues":               "排查整改问题主表",
 		"op_logs":              "操作日志",
 		"attachments":          "附件文件主表",

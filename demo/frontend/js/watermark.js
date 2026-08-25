@@ -292,8 +292,16 @@
       });
   }
 
+  function locateErrorHint(code) {
+    if (code === 1) return '请在浏览器与系统中允许使用位置信息';
+    if (code === 2) return '当前设备无法获取位置，已使用默认地址';
+    if (code === 3) return '定位超时，已使用默认地址';
+    return '无法获取当前位置，已使用默认地址';
+  }
+
   /**
    * 浏览器定位：优先真实坐标 + 逆地理地址；失败用聊城示例点
+   * 桌面/Mac 无 GPS 时常返回 POSITION_UNAVAILABLE，会先低精度再高精度各试一次
    */
   function locate(callback) {
     var fallback = {
@@ -306,36 +314,72 @@
     }
     if (!navigator.geolocation) {
       if (global.AppLog) global.AppLog.warn('watermark', 'geolocation unsupported');
-      done(fallback, { fromGps: false });
+      done(fallback, { fromGps: false, error: 'unsupported' });
       return;
     }
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        var lat = Number(pos.coords.latitude.toFixed(6));
-        var lng = Number(pos.coords.longitude.toFixed(6));
-        reverseGeocode(lat, lng, function (address) {
-          done(
-            { lat: lat, lng: lng, address: address },
-            { fromGps: true, geocodeOk: address.indexOf('当前位置') !== 0 }
-          );
-          if (global.AppLog) {
-            global.AppLog.info('watermark', 'locate ok', { lat: lat, lng: lng });
-          }
-        });
-      },
-      function (err) {
+    if (global.isSecureContext === false) {
+      if (global.AppLog) {
+        global.AppLog.warn('watermark', 'geolocation blocked: insecure context');
+      }
+      done(fallback, { fromGps: false, error: 'insecure' });
+      return;
+    }
+
+    var attempts = [
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    ];
+    var lastErr = null;
+
+    function onSuccess(pos) {
+      var lat = Number(pos.coords.latitude.toFixed(6));
+      var lng = Number(pos.coords.longitude.toFixed(6));
+      reverseGeocode(lat, lng, function (address) {
+        done(
+          { lat: lat, lng: lng, address: address },
+          { fromGps: true, geocodeOk: address.indexOf('当前位置') !== 0 }
+        );
         if (global.AppLog) {
-          global.AppLog.warn('watermark', 'geolocation fail', err && err.message);
+          global.AppLog.info('watermark', 'locate ok', { lat: lat, lng: lng });
         }
-        done(fallback, { fromGps: false, error: err && err.code });
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
-    );
+      });
+    }
+
+    function onFail(err) {
+      lastErr = err;
+      if (global.AppLog) {
+        global.AppLog.warn('watermark', 'geolocation fail', {
+          code: err && err.code,
+          message: err && err.message,
+        });
+      }
+    }
+
+    function tryAttempt(i) {
+      if (i >= attempts.length) {
+        done(fallback, {
+          fromGps: false,
+          error: lastErr && lastErr.code != null ? lastErr.code : 'exhausted',
+        });
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        onSuccess,
+        function (err) {
+          onFail(err);
+          tryAttempt(i + 1);
+        },
+        attempts[i]
+      );
+    }
+
+    tryAttempt(0);
   }
 
   global.AppWatermark = {
     apply: applyWatermark,
     locate: locate,
+    locateErrorHint: locateErrorHint,
     formatNow: formatNow,
     formatDateZh: formatDateZh,
     formatCoordLine: formatCoordLine,

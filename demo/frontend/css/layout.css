@@ -569,6 +569,34 @@ textarea {
   opacity: 0;
 }
 
+.app-toast--success {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #f6ffed;
+  color: #1a7f4b;
+  border: 1px solid #b7eb8f;
+  font-weight: var(--font-weight-bold, 600);
+  text-align: left;
+}
+
+.app-toast__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: #1a7f4b;
+}
+
+.app-toast__icon-svg {
+  display: block;
+}
+
+.app-toast__text {
+  line-height: 1.45;
+}
+
 .app-modal-mask {
   position: fixed;
   inset: 0;

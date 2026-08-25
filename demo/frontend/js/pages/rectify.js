@@ -26,6 +26,7 @@
     { label: '全部', value: '' },
     { label: '待整改', value: 'pending' },
     { label: '已整改', value: 'done' },
+    { label: '已排查', value: 'inspected' },
   ];
 
   function $(id) {
@@ -61,39 +62,115 @@
 
   function cellStatus(item) {
     var label = global.AppData.STATUS_LABEL[item.status] || '—';
-    var st =
-      item.status === 'done'
-        ? 'padding:2px 6px;background:#f6ffed;border:1px solid #b7eb8f;color:#1a7f4b;border-radius:4px;font-size:12px;'
-        : 'padding:2px 6px;background:#fff7e6;border:1px solid #ffd591;color:#c47a06;border-radius:4px;font-size:12px;';
+    var st;
+    if (item.status === 'done') {
+      st =
+        'padding:2px 6px;background:#f6ffed;border:1px solid #b7eb8f;color:#1a7f4b;border-radius:4px;font-size:12px;';
+    } else if (item.status === 'inspected') {
+      st =
+        'padding:2px 6px;background:#e6f4ff;border:1px solid #91caff;color:#015cbb;border-radius:4px;font-size:12px;';
+    } else {
+      st =
+        'padding:2px 6px;background:#fff7e6;border:1px solid #ffd591;color:#c47a06;border-radius:4px;font-size:12px;';
+    }
     return '<td><span style="' + st + '">' + escapeHtml(label) + '</span></td>';
   }
 
   function getFilters() {
-    var region = regionSelect ? regionSelect.getRegion() : { street: '', village: '' };
+    var region = regionSelect
+      ? regionSelect.getRegion()
+      : { street: '', village: '', naturalVillage: '' };
     return {
       type: filterTypeSelect ? filterTypeSelect.getValue() || '' : '',
       status: filterStatusSelect ? filterStatusSelect.getValue() || '' : '',
       keyword: ($('rf-filter-keyword') && $('rf-filter-keyword').value.trim()) || '',
       street: region.street || '',
       village: region.village || '',
+      naturalVillage: region.naturalVillage || '',
     };
+  }
+
+  /** 行政区划：街道 + 村/社区 + 自然村（有则拼出） */
+  function formatRegion(row) {
+    if (global.AppData && typeof global.AppData.formatRegion === 'function') {
+      return global.AppData.formatRegion(row) || '—';
+    }
+    return [row.street, row.village, row.naturalVillage]
+      .map(function (s) {
+        return String(s || '').trim();
+      })
+      .filter(Boolean)
+      .join('') || '—';
+  }
+
+  function formatYear(row) {
+    var y = String((row && row.projectYear) || '').trim().replace(/年$/, '');
+    return y ? y + '年' : '—';
+  }
+
+  /** 排序组：0 逾期 / 1 待整改 / 2 已整改·已排查 */
+  function sortGroup(row) {
+    if (row.status === 'pending') {
+      var rem = global.AppData.planRemain ? global.AppData.planRemain(row.planDate) : null;
+      if (rem && rem.overdue) return 0;
+      return 1;
+    }
+    if (row.status === 'done' || row.status === 'inspected') return 2;
+    return 9;
+  }
+
+  /** 待整改天数权重（逾期/剩余均按天数大的在前）；非待整改返回 0 */
+  function pendingDayWeight(row) {
+    if (row.status !== 'pending') return 0;
+    var rem = global.AppData.planRemain ? global.AppData.planRemain(row.planDate) : null;
+    if (!rem) return 0;
+    return rem.days + rem.hours / 24;
+  }
+
+  /** 已整改/已排查：取最近业务时间 */
+  function latestTime(row) {
+    if (row.status === 'done') return String(row.rectifyAt || row.createdAt || '');
+    if (row.status === 'inspected') {
+      return String(row.inspectionDate || row.createdAt || '');
+    }
+    return String(row.createdAt || '');
+  }
+
+  function sortIssues(list) {
+    return list.slice().sort(function (a, b) {
+      var ga = sortGroup(a);
+      var gb = sortGroup(b);
+      if (ga !== gb) return ga - gb;
+      if (ga === 0 || ga === 1) {
+        var da = pendingDayWeight(a);
+        var db = pendingDayWeight(b);
+        if (db !== da) return db - da;
+      }
+      return latestTime(b).localeCompare(latestTime(a));
+    });
   }
 
   function filterList() {
     var f = getFilters();
-    return global.AppData.getIssues().filter(function (row) {
+    var list = global.AppData.getIssues().filter(function (row) {
       if (f.type && row.type !== f.type) return false;
       if (f.status && row.status !== f.status) return false;
-      if (f.village && String(row.village || '') !== f.village) return false;
+      if (f.naturalVillage && String(row.naturalVillage || '') !== f.naturalVillage) return false;
+      if (f.village && !f.naturalVillage && String(row.village || '') !== f.village) return false;
       if (f.street && !f.village && String(row.street || '') !== f.street) return false;
       if (f.keyword) {
         var kw = f.keyword.toLowerCase();
         var blob = [
           global.AppData.TYPE_LABEL[row.type],
           row.code,
+          row.projectYear,
           row.projectName,
+          formatRegion(row),
           row.village,
           row.street,
+          row.naturalVillage,
+          row.reporterName,
+          row.reporterPhone,
           row.assigneeName,
           row.description,
         ]
@@ -103,6 +180,7 @@
       }
       return true;
     });
+    return sortIssues(list);
   }
 
   function paginate(list) {
@@ -179,7 +257,7 @@
 
     if (!list.length) {
       tbody.innerHTML =
-        '<tr><td colspan="11" style="text-align:center;color:#999;">暂无记录</td></tr>';
+        '<tr><td colspan="13" style="text-align:center;color:#999;">暂无记录</td></tr>';
       setTimeout(updateTableShadow, 50);
       return;
     }
@@ -190,9 +268,18 @@
         var typeLabel = global.AppData.TYPE_LABEL[row.type] || row.type;
         var plan = global.AppData.formatPlanStatus(row);
         var rowClass = active;
-        if (plan.level === 'overdue') rowClass += ' is-overdue';
+        if (row.status === 'pending' && plan.level === 'overdue') rowClass += ' is-overdue';
         var countdownClass =
           'col-countdown' + (plan.level === 'overdue' ? ' col-countdown--overdue' : '');
+        var inspectionDate = global.AppData.formatInspectionDate
+          ? global.AppData.formatInspectionDate(row)
+          : '—';
+        var planDateText =
+          row.status === 'inspected'
+            ? '—'
+            : global.AppData.formatPlanDateDisplay
+              ? global.AppData.formatPlanDateDisplay(row.planDate) || '—'
+              : row.planDate || '—';
         var ops =
           '<a class="op-link" data-action="view" data-id="' +
           row.id +
@@ -214,12 +301,14 @@
           (baseIndex + i + 1) +
           '</td>' +
           cellText(typeLabel) +
+          cellText(formatYear(row)) +
           cellText(row.code) +
-          cellText(row.street) +
-          cellText(row.village) +
+          cellText(formatRegion(row), { className: 'col-region' }) +
+          cellText(row.reporterName) +
           cellText(row.assigneeName) +
           cellText(row.assigneePhone) +
-          cellText(row.planDate) +
+          cellText(inspectionDate, { className: 'col-date' }) +
+          cellText(planDateText, { className: 'col-date' }) +
           cellText(plan.text, { className: countdownClass }) +
           cellStatus(row) +
           '<td class="col-fixed-right">' +
@@ -334,7 +423,8 @@
 
     if (global.HSFRegionTreeSelect) {
       regionSelect = global.HSFRegionTreeSelect.create('rf-filter-region', {
-        searchPlaceholder: '搜索街道或村/社区',
+        searchPlaceholder: '搜索街道 / 村社区 / 自然村',
+        expandStreets: false,
       });
     }
 

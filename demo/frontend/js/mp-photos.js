@@ -28,6 +28,13 @@
             return {};
           };
     var onChange = typeof opts.onChange === 'function' ? opts.onChange : function () {};
+    var onDelete = typeof opts.onDelete === 'function' ? opts.onDelete : null;
+    var cameraOnly = !!opts.cameraOnly;
+    var previewBaked = !!opts.previewBaked;
+    var getAddButton =
+      typeof opts.getAddButton === 'function' ? opts.getAddButton : null;
+    var afterCapture =
+      typeof opts.afterCapture === 'function' ? opts.afterCapture : null;
 
     var sheetRoot = null;
     var camRoot = null;
@@ -85,7 +92,11 @@
     function openPreview(src) {
       closePreview();
       if (global.AppWatermark && typeof AppWatermark.openPreview === 'function') {
-        AppWatermark.openPreview(src, previewMeta());
+        if (previewBaked) {
+          AppWatermark.openPreview(src, null, { baked: true });
+        } else {
+          AppWatermark.openPreview(src, previewMeta());
+        }
       }
     }
 
@@ -106,9 +117,17 @@
           '</button></div>';
       });
       if (photos.length < max) {
-        html +=
-          '<button type="button" class="m-report__add" data-act="add" aria-label="添加照片">' +
-          '<span data-icon="plus" aria-hidden="true"></span></button>';
+        if (getAddButton) {
+          html += getAddButton({
+            photos: photos,
+            length: photos.length,
+            max: max,
+          });
+        } else {
+          html +=
+            '<button type="button" class="m-report__add" data-act="add" aria-label="添加照片">' +
+            '<span data-icon="plus" aria-hidden="true"></span></button>';
+        }
       }
       el.innerHTML = html;
       if (global.AppIcons) AppIcons.injectAll(el);
@@ -340,7 +359,19 @@
             ctx.scale(-1, 1);
           }
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          enterReview(canvas.toDataURL('image/jpeg', 0.92));
+          var maxW = 1280;
+          var w = canvas.width;
+          var h = canvas.height;
+          if (w > maxW) {
+            var nh = Math.round(h * (maxW / w));
+            var scaled = document.createElement('canvas');
+            scaled.width = maxW;
+            scaled.height = nh;
+            scaled.getContext('2d').drawImage(canvas, 0, 0, maxW, nh);
+            enterReview(scaled.toDataURL('image/jpeg', 0.8));
+          } else {
+            enterReview(canvas.toDataURL('image/jpeg', 0.8));
+          }
           return;
         }
 
@@ -353,7 +384,17 @@
           if (!pendingSnap) return;
           var shot = pendingSnap;
           stopCamera();
-          pushPhoto(shot);
+          if (afterCapture) {
+            afterCapture(shot)
+              .then(function (result) {
+                if (result) pushPhoto(result);
+              })
+              .catch(function () {
+                AppUI.toast('图片处理失败', 'error');
+              });
+          } else {
+            pushPhoto(shot);
+          }
         }
       });
     }
@@ -408,13 +449,19 @@
       var act = t.getAttribute('data-act');
       var idx = parseInt(t.getAttribute('data-index'), 10);
       if (act === 'add') {
-        openSheet();
+        if (cameraOnly) openCamera();
+        else openSheet();
+        return;
+      }
+      if (act === 'countdown') {
+        AppUI.toast('请等待倒计时结束后再拍照', 'warn');
         return;
       }
       if (act === 'del') {
         e.stopPropagation();
         if (!isNaN(idx)) {
           photos.splice(idx, 1);
+          if (onDelete) onDelete(idx);
           render();
         }
         return;

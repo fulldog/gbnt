@@ -16,19 +16,19 @@
           <div class="m-form__section">问题信息</div>
           <div class="m-card" id="rectifyInfo"></div>
 
-          <div class="m-form__section">整改情况</div>
+          <div class="m-form__section">整改反馈</div>
           <div class="m-field">
-            <label for="fixNote">整改说明</label>
-            <textarea id="fixNote" rows="3" placeholder="简述整改措施"></textarea>
+            <label for="formNote">整改说明</label>
+            <textarea id="formNote" rows="3" placeholder="填写整改说明"></textarea>
           </div>
           <div class="m-field">
             <label>整改后照片</label>
-            <label class="m-upload__box" for="fixFile">
+            <label class="m-upload__box" for="formFile">
               <span class="m-upload__icon" data-icon="camera"></span>
-              <span class="m-upload__text" id="fixUploadText">拍照或从相册选择</span>
+              <span class="m-upload__text" id="formUploadText">拍照或从相册选择</span>
             </label>
-            <input type="file" id="fixFile" accept="image/*" capture="environment" hidden />
-            <img class="m-photo-preview" id="fixPreview" alt="" hidden />
+            <input type="file" id="formFile" accept="image/*" capture="environment" hidden />
+            <img class="m-photo-preview" id="formPreview" alt="" hidden />
             <button type="button" class="m-btn m-btn--ghost" id="btnFixDemo">
               <span data-icon="image"></span>使用预置图
             </button>
@@ -45,6 +45,7 @@
     <script src="../frontend/js/config.js"></script>
     <script src="../frontend/js/storage.js"></script>
     <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/data/region-2023.js"></script>
     <script src="../frontend/js/seed.js"></script>
     <script src="../frontend/js/data.js"></script>
     <script src="../frontend/js/ui.js"></script>

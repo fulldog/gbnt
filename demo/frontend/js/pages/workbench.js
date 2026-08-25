@@ -176,6 +176,18 @@
     ]);
   }
 
+  function inspectedCountByType(key) {
+    if (key === 'other') {
+      var known = { well: 1, road: 1, bridge: 1, forest: 1, transformer: 1 };
+      return AppData.getIssues().filter(function (i) {
+        return i.status === 'inspected' && !known[i.type];
+      }).length;
+    }
+    return AppData.getIssues().filter(function (i) {
+      return i.status === 'inspected' && i.type === key;
+    }).length;
+  }
+
   function doneCountByType(key) {
     if (key === 'other') {
       var known = { well: 1, road: 1, bridge: 1, forest: 1, transformer: 1 };
@@ -245,7 +257,12 @@
     };
   }
 
-  function sparkBarOption(labels, data) {
+  function sparkBarOption(labels, data, theme) {
+    var isAccent = theme === 'accent';
+    var hi = isAccent ? 'rgba(26, 127, 75, 0.45)' : 'rgba(1, 92, 187, 0.45)';
+    var lo = isAccent ? '#1a7f4b' : '#015cbb';
+    var zeroHi = isAccent ? 'rgba(26, 127, 75, 0.35)' : 'rgba(1, 92, 187, 0.35)';
+    var zeroLo = isAccent ? 'rgba(26, 127, 75, 0.55)' : 'rgba(1, 92, 187, 0.55)';
     return {
       tooltip: sparkTooltip(),
       grid: { left: 0, right: 0, top: 6, bottom: 8 },
@@ -273,15 +290,15 @@
                       opacity: 0.35,
                       borderRadius: [3, 3, 0, 0],
                       color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                        { offset: 0, color: 'rgba(1, 92, 187, 0.35)' },
-                        { offset: 1, color: 'rgba(1, 92, 187, 0.55)' },
+                        { offset: 0, color: zeroHi },
+                        { offset: 1, color: zeroLo },
                       ]),
                     }
                   : {
                       borderRadius: [3, 3, 0, 0],
                       color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                        { offset: 0, color: 'rgba(1, 92, 187, 0.45)' },
-                        { offset: 1, color: '#015cbb' },
+                        { offset: 0, color: hi },
+                        { offset: 1, color: lo },
                       ]),
                     },
             };
@@ -297,30 +314,46 @@
     var grid = document.getElementById('statGrid');
     var cards = [
       {
-        label: '上报数量',
+        key: 'patrol',
+        label: '巡查数量',
         value: s.total,
-        foot: '累计排查上报',
+        foot: '累计巡查记录',
         spark: 'line',
         color: '#015cbb',
+        series: 'reported',
+        seriesName: '巡查',
       },
       {
+        key: 'pending',
         label: '待整改',
         value: s.pending,
         foot: '当前待处理',
         spark: 'line',
         color: '#c47a06',
+        series: 'pending',
+        seriesName: '待整改',
       },
       {
+        key: 'done',
         label: '已整改',
         value: s.done,
-        foot: '已完成闭环',
+        foot: '当前已整改',
         spark: 'bar',
-        color: '#1a7f4b',
+        barTheme: 'primary',
       },
       {
+        key: 'inspected',
+        label: '已排查',
+        value: s.inspected,
+        foot: '排查无问题',
+        spark: 'bar',
+        barTheme: 'accent',
+      },
+      {
+        key: 'rate',
         label: '整改完成率',
         value: rate,
-        foot: '已整改 / 上报',
+        foot: '已整改 / 巡查',
         spark: 'progress',
         color: '#015cbb',
       },
@@ -358,6 +391,9 @@
     var typeLabels = RANK_TYPES.map(function (t) {
       return t.label;
     });
+    var typeInspected = RANK_TYPES.map(function (t) {
+      return inspectedCountByType(t.key);
+    });
     var typeDone = RANK_TYPES.map(function (t) {
       return doneCountByType(t.key);
     });
@@ -374,11 +410,12 @@
       var chart = echarts.init(dom);
 
       if (c.spark === 'bar') {
-        chart.setOption(sparkBarOption(typeLabels, typeDone));
-      } else if (idx === 0) {
-        chart.setOption(sparkLineOption(trend.labels, trend.reported, c.color, '上报'));
-      } else if (idx === 1) {
-        chart.setOption(sparkLineOption(trend.labels, trend.pending, c.color, '待整改'));
+        var barData = c.key === 'inspected' ? typeInspected : typeDone;
+        chart.setOption(sparkBarOption(typeLabels, barData, c.barTheme || 'primary'));
+      } else if (c.spark === 'line' && c.series) {
+        chart.setOption(
+          sparkLineOption(trend.labels, trend[c.series], c.color, c.seriesName || c.label)
+        );
       }
 
       sparkCharts.push(chart);
@@ -469,7 +506,8 @@
     var rankList = document.getElementById('typeRank');
     var chartDom = document.getElementById('trendChart');
     if (!rankList || !chartDom) return;
-    chartDom.style.height = rankList.offsetHeight + 'px';
+    var rankH = Math.max(rankList.scrollHeight, rankList.offsetHeight);
+    chartDom.style.height = Math.max(rankH, 220) + 'px';
     if (trendChart) trendChart.resize();
   }
 
@@ -577,4 +615,7 @@
   renderTodo();
   bindRange();
   bindResize();
+  requestAnimationFrame(function () {
+    syncTrendChartHeight();
+  });
 })();

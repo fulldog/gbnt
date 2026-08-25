@@ -25,6 +25,23 @@
     return el;
   }
 
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function successIconMarkup() {
+    return (
+      '<svg class="app-toast__icon-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="10" fill="currentColor" opacity="0.14"></circle>' +
+      '<polyline points="7 12.5 10.5 16 17 8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>' +
+      '</svg>'
+    );
+  }
+
   function toast(message, type) {
     var kind = type || 'info';
     var text = message == null ? '' : String(message);
@@ -35,7 +52,16 @@
     var host = ensureToastHost();
     var item = document.createElement('div');
     item.className = 'app-toast app-toast--' + kind;
-    item.textContent = text;
+    if (kind === 'success') {
+      item.innerHTML =
+        '<span class="app-toast__icon">' +
+        successIconMarkup() +
+        '</span><span class="app-toast__text">' +
+        escapeHtml(text) +
+        '</span>';
+    } else {
+      item.textContent = text;
+    }
     host.appendChild(item);
     setTimeout(function () {
       item.classList.add('is-out');

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
-    <title>上报 · 移动端</title>
+    <title>巡查 · 移动端</title>
     <link rel="icon" type="image/png" href="../media/favicon.png" />
     <link rel="stylesheet" href="../frontend/css/variables.css" />
     <link rel="stylesheet" href="../frontend/css/device-shell.css" />
@@ -14,67 +14,38 @@
       <div class="m-page m-report">
         <div class="m-report__top-fade" id="rTopFade" aria-hidden="true"></div>
         <form class="m-report__body" id="reportForm" novalidate>
-          <textarea
-            id="rDesc"
-            class="m-report__desc"
-            rows="4"
-            placeholder="发现了什么问题？"
-            aria-label="问题描述"
-            required
-          ></textarea>
-
-          <div class="m-report__photos" id="rPhotos" aria-label="现场照片"></div>
-
-          <div class="m-report__row m-report__row--loc" aria-label="定位">
-            <span class="m-report__loc-icon" data-icon="mapPin" aria-hidden="true"></span>
-            <span class="m-report__row-value m-report__loc-text" id="rLocText">定位中…</span>
-            <button
-              type="button"
-              class="m-report__loc-btn"
-              id="btnRelocate"
-              aria-label="重新定位"
-            >
-              <span data-icon="refresh" aria-hidden="true"></span>
-            </button>
-          </div>
-          <div class="m-report__split" aria-hidden="true"></div>
-
           <div class="m-report__types" aria-label="问题类型">
             <div class="vben-segmented-box" id="v86-controller" role="listbox"></div>
           </div>
 
-          <div class="m-report__meta" aria-label="上报信息">
+          <div id="rWellFillPanel">
+          <div class="m-report__meta" aria-label="巡查信息">
             <button type="button" class="m-report__row" id="rRegionRow" data-meta="region">
               <span class="m-report__row-label">区划</span>
               <span class="m-report__row-value is-placeholder" id="rRegionLabel">请选择</span>
               <span class="m-report__row-caret" data-icon="chevronRight" aria-hidden="true"></span>
             </button>
-            <label class="m-report__row m-report__row--input" for="rProjectName">
-              <span class="m-report__row-label">项目名称</span>
-              <input
-                id="rProjectName"
-                class="m-report__row-input"
-                placeholder="如：高标农田建设项目"
-                aria-label="项目名称"
-                autocomplete="off"
-                required
-              />
-            </label>
+            <div class="m-report__row m-report__row--year" aria-label="项目年度">
+              <span class="m-report__row-label">项目年度</span>
+              <div class="m-year-group" id="rProjectYear" role="radiogroup" aria-label="项目年度">
+                <button type="button" class="m-year-btn" data-year="2020" aria-pressed="false">2020</button>
+                <button type="button" class="m-year-btn" data-year="2021" aria-pressed="false">2021</button>
+                <button type="button" class="m-year-btn" data-year="2022" aria-pressed="false">2022</button>
+                <button type="button" class="m-year-btn" data-year="2023" aria-pressed="false">2023</button>
+              </div>
+            </div>
             <label class="m-report__row m-report__row--input" for="rCode">
-              <span class="m-report__row-label">编号</span>
+              <span class="m-report__row-label">项目编号</span>
               <input
                 id="rCode"
                 class="m-report__row-input"
-                placeholder="选填"
-                aria-label="设施编号（选填）"
+                placeholder="如：机井01号"
+                aria-label="项目编号"
                 autocomplete="off"
               />
             </label>
-          </div>
-
-          <div class="m-report__type-block" id="rWellBlock" hidden>
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">新建 / 配套</span>
+            <div class="m-report__row m-report__row--yn" id="rFacilityKindRow" aria-label="设施类型">
+              <span class="m-report__yn-label">设施类型</span>
               <div class="m-yn-group" data-field="buildKind">
                 <label class="m-yn-item">
                   <input type="radio" name="rWellBuild" value="new" />
@@ -88,633 +59,287 @@
                 </label>
               </div>
             </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">机井是否出水<span class="m-report__yn-hint">（≥5分钟）</span></span>
-              <div class="m-yn-group" data-field="waterOut">
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellWater" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellWater" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
+          </div>
+            <div id="rWellFillExtra" class="m-report__well-fill-extra">
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellOutletTotal">
+                <span class="m-report__row-label">出水口总数</span>
+                <input
+                  id="rWellOutletTotal"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                  placeholder="请输入"
+                  aria-label="出水口总数"
+                />
+                <span class="m-report__row-unit">个</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellOutletDamaged">
+                <span class="m-report__row-label">出水口损坏</span>
+                <input
+                  id="rWellOutletDamaged"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                  placeholder="请输入"
+                  aria-label="出水口损坏数量"
+                />
+                <span class="m-report__row-unit">个</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellCasingTotal">
+                <span class="m-report__row-label">护筒总数</span>
+                <input
+                  id="rWellCasingTotal"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                  placeholder="请输入"
+                  aria-label="护筒总数"
+                />
+                <span class="m-report__row-unit">个</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellCasingDamaged">
+                <span class="m-report__row-label">护筒损坏</span>
+                <input
+                  id="rWellCasingDamaged"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                  placeholder="请输入"
+                  aria-label="护筒损坏数量"
+                />
+                <span class="m-report__row-unit">个</span>
+              </label>
+            </div>
+            <div id="rRoadFillExtra" class="m-report__well-fill-extra" hidden>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadLength">
+                <span class="m-report__row-label">长度</span>
+                <input
+                  id="rRoadLength"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  placeholder="请输入"
+                  aria-label="道路长度"
+                />
+                <span class="m-report__row-unit">千米</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadWidth">
+                <span class="m-report__row-label">宽度</span>
+                <input
+                  id="rRoadWidth"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  placeholder="请输入"
+                  aria-label="道路宽度"
+                />
+                <span class="m-report__row-unit">米</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadThickness">
+                <span class="m-report__row-label">厚度</span>
+                <input
+                  id="rRoadThickness"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputmode="decimal"
+                  placeholder="请输入"
+                  aria-label="道路厚度"
+                />
+                <span class="m-report__row-unit">米</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadTreeSurvive">
+                <span class="m-report__row-label">林网存活率</span>
+                <input
+                  id="rRoadTreeSurvive"
+                  class="m-report__row-input"
+                  type="number"
+                  min="0"
+                  inputmode="numeric"
+                  placeholder="请输入"
+                  aria-label="护林林网树木存活率"
+                />
+                <span class="m-report__row-unit">棵</span>
+              </label>
+            </div>
+            <div id="rBridgeFillExtra" class="m-report__well-fill-extra" hidden>
+              <div class="m-report__row m-report__row--yn" id="rBridgeKindRow" aria-label="设施类型">
+                <span class="m-report__yn-label">设施类型</span>
+                <div class="m-yn-group" data-field="kind">
+                  <label class="m-yn-item">
+                    <input type="radio" name="rBridgeKind" value="bridge" />
+                    <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                    <span class="m-yn-text">桥</span>
+                  </label>
+                  <label class="m-yn-item">
+                    <input type="radio" name="rBridgeKind" value="culvert" />
+                    <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                    <span class="m-yn-text">涵</span>
+                  </label>
+                  <label class="m-yn-item">
+                    <input type="radio" name="rBridgeKind" value="gate" />
+                    <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                    <span class="m-yn-text">闸</span>
+                  </label>
+                </div>
+              </div>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rBridgeLength">
+                <span class="m-report__row-label">长度</span>
+                <input id="rBridgeLength" class="m-report__row-input" type="number" min="0" step="any" inputmode="decimal" placeholder="请输入" aria-label="桥涵闸长度" />
+                <span class="m-report__row-unit">米</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rBridgeWidth">
+                <span class="m-report__row-label">宽度</span>
+                <input id="rBridgeWidth" class="m-report__row-input" type="number" min="0" step="any" inputmode="decimal" placeholder="请输入" aria-label="桥涵闸宽度" />
+                <span class="m-report__row-unit">米</span>
+              </label>
+            </div>
+            <div id="rForestFillExtra" class="m-report__well-fill-extra" hidden>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestHandover">
+                <span class="m-report__row-label">移交株数</span>
+                <input id="rForestHandover" class="m-report__row-input" type="number" min="0" inputmode="numeric" placeholder="请输入" aria-label="移交株数" />
+                <span class="m-report__row-unit">株</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestExisting">
+                <span class="m-report__row-label">现有株数</span>
+                <input id="rForestExisting" class="m-report__row-input" type="number" min="0" inputmode="numeric" placeholder="请输入" aria-label="现有株数" />
+                <span class="m-report__row-unit">株</span>
+              </label>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestSurviveRate">
+                <span class="m-report__row-label">存活率</span>
+                <input id="rForestSurviveRate" class="m-report__row-input" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="请输入" aria-label="存活率" />
+                <span class="m-report__row-unit">%</span>
+              </label>
+            </div>
+            <div id="rTransformerFillExtra" class="m-report__well-fill-extra" hidden>
+              <label class="m-report__row m-report__row--input m-report__row--unit" for="rTfCapacity">
+                <span class="m-report__row-label">容量</span>
+                <input id="rTfCapacity" class="m-report__row-input" type="number" min="0" step="any" inputmode="decimal" placeholder="请输入" aria-label="变压器容量" />
+                <span class="m-report__row-unit">kVA</span>
+              </label>
+              <label class="m-report__row m-report__row--input" for="rTfModel">
+                <span class="m-report__row-label">型号</span>
+                <input id="rTfModel" class="m-report__row-input" placeholder="请输入型号" autocomplete="off" aria-label="变压器型号" />
+              </label>
+              <div class="m-report__row m-report__row--yn" aria-label="电压等级">
+                <span class="m-report__yn-label">电压等级</span>
+                <div class="m-yn-group" data-field="voltage">
+                  <label class="m-yn-item">
+                    <input type="radio" name="rTfVoltage" value="10kv" />
+                    <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                    <span class="m-yn-text">10kV</span>
+                  </label>
+                  <label class="m-yn-item">
+                    <input type="radio" name="rTfVoltage" value="0.4kv" />
+                    <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
+                    <span class="m-yn-text">0.4kV</span>
+                  </label>
+                </div>
               </div>
             </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">管道是否按要求连接</span>
-              <div class="m-yn-group" data-field="pipeOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellPipe" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellPipe" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
+            <div id="rWizardFillTail" class="m-report__well-fill-extra" hidden>
+              <div class="m-report__row m-report__row--loc m-report__row--loc-in-fill" aria-label="定位">
+                <span class="m-report__loc-icon" data-icon="mapPin" aria-hidden="true"></span>
+                <span class="m-report__row-value m-report__loc-text" id="rLocText">定位中…</span>
+                <button type="button" class="m-report__loc-btn" id="btnRelocate" aria-label="重新定位">
+                  <span data-icon="refresh" aria-hidden="true"></span>
+                </button>
               </div>
             </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">走线是否规范</span>
-              <div class="m-yn-group" data-field="wiringOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellWiring" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellWiring" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">配电箱是否完好</span>
-              <div class="m-yn-group" data-field="boxOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellBox" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellBox" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">井台、井盖是否完整</span>
-              <div class="m-yn-group" data-field="coverOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellCover" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rWellCover" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellOutletTotal">
-              <span class="m-report__row-label">出水口总数</span>
-              <input
-                id="rWellOutletTotal"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="出水口总数"
-              />
-              <span class="m-report__row-unit">个</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellOutletDamaged">
-              <span class="m-report__row-label">出水口损坏</span>
-              <input
-                id="rWellOutletDamaged"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="出水口损坏数量"
-              />
-              <span class="m-report__row-unit">个</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellCasingTotal">
-              <span class="m-report__row-label">护筒总数</span>
-              <input
-                id="rWellCasingTotal"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="护筒总数"
-              />
-              <span class="m-report__row-unit">个</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rWellCasingDamaged">
-              <span class="m-report__row-label">护筒损坏</span>
-              <input
-                id="rWellCasingDamaged"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="护筒损坏数量"
-              />
-              <span class="m-report__row-unit">个</span>
-            </label>
-
-            <label class="m-report__row m-report__row--input" for="rWellKeeper">
-              <span class="m-report__row-label">井长及分管负责人</span>
-              <input
-                id="rWellKeeper"
-                class="m-report__row-input"
-                placeholder="请输入井长及分管负责人"
-                autocomplete="off"
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rWellKeeperPhone">
-              <span class="m-report__row-label">联系电话</span>
-              <input
-                id="rWellKeeperPhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入联系电话"
-                autocomplete="off"
-              />
-            </label>
           </div>
 
-          <div class="m-report__type-block" id="rRoadBlock" hidden>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadLength">
-              <span class="m-report__row-label">长度</span>
-              <input
-                id="rRoadLength"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="道路长度"
-              />
-              <span class="m-report__row-unit">千米</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadWidth">
-              <span class="m-report__row-label">宽度</span>
-              <input
-                id="rRoadWidth"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="道路宽度"
-              />
-              <span class="m-report__row-unit">米</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadThickness">
-              <span class="m-report__row-label">厚度</span>
-              <input
-                id="rRoadThickness"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="道路厚度"
-              />
-              <span class="m-report__row-unit">米</span>
-            </label>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否有路肩</span>
-              <div class="m-yn-group" data-field="hasShoulder">
-                <label class="m-yn-item">
-                  <input type="radio" name="rRoadShoulder" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rRoadShoulder" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
+          <div id="rWellWizardHead" class="m-report__well-head" hidden>
+            <div class="m-report__progress" id="rWellProgress" aria-hidden="true">
+              <div class="m-report__progress-track">
+                <div class="m-report__progress-fill" id="rWellProgressFill"></div>
               </div>
             </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否有灰土层</span>
-              <div class="m-yn-group" data-field="hasAsh">
-                <label class="m-yn-item">
-                  <input type="radio" name="rRoadAsh" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rRoadAsh" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadTreeSurvive">
-              <span class="m-report__row-label">林网存活率</span>
-              <input
-                id="rRoadTreeSurvive"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="护林林网树木存活率"
-              />
-              <span class="m-report__row-unit">棵</span>
-            </label>
-
-            <label class="m-report__row m-report__row--input" for="rRoadKeeper">
-              <span class="m-report__row-label">负责人</span>
-              <input
-                id="rRoadKeeper"
-                class="m-report__row-input"
-                placeholder="请输入负责人"
-                autocomplete="off"
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rRoadKeeperPhone">
-              <span class="m-report__row-label">电话</span>
-              <input
-                id="rRoadKeeperPhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入电话"
-                autocomplete="off"
-              />
-            </label>
           </div>
 
-          <div class="m-report__type-block" id="rBridgeBlock" hidden>
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">设施类型</span>
-              <div class="m-yn-group" data-field="kind">
-                <label class="m-yn-item">
-                  <input type="radio" name="rBridgeKind" value="bridge" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">桥</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rBridgeKind" value="culvert" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">涵</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rBridgeKind" value="gate" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">闸</span>
-                </label>
-              </div>
-            </div>
-
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rBridgeLength">
-              <span class="m-report__row-label">长度</span>
-              <input
-                id="rBridgeLength"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="桥涵闸长度"
-              />
-              <span class="m-report__row-unit">米</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rBridgeWidth">
-              <span class="m-report__row-label">宽度</span>
-              <input
-                id="rBridgeWidth"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="桥涵闸宽度"
-              />
-              <span class="m-report__row-unit">米</span>
-            </label>
-
-            <label class="m-report__row m-report__row--input" for="rBridgeKeeper">
-              <span class="m-report__row-label">负责人</span>
-              <input
-                id="rBridgeKeeper"
-                class="m-report__row-input"
-                placeholder="请输入负责人"
-                autocomplete="off"
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rBridgeKeeperPhone">
-              <span class="m-report__row-label">电话</span>
-              <input
-                id="rBridgeKeeperPhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入电话"
-                autocomplete="off"
-              />
-            </label>
-          </div>
-
-          <div class="m-report__type-block" id="rForestBlock" hidden>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestHandover">
-              <span class="m-report__row-label">移交株数</span>
-              <input
-                id="rForestHandover"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="移交株数"
-              />
-              <span class="m-report__row-unit">株</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestExisting">
-              <span class="m-report__row-label">现有株数</span>
-              <input
-                id="rForestExisting"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                inputmode="numeric"
-                placeholder="请输入"
-                aria-label="现有株数"
-              />
-              <span class="m-report__row-unit">株</span>
-            </label>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rForestSurviveRate">
-              <span class="m-report__row-label">存活率</span>
-              <input
-                id="rForestSurviveRate"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                max="100"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="存活率"
-              />
-              <span class="m-report__row-unit">%</span>
-            </label>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">林带是否断带</span>
-              <div class="m-yn-group" data-field="brokenBelt">
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestBroken" value="yes" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestBroken" value="no" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否有枯死木</span>
-              <div class="m-yn-group" data-field="deadTrees">
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestDead" value="yes" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestDead" value="no" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否发现病虫害</span>
-              <div class="m-yn-group" data-field="pest">
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestPest" value="yes" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rForestPest" value="no" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <label class="m-report__row m-report__row--input" for="rForestKeeper">
-              <span class="m-report__row-label">负责人</span>
-              <input
-                id="rForestKeeper"
-                class="m-report__row-input"
-                placeholder="请输入负责人"
-                autocomplete="off"
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rForestKeeperPhone">
-              <span class="m-report__row-label">电话</span>
-              <input
-                id="rForestKeeperPhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入电话"
-                autocomplete="off"
-              />
-            </label>
-          </div>
-
-          <div class="m-report__type-block" id="rTransformerBlock" hidden>
-            <label class="m-report__row m-report__row--input m-report__row--unit" for="rTfCapacity">
-              <span class="m-report__row-label">容量</span>
-              <input
-                id="rTfCapacity"
-                class="m-report__row-input"
-                type="number"
-                min="0"
-                step="any"
-                inputmode="decimal"
-                placeholder="请输入"
-                aria-label="变压器容量"
-              />
-              <span class="m-report__row-unit">kVA</span>
-            </label>
-            <label class="m-report__row m-report__row--input" for="rTfModel">
-              <span class="m-report__row-label">型号</span>
-              <input
-                id="rTfModel"
-                class="m-report__row-input"
-                placeholder="请输入型号"
-                autocomplete="off"
-                aria-label="变压器型号"
-              />
-            </label>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">电压等级</span>
-              <div class="m-yn-group" data-field="voltage">
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfVoltage" value="10kv" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">10kV</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfVoltage" value="0.4kv" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">0.4kV</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否通电</span>
-              <div class="m-yn-group" data-field="powered">
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfPowered" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfPowered" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">设备是否完好</span>
-              <div class="m-yn-group" data-field="deviceOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfDevice" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfDevice" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">配电设施是否完好</span>
-              <div class="m-yn-group" data-field="cabinetOk">
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfCabinet" value="yes" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfCabinet" value="no" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="m-report__row m-report__row--yn">
-              <span class="m-report__yn-label">是否私拉乱接</span>
-              <div class="m-yn-group" data-field="illegalWire">
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfIllegal" value="yes" />
-                  <span class="m-yn-box m-yn-box--no" aria-hidden="true"></span>
-                  <span class="m-yn-text">是</span>
-                </label>
-                <label class="m-yn-item">
-                  <input type="radio" name="rTfIllegal" value="no" />
-                  <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
-                  <span class="m-yn-text">否</span>
-                </label>
-              </div>
-            </div>
-
-            <label class="m-report__row m-report__row--input" for="rTfKeeper">
-              <span class="m-report__row-label">负责人</span>
-              <input
-                id="rTfKeeper"
-                class="m-report__row-input"
-                placeholder="请输入负责人"
-                autocomplete="off"
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rTfKeeperPhone">
-              <span class="m-report__row-label">电话</span>
-              <input
-                id="rTfKeeperPhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入电话"
-                autocomplete="off"
-              />
-            </label>
-          </div>
-
-          <label class="m-report__row m-report__row--input m-report__row--textarea m-report__measure" for="rWellMeasure">
-            <span class="m-report__row-label">整改措施</span>
+          <div id="rWellQuizPanel" class="m-report__well-quiz" hidden>
+            <div class="m-report__quiz-title" id="rWellQuizTitle"></div>
+            <div class="m-report__quiz-yn" id="rWellQuizYnHost" role="radiogroup"></div>
             <textarea
-              id="rWellMeasure"
-              class="m-report__row-input m-report__row-textarea"
-              rows="1"
-              placeholder="请输入整改措施"
-              aria-label="整改措施"
+              id="rWellStepDesc"
+              class="m-report__desc"
+              rows="4"
+              placeholder="发现了什么问题？"
+              aria-label="问题描述"
             ></textarea>
-          </label>
-          <button type="button" class="m-report__row m-report__plan-row" id="rWellPlanDateRow" data-meta="planDate">
+            <div class="m-report__photos" id="rWellStepPhotos" aria-label="现场照片"></div>
+            <button type="button" class="m-report__row m-report__plan-row" id="rWellPlanDateRow" data-meta="planDate" hidden>
+              <span class="m-report__row-label">整改计划日期</span>
+              <span class="m-report__row-value is-placeholder" id="rWellPlanDateLabel">请选择</span>
+              <span class="m-report__row-caret" data-icon="chevronRight" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div id="rWellSignPanel" class="m-report__well-sign" hidden>
+            <div class="m-report__sign-title">电子签名：</div>
+            <div class="m-report__sign-board">
+              <canvas id="rWellSignCanvas" class="m-report__sign-canvas" aria-label="签名画布"></canvas>
+              <button type="button" class="m-report__sign-clear" id="btnWellSignClear">清空</button>
+            </div>
+          </div>
+
+          <div id="rLegacyFlow">
+          <div id="rLegacyIntro">
+          <textarea
+            id="rDesc"
+            class="m-report__desc"
+            rows="4"
+            placeholder="发现了什么问题？"
+            aria-label="问题描述"
+            required
+          ></textarea>
+
+          <div class="m-report__photos" id="rPhotos" aria-label="现场照片"></div>
+
+          <div class="m-report__row m-report__row--loc" aria-label="定位">
+            <span class="m-report__loc-icon" data-icon="mapPin" aria-hidden="true"></span>
+            <span class="m-report__row-value m-report__loc-text" id="rLegacyLocText">定位中…</span>
+            <button
+              type="button"
+              class="m-report__loc-btn"
+              id="btnRelocateLegacy"
+              aria-label="重新定位"
+            >
+              <span data-icon="refresh" aria-hidden="true"></span>
+            </button>
+          </div>
+          </div>
+          <div class="m-report__split" aria-hidden="true"></div>
+
+          <div class="m-report__type-block" id="rWellBlock" hidden></div>
+
+
+          <button type="button" class="m-report__row m-report__plan-row" id="rLegacyPlanDateRow" data-meta="planDate">
             <span class="m-report__row-label">计划整改完成时间</span>
-            <span class="m-report__row-value" id="rWellPlanDateLabel">请选择</span>
+            <span class="m-report__row-value" id="rLegacyPlanDateLabel">请选择</span>
             <span class="m-report__row-caret" data-icon="chevronRight" aria-hidden="true"></span>
           </button>
-
-          <div class="m-report__assign" id="rAssignBlock">
-            <label class="m-report__row m-report__row--input" for="rAssigneeName">
-              <span class="m-report__row-label">整改责任人</span>
-              <input
-                id="rAssigneeName"
-                class="m-report__row-input"
-                placeholder="请输入整改责任人"
-                autocomplete="off"
-                required
-              />
-            </label>
-            <label class="m-report__row m-report__row--input" for="rAssigneePhone">
-              <span class="m-report__row-label">联系电话</span>
-              <input
-                id="rAssigneePhone"
-                class="m-report__row-input"
-                type="tel"
-                placeholder="请输入联系电话"
-                autocomplete="off"
-                required
-              />
-            </label>
           </div>
         </form>
 
-        <div class="m-report__foot">
-          <button type="submit" form="reportForm" class="m-btn m-btn--primary m-report__submit">
-            提交上报
+        <div class="m-report__foot" id="rReportFoot">
+          <button type="button" class="m-btn m-report__prev" id="btnReportPrev" hidden>上一步</button>
+          <button type="button" class="m-btn m-btn--primary m-report__submit" id="btnReportNext" disabled>
+            下一步
           </button>
         </div>
 
         <nav class="m-tabbar">
           <a class="m-tab" href="./todo.html"><span data-icon="list"></span><span>待办</span></a>
-          <a class="m-tab is-active" href="./report.html"><span data-icon="camera"></span><span>上报</span></a>
+          <a class="m-tab is-active" href="./report.html"><span data-icon="patrol"></span><span>巡查</span></a>
           <a class="m-tab" href="./mine.html"><span data-icon="user"></span><span>我的</span></a>
         </nav>
       </div>
@@ -727,11 +352,18 @@
     <script src="../frontend/js/config.js"></script>
     <script src="../frontend/js/storage.js"></script>
     <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/data/region-2023.js"></script>
     <script src="../frontend/js/seed.js"></script>
     <script src="../frontend/js/data.js"></script>
+    <script src="../frontend/js/project-code.js"></script>
     <script src="../frontend/js/ui.js"></script>
     <script src="../frontend/js/watermark.js"></script>
+    <script src="../frontend/js/picker-date-loop.js"></script>
     <script src="../frontend/js/mp-photos.js"></script>
+    <script src="../frontend/js/image-compress.js"></script>
+    <script src="../frontend/js/well-water-photos.js"></script>
+    <script src="../frontend/js/well-submit-rules.js"></script>
+    <script src="../frontend/js/mp-signature.js"></script>
     <script src="../frontend/js/pages/m-report.js"></script>
   </body>
 </html>

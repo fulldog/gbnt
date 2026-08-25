@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="../frontend/css/pages/mobile.css" />
   </head>
   <body>
-    <div id="app-viewport" data-mp-status="transparent" data-mp-title="高标农田专项整治">
+    <div id="app-viewport" data-mp-status="transparent" data-mp-title="农田专项整治">
       <div class="m-page m-todo m-todo--select">
         <div class="m-todo__toolbar">
           <div class="m-todo__search">
@@ -19,8 +19,8 @@
               type="search"
               id="mTodoSearch"
               class="m-todo__search-input"
-              placeholder="搜索编号、村名、问题描述"
-              aria-label="搜索待办"
+              placeholder="搜索编号或姓名"
+              aria-label="搜索编号或姓名"
               autocomplete="off"
             />
           </div>
@@ -45,7 +45,7 @@
 
         <nav class="m-tabbar">
           <a class="m-tab is-active" href="./todo.html"><span data-icon="list"></span><span>待办</span></a>
-          <a class="m-tab" href="./report.html"><span data-icon="camera"></span><span>上报</span></a>
+          <a class="m-tab" href="./report.html"><span data-icon="patrol"></span><span>巡查</span></a>
           <a class="m-tab" href="./mine.html"><span data-icon="user"></span><span>我的</span></a>
         </nav>
       </div>
@@ -58,10 +58,13 @@
     <script src="../frontend/js/config.js"></script>
     <script src="../frontend/js/storage.js"></script>
     <script src="../frontend/js/data/issues-seed.js"></script>
+    <script src="../frontend/js/data/region-2023.js"></script>
     <script src="../frontend/js/seed.js"></script>
     <script src="../frontend/js/data.js"></script>
     <script src="../frontend/js/ui.js"></script>
     <script src="../frontend/js/watermark.js"></script>
+    <script src="../frontend/js/mp-region-picker.js"></script>
+    <script src="../frontend/js/mp-media.js"></script>
     <script src="../frontend/js/pages/m-todo.js"></script>
   </body>
 </html>

@@ -22,10 +22,15 @@
     { value: 'all', label: '全部' },
     { value: 'pending', label: '待整改' },
     { value: 'done', label: '已整改' },
+    { value: 'inspected', label: '已排查' },
   ];
 
-  var issues = AppData.getIssues().slice().sort(sortIssues);
-  var filters = { type: 'all', street: 'all', village: 'all', status: 'all' };
+  var issues = [];
+  function reloadIssues() {
+    issues = AppData.getIssues().slice().sort(sortIssues);
+  }
+  reloadIssues();
+  var filters = { type: 'all', street: 'all', village: 'all', naturalVillage: 'all', status: 'all' };
   var regionTree = buildRegionTree();
   var search = document.getElementById('mTodoSearch');
   var list = document.getElementById('mTodoList');
@@ -38,11 +43,34 @@
   var pickerOpts = [];
   var pickerKey = '';
   var cascade = null;
+  var regionPickerHandle = null;
   var scrollTimer = null;
 
+  function isAdmin() {
+    return session.role === 'admin';
+  }
+
+  function visibleInTodo(issue) {
+    if (isAdmin()) return true;
+    if (AppData.isReporterMatch(issue, session)) return true;
+    if (issue.status === 'pending') {
+      return AppData.isAssigneeMatch(issue, session);
+    }
+    if (issue.status === 'done') {
+      return AppData.isAssigneeMatch(issue, session);
+    }
+    return false;
+  }
+
+  function statusOrder(status) {
+    if (status === 'pending') return 0;
+    if (status === 'inspected') return 1;
+    return 2;
+  }
+
   function sortIssues(a, b) {
-    var sa = a.status === 'pending' ? 0 : 1;
-    var sb = b.status === 'pending' ? 0 : 1;
+    var sa = statusOrder(a.status);
+    var sb = statusOrder(b.status);
     if (sa !== sb) return sa - sb;
     return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
   }
@@ -54,6 +82,7 @@
   function countPending(pred) {
     return issues.filter(function (i) {
       if (i.status !== 'pending') return false;
+      if (!isAdmin() && !AppData.isAssigneeMatch(i, session)) return false;
       return pred ? pred(i) : true;
     }).length;
   }
@@ -63,41 +92,78 @@
   }
 
   function buildRegionTree() {
-    var orgs = AppStorage.get('orgs', []) || [];
+    var base =
+      window.HSFMpRegionPicker && HSFMpRegionPicker.buildBaseTree
+        ? HSFMpRegionPicker.buildBaseTree()
+        : [];
+    var villageNaturals =
+      window.HSFMpRegionPicker && HSFMpRegionPicker.villageNaturals
+        ? function (v) {
+            return HSFMpRegionPicker.villageNaturals(v);
+          }
+        : function (v) {
+            return (v && v.children) || [];
+          };
+
     var allPending = countPending(null);
     var streets = [
       {
         value: 'all',
         label: withPendingCount('全部', allPending),
-        children: [{ value: 'all', label: withPendingCount('全部', allPending) }],
+        children: [
+          {
+            value: 'all',
+            label: withPendingCount('全部', allPending),
+            children: [{ value: 'all', label: withPendingCount('全部', allPending) }],
+          },
+        ],
       },
     ];
-    orgs.forEach(function (street) {
-      if (street.type !== 'street') return;
+
+    base.forEach(function (street) {
       var streetN = countPending(function (i) {
-        return i.street === street.name;
+        return i.street === street.value;
       });
-      var children = [{ value: 'all', label: withPendingCount('全部', streetN) }];
-      orgs.forEach(function (child) {
-        if (
-          child.parentId === street.id &&
-          (child.type === 'village' || child.type === 'community')
-        ) {
-          var villageN = countPending(function (i) {
-            return i.village === child.name;
+      var children = [
+        {
+          value: 'all',
+          label: withPendingCount('全部', streetN),
+          children: [{ value: 'all', label: withPendingCount('全部', streetN) }],
+        },
+      ];
+
+      (street.children || []).forEach(function (village) {
+        var villageN = countPending(function (i) {
+          return i.street === street.value && i.village === village.value;
+        });
+        var naturalChildren = [{ value: 'all', label: withPendingCount('全部', villageN) }];
+        villageNaturals(village).forEach(function (nat) {
+          var natN = countPending(function (i) {
+            return (
+              i.street === street.value &&
+              i.village === village.value &&
+              i.naturalVillage === nat.value
+            );
           });
-          children.push({
-            value: child.name,
-            label: withPendingCount(child.name, villageN),
+          naturalChildren.push({
+            value: nat.value,
+            label: withPendingCount(nat.label, natN),
           });
-        }
+        });
+        children.push({
+          value: village.value,
+          label: withPendingCount(village.label, villageN),
+          children: naturalChildren,
+        });
       });
+
       streets.push({
-        value: street.name,
-        label: withPendingCount(street.name, streetN),
+        value: street.value,
+        label: withPendingCount(street.label, streetN),
         children: children,
       });
     });
+
     return streets;
   }
 
@@ -116,12 +182,18 @@
     /* 状态：全部/待整改括号为待整改数；已整改为已整改数 */
     var pendingN = countPending(null);
     var doneN = issues.filter(function (i) {
-      return i.status === 'done';
+      if (i.status !== 'done') return false;
+      return visibleInTodo(i);
+    }).length;
+    var inspectedN = issues.filter(function (i) {
+      if (i.status !== 'inspected') return false;
+      return visibleInTodo(i);
     }).length;
     return [
       { value: 'all', label: withPendingCount('全部', pendingN) },
       { value: 'pending', label: withPendingCount('待整改', pendingN) },
       { value: 'done', label: withPendingCount('已整改', doneN) },
+      { value: 'inspected', label: withPendingCount('已排查', inspectedN) },
     ];
   }
 
@@ -146,6 +218,7 @@
   }
 
   function regionTriggerLabel() {
+    if (filters.naturalVillage && filters.naturalVillage !== 'all') return filters.naturalVillage;
     if (filters.village && filters.village !== 'all') return filters.village;
     if (filters.street && filters.street !== 'all') return filters.street;
     return '全部';
@@ -163,22 +236,20 @@
 
   function closePicker(commit) {
     if (!pickerRoot) return;
+    if (pickerKey === 'region' && regionPickerHandle) {
+      regionPickerHandle.close(!!commit);
+      pickerRoot = null;
+      regionPickerHandle = null;
+      pickerKey = '';
+      cascade = null;
+      return;
+    }
     if (commit) {
-      if (pickerKey === 'region' && cascade) {
-        var streetOpt = regionTree[cascade.streetIndex] || regionTree[0];
-        var villages = streetOpt.children || [];
-        var villageOpt = villages[cascade.villageIndex] || villages[0];
-        filters.street = streetOpt.value;
-        filters.village = villageOpt ? villageOpt.value : 'all';
+      var opt = pickerOpts[pickerIndex];
+      if (opt) {
+        filters[pickerKey] = opt.value;
         syncTriggers();
         renderList();
-      } else {
-        var opt = pickerOpts[pickerIndex];
-        if (opt) {
-          filters[pickerKey] = opt.value;
-          syncTriggers();
-          renderList();
-        }
       }
     }
     pickerRoot.classList.remove('is-open');
@@ -295,88 +366,46 @@
   }
 
   function openRegionCascade() {
-    regionTree = buildRegionTree();
-    var streetIndex = indexOf(regionTree, filters.street);
-    var villages = regionTree[streetIndex].children || [];
-    var villageIndex = indexOf(villages, filters.village);
-    cascade = { streetIndex: streetIndex, villageIndex: villageIndex };
-
-    var host = mountHost();
-    var mask = document.createElement('div');
-    mask.className = 'm-picker';
-    mask.setAttribute('role', 'dialog');
-    mask.setAttribute('aria-modal', 'true');
-    mask.setAttribute('aria-label', '行政区划');
-
-    mask.innerHTML =
-      '<div class="m-picker__mask" data-act="cancel"></div>' +
-      '<div class="m-picker__panel">' +
-      '<div class="m-picker__hd">' +
-      '<button type="button" class="m-picker__btn" data-act="cancel">取消</button>' +
-      '<span class="m-picker__title">行政区划</span>' +
-      '<button type="button" class="m-picker__btn m-picker__btn--ok" data-act="ok">确定</button>' +
-      '</div>' +
-      '<div class="m-picker__bd m-picker__bd--cascade">' +
-      '<div class="m-picker__indicator" aria-hidden="true"></div>' +
-      '<div class="m-picker__cascade">' +
-      '<div class="m-picker__col" id="mPickerStreet" aria-label="街道">' +
-      colHtml(regionTree) +
-      '</div>' +
-      '<div class="m-picker__col" id="mPickerVillage" aria-label="村社区">' +
-      colHtml(villages) +
-      '</div>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
-
-    host.appendChild(mask);
-    pickerRoot = mask;
-    pickerScroll = null;
-
-    var streetCol = mask.querySelector('#mPickerStreet');
-    var villageCol = mask.querySelector('#mPickerVillage');
-    streetCol.scrollTop = streetIndex * ITEM_H;
-    villageCol.scrollTop = villageIndex * ITEM_H;
-    markActiveItem(streetCol, streetIndex);
-    markActiveItem(villageCol, villageIndex);
-
-    function refreshVillages(keepVillage) {
-      var streetOpt = regionTree[cascade.streetIndex] || regionTree[0];
-      var next = streetOpt.children || [];
-      var idx = keepVillage ? indexOf(next, filters.village) : 0;
-      if (idx < 0) idx = 0;
-      cascade.villageIndex = idx;
-      villageCol.innerHTML = colHtml(next);
-      villageCol.scrollTop = idx * ITEM_H;
-      markActiveItem(villageCol, idx);
+    closePicker(false);
+    if (!window.HSFMpRegionPicker) {
+      AppUI.toast('区划组件未加载', 'error');
+      return;
     }
-
-    bindColScroll(streetCol, function () {
-      var next = snapCol(streetCol, regionTree.length - 1);
-      if (next !== cascade.streetIndex) {
-        cascade.streetIndex = next;
-        refreshVillages(false);
-      } else {
-        cascade.streetIndex = next;
-      }
-      markActiveItem(streetCol, cascade.streetIndex);
+    pickerKey = 'region';
+    regionTree = buildRegionTree();
+    var handle = HSFMpRegionPicker.openCascade({
+      host: mountHost(),
+      tree: regionTree,
+      value: {
+        street: filters.street,
+        village: filters.village,
+        naturalVillage: filters.naturalVillage,
+      },
+      itemH: ITEM_H,
+      idPrefix: 'mTodoPicker',
+      onOk: function (vals) {
+        filters.street = vals.street || 'all';
+        filters.village = vals.village || 'all';
+        filters.naturalVillage = vals.naturalVillage || 'all';
+        pickerRoot = null;
+        regionPickerHandle = null;
+        pickerKey = '';
+        syncTriggers();
+        renderList();
+      },
+      onCancel: function () {
+        pickerRoot = null;
+        regionPickerHandle = null;
+        pickerKey = '';
+      },
     });
-
-    bindColScroll(villageCol, function () {
-      var streetOpt = regionTree[cascade.streetIndex] || regionTree[0];
-      var list = streetOpt.children || [];
-      cascade.villageIndex = snapCol(villageCol, list.length - 1);
-    });
-
-    requestAnimationFrame(function () {
-      mask.classList.add('is-open');
-    });
-
-    mask.addEventListener('click', function (e) {
-      var act = e.target.getAttribute('data-act');
-      if (act === 'cancel') closePicker(false);
-      if (act === 'ok') closePicker(true);
-    });
+    if (!handle) {
+      AppUI.toast('暂无区划数据', 'warn');
+      pickerKey = '';
+      return;
+    }
+    pickerRoot = handle.root;
+    regionPickerHandle = handle;
   }
 
   function openRollerPicker(key) {
@@ -447,21 +476,15 @@
   function filtered() {
     var q = (search.value || '').trim().toLowerCase();
     return issues.filter(function (i) {
+      if (!visibleInTodo(i)) return false;
       if (filters.type !== 'all' && i.type !== filters.type) return false;
       if (filters.status !== 'all' && i.status !== filters.status) return false;
       if (filters.street !== 'all' && i.street !== filters.street) return false;
       if (filters.village !== 'all' && i.village !== filters.village) return false;
+      if (filters.naturalVillage !== 'all' && (i.naturalVillage || '') !== filters.naturalVillage)
+        return false;
       if (!q) return true;
-      var blob = [
-        i.code,
-        i.village,
-        i.street,
-        i.description,
-        i.assigneeName,
-        AppData.TYPE_LABEL[i.type] || '',
-      ]
-        .join(' ')
-        .toLowerCase();
+      var blob = [i.code, i.reporterName, i.assigneeName].join(' ').toLowerCase();
       return blob.indexOf(q) !== -1;
     });
   }
@@ -513,6 +536,9 @@
   }
 
   function mediaCellHtml(src) {
+    if (window.AppMpMedia && typeof AppMpMedia.mediaCellHtml === 'function') {
+      return AppMpMedia.mediaCellHtml(src, { extraClass: 'm-todo-card__grid-item' });
+    }
     if (!src) {
       return (
         '<div class="m-todo-card__grid-item m-media is-empty">' +
@@ -549,14 +575,22 @@
   }
 
   function bindMedia(root) {
+    if (window.AppMpMedia && typeof AppMpMedia.bindMedia === 'function') {
+      AppMpMedia.bindMedia(root);
+      return;
+    }
     if (!root) return;
     root.querySelectorAll('.m-media img').forEach(function (img) {
       var wrap = img.closest('.m-media');
       if (!wrap) return;
       function done(ok) {
-        wrap.classList.remove('is-loading');
-        wrap.classList.toggle('is-ready', !!ok);
-        wrap.classList.toggle('is-error', !ok);
+        if (ok) {
+          wrap.classList.remove('is-loading', 'is-error');
+          wrap.classList.add('is-ready');
+          return;
+        }
+        wrap.classList.remove('is-ready');
+        wrap.classList.add('is-error', 'is-loading');
       }
       if (img.complete) {
         done(img.naturalWidth > 0);
@@ -572,11 +606,10 @@
   }
 
   function card(i) {
-    var typeLabel = AppData.TYPE_LABEL[i.type] || i.type || '';
     var urg = urgency(i);
     var name = i.reporterName || '上报人';
     var time = formatPubTime(i.createdAt);
-    var desc = (i.description || '').trim();
+    var desc = AppData.formatIssueListTitle(i);
     var loc = i.locationText || i.address || '';
     var region = [(i.street || ''), (i.village || '')].filter(Boolean).join('');
     var photos = issuePhotos(i);
@@ -608,12 +641,11 @@
       '</div>' +
       (desc ? '<div class="m-todo-card__desc">' + desc + '</div>' : '') +
       photosHtml(photos) +
-      '<div class="m-todo-card__tags">' +
-      '<span class="m-todo-card__type">' +
-      typeLabel +
-      '</span>' +
-      (region ? '<span class="m-todo-card__region">' + region + '</span>' : '') +
-      '</div>' +
+      (region
+        ? '<div class="m-todo-card__tags"><span class="m-todo-card__region">' +
+          region +
+          '</span></div>'
+        : '') +
       (loc
         ? '<button type="button" class="m-todo-card__loc" data-map-id="' +
           encodeURIComponent(i.id) +
@@ -628,6 +660,7 @@
   }
 
   function renderList() {
+    reloadIssues();
     var items = filtered();
     if (!items.length) {
       list.innerHTML =

@@ -24,23 +24,44 @@ func parseOptionalFloat(s string) (*float64, error) {
 	return &v, nil
 }
 
+// parseFormBool 解析表单布尔；空串用 defaultVal（兼容未传 watermark 时默认打水印）。
+func parseFormBool(s string, defaultVal bool) (bool, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return defaultVal, nil
+	}
+	switch s {
+	case "1", "true", "yes", "on", "y":
+		return true, nil
+	case "0", "false", "no", "off", "n":
+		return false, nil
+	default:
+		return false, errors.New("watermark 参数无效，请传 1/0 或 true/false")
+	}
+}
+
 func watermarkFromForm(c *gin.Context) (service.WatermarkInput, error) {
 	var meta service.WatermarkInput
-	meta.Address = strings.TrimSpace(c.PostForm("address"))
-	lat, err := parseOptionalFloat(c.PostForm("lat"))
+	enabled, err := parseFormBool(c.PostForm("watermark"), true)
 	if err != nil {
 		return meta, err
 	}
+	meta.Enabled = enabled
+	meta.Address = strings.TrimSpace(c.PostForm("address"))
+	lat, err := parseOptionalFloat(c.PostForm("lat"))
+	if err != nil {
+		return meta, errors.New("经纬度参数无效")
+	}
 	lng, err := parseOptionalFloat(c.PostForm("lng"))
 	if err != nil {
-		return meta, err
+		return meta, errors.New("经纬度参数无效")
 	}
 	meta.Lat = lat
 	meta.Lng = lng
 	return meta, nil
 }
 
-// AttachUploadImages POST /api/attachments/images — 批量直传图片（multipart files/file + lat/lng/address）；水印姓名取登录用户。
+// AttachUploadImages POST /api/attachments/images — 批量直传图片（multipart files/file + 可选 watermark/lat/lng/address）。
 func (d *Deps) AttachUploadImages(c *gin.Context) {
 	maxMem := d.Cfg.Upload.MaxFileSize
 	if maxMem <= 0 {
@@ -61,7 +82,7 @@ func (d *Deps) AttachUploadImages(c *gin.Context) {
 	}
 	meta, err := watermarkFromForm(c)
 	if err != nil {
-		response.Fail(c, 400, response.CodeBadReq, "经纬度参数无效")
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	list, err := d.Attach.SaveImages(c.Request.Context(), headers, meta)

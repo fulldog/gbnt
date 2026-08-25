@@ -90,17 +90,6 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | PUT | `/api/sys/roles/:id/apis` | 覆盖授权 `{api_ids:[1,2,3]}`（`:id=1` 不可编辑） |
 | GET | `/api/sys/apis` | 全量 API 目录（供授权 UI） |
 
-## 系统 · 字典
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/sys/dict/types` | 排查类型 |
-| GET | `/api/sys/dict/fields` | 字段，query: type_code |
-| GET | `/api/sys/dict/items` | 选项，query: field_id |
-| POST | `/api/sys/dict/items` | 新增 `{field_id,label,value,sort}` |
-| PUT | `/api/sys/dict/items/:id` | 更新 `{field_id,label,value,sort}` |
-| DELETE | `/api/sys/dict/items/:id` | 删除 |
-
 ## 系统 · 操作日志
 
 | 方法 | 路径 | 说明 |
@@ -123,7 +112,8 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | --- | --- |
 | Content-Type | `multipart/form-data` |
 | 文件字段 | `files`（多选）；无 `files` 时可退化为单字段 `file` |
-| 水印表单 | `lat`、`lng`、`address`（可选）；**上报人姓名取当前登录用户**，不传 `user_name` |
+| 水印开关 | `watermark`（可选）：`1`/`true`/`yes`/`on` 打水印；`0`/`false`/`no`/`off` 原图入库；**省略默认打水印** |
+| 水印表单 | `lat`、`lng`、`address`（可选；仅 `watermark` 开启时烧入图）；**上报人姓名取当前登录用户**，不传 `user_name` |
 | 限制 | jpg/png/gif/webp；单张 ≤ `upload.max_file_size`；**一次最多 20 张** |
 | 响应 | `data.list = [{file_id, url}, ...]`；`url` 形如 `/uploads/2026/08/24/xxx_{user_id}_{ms}.jpg` |
 
@@ -154,7 +144,7 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 ### 图片水印
 
-直传时对 jpg/png/gif/webp **烧录**左下角取证水印：
+当表单 **`watermark` 未传或为真** 时，对 jpg/png/gif/webp **烧录**左下角取证水印；`watermark=0` 时落盘原图、不烧录：
 
 1. 最上一行加粗 **地址** `address`
 2. 黄竖条 + **度分秒** `lat/lng`

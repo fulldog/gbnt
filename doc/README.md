@@ -111,7 +111,7 @@ JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 
 
 ### 3.4 迁移与软删
 
-启动时 GORM `AutoMigrate`（刷新列类型/索引/**列注释**）+ 空库种子（组织、admin、角色、字典类型）；并 `ALTER TABLE ... COMMENT` 写入表注释（版本 `v2_table_column_comments`）。RBAC 迁移版本 `v4_rbac_sys_apis`：新增 `sys_apis`/`sys_role_apis`，用户 `role_id`，角色 `status`，移除 `sys_roles.code` 与 `sys_role_perms`；启动时从 `internal/perm/registry.go` 同步 API 目录。
+启动时 GORM `AutoMigrate`（刷新列类型/索引/**列注释**）+ 空库种子（组织、admin、角色）；并 `ALTER TABLE ... COMMENT` 写入表注释。启动时从 `internal/perm/registry.go` 同步 API 目录。
 
 **审计字段**：`created_id` / `updated_id` 由 GORM 回调写入当前登录用户 ID。
 
@@ -128,7 +128,7 @@ JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 
 环境变量：`GBNT_MIGRATE_ENABLED`、`GBNT_MIGRATE_SEED`。
 ## 4. 附件约定
 
-1. **上传**：`POST /api/attachments/images`（multipart 字段 `files` / `file` + 可选 `lat`/`lng`/`address`）→ `data.list = [{file_id, url}]`；图片逐张烧录水印，上报人取登录用户姓名
+1. **上传**：`POST /api/attachments/images`（multipart 字段 `files` / `file` + 可选 `watermark`/`lat`/`lng`/`address`）→ `data.list = [{file_id, url}]`；`watermark` 省略或为真时逐张烧录水印（上报人取登录用户姓名），`watermark=0` 则原图入库
 2. **访问**：文件 URL 为 **`/uploads/y/m/d/...`**（静态目录，非 API download 路由）
 3. **业务提交**：JSON 字段 **`file_uuids`** = 上传返回的 **`file_id` 列表**；后台校验后内部建关联，业务表只落 **`photo_ref_uuid` / `rectify_photo_ref_uuid`**（值为 `att_id`）
 4. **修改**：`photo_ref_uuid` 非空 → 附件不变；为空 → 须重新传 `file_uuids`

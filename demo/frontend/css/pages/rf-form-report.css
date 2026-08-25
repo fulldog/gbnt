@@ -1,70 +1,183 @@
-/* 管理端专项整改新增弹窗 · 双列表单 */
+/* 管理端专项整改新增弹窗 · 左右分栏表单 */
 
 #rf-form-overlay .v50-modal-box {
-  width: min(1100px, 96vw);
+  width: min(1200px, 96vw);
   max-height: 88vh;
+  display: flex;
+  flex-direction: column;
 }
 
 #rf-form-overlay .rf-form-modal-body {
   padding: 0;
-  overflow-y: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   max-height: calc(88vh - 118px);
+  display: flex;
+  flex-direction: column;
+  background: #eef3f9;
+}
+
+#rf-form-overlay .rf-form-report.m-report__body {
+  --rf-label-w: 6rem;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+}
+
+#rf-form-overlay .rf-form-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 8px 1fr;
+  align-items: stretch;
+  background: #eef3f9;
+}
+
+#rf-form-overlay .rf-form-col {
+  display: grid;
+  grid-template-columns: var(--rf-label-w) 1fr;
+  column-gap: 12px;
+  row-gap: 12px;
+  align-content: start;
+  align-items: center;
+  padding: 20px 24px;
+  box-sizing: border-box;
+  background: #fff;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-#rf-form-overlay .rf-form-modal-body::-webkit-scrollbar {
+#rf-form-overlay .rf-form-col::-webkit-scrollbar {
   display: none;
 }
 
-#rf-form-overlay .rf-form-report.m-report__body {
-  --rf-label-w: 10rem;
-  --rf-pair-gap: 12px;
-  --rf-mid-gap: calc(12px + 9.5rem);
-  padding: 20px 24px;
-  box-sizing: border-box;
-  background: #fff;
-  display: grid;
-  grid-template-columns: var(--rf-label-w) 1fr var(--rf-mid-gap) var(--rf-label-w) 1fr;
-  column-gap: var(--rf-pair-gap);
-  row-gap: 12px;
-  align-items: center;
+#rf-form-overlay .rf-form-col--left {
+  --rf-label-w: 5.5rem;
+  grid-column: 1;
 }
 
-/* 拍平嵌套，子项直接落入表单四列栅格 */
-#rf-form-overlay .rf-form-grid,
-#rf-form-overlay #rf-rAssignBlock,
-#rf-form-overlay #rf-type-fields,
-#rf-form-overlay .rf-form-field {
+#rf-form-overlay .rf-form-col--right {
+  --rf-label-w: 12.5rem;
+  grid-column: 3;
+}
+
+/* 拍平嵌套，子项直接落入各栏两列栅格 */
+#rf-form-overlay .rf-form-col .rf-form-field,
+#rf-form-overlay .rf-form-col #rf-type-fields,
+#rf-form-overlay .rf-form-col #rf-quiz-fields,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row,
+#rf-form-overlay .rf-form-col .rf-quiz-item .m-report__row {
   display: contents;
 }
 
-#rf-form-overlay .rf-form-field--full > .rf-form-field__label {
+#rf-form-overlay .rf-form-col .rf-quiz-item {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: var(--rf-label-w) 1fr;
+  column-gap: 12px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+#rf-form-overlay .rf-form-section {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.4;
+}
+
+#rf-form-overlay .rf-form-section:first-child {
+  margin-top: 0;
+}
+
+#rf-form-overlay .rf-form-field > .rf-form-field__label,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__yn-label,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row-label,
+#rf-form-overlay .rf-form-col .rf-quiz-block.is-active .m-report__yn-label {
   grid-column: 1;
   justify-self: end;
 }
 
-#rf-form-overlay .rf-form-field--full > .rf-form-field__ctrl {
-  grid-column: 2 / -1;
+#rf-form-overlay .rf-form-field > .rf-form-field__ctrl,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-yn-group,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row-ctrl,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active > .m-report__row > .m-report__row-input,
+#rf-form-overlay .rf-form-col .rf-quiz-block.is-active .m-yn-group {
+  grid-column: 2;
   min-width: 0;
+  align-self: center;
 }
 
-/* 双列行：右半标签/控件落在第 4、5 列，中间第 3 列留宽间距 */
-#rf-form-overlay .rf-form-grid > .rf-form-field:nth-child(2) > .rf-form-field__label,
-#rf-form-overlay #rf-rAssignBlock > .rf-form-field:nth-child(2) > .rf-form-field__label,
-#rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__yn-label,
-#rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-label {
-  grid-column: 4;
+/* 排查清单：描述+照片始终展示（是/否只改必填/选填） */
+#rf-form-overlay .rf-quiz-extra {
+  display: none;
+  grid-column: 2;
+  margin: 0;
+  padding: 0;
 }
 
-#rf-form-overlay .rf-form-grid > .rf-form-field:nth-child(2) > .rf-form-field__ctrl,
-#rf-form-overlay #rf-rAssignBlock > .rf-form-field:nth-child(2) > .rf-form-field__ctrl,
-#rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-yn-group,
-#rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-ctrl,
-#rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-input {
-  grid-column: 5;
+#rf-form-overlay .rf-quiz-item > .rf-quiz-extra:not([hidden]) {
+  display: block;
+  position: relative;
+  margin: 10px 0 18px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#rf-form-overlay .rf-quiz-item > .rf-quiz-extra:not([hidden]):focus-within {
+  border-color: var(--app-primary, #015cbb);
+}
+
+#rf-form-overlay .rf-quiz-extra .rf-quiz-desc {
+  display: block;
+  min-height: 72px;
+  width: 100%;
+  padding: 10px 12px 0;
+  padding-bottom: 98px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  resize: none;
+  box-sizing: border-box;
+  outline: none;
+}
+
+#rf-form-overlay .rf-quiz-extra .rf-quiz-photos {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+#rf-form-overlay .rf-quiz-extra .rf-quiz-photos::-webkit-scrollbar {
+  display: none;
+}
+
+#rf-form-overlay .rf-quiz-extra .m-report__thumb,
+#rf-form-overlay .rf-quiz-extra .m-report__add {
+  flex: 0 0 80px;
+  width: 80px;
+  height: 80px;
 }
 
 #rf-form-overlay .rf-form-field--top > .rf-form-field__label,
@@ -85,12 +198,9 @@
   line-height: 1.35;
   text-align: right;
   justify-self: end;
+  align-self: center;
   padding-right: 2px;
   white-space: nowrap;
-}
-
-#rf-form-overlay .m-report__yn-label,
-#rf-form-overlay .m-report__row-label {
   min-height: 36px;
   display: flex;
   align-items: center;
@@ -162,7 +272,8 @@
 #rf-form-overlay .rf-form-textarea:focus,
 #rf-form-overlay .rf-form-trigger:focus,
 #rf-form-overlay #rf-f-region .select-trigger.active,
-#rf-form-overlay #rf-f-region .search-input:focus {
+#rf-form-overlay #rf-f-region .search-input:focus,
+#rf-form-overlay .hsf-date-picker .input-box.active {
   border-color: var(--app-primary, #015cbb);
   box-shadow: none;
   outline: none;
@@ -193,7 +304,7 @@
 #rf-form-overlay .rf-form-photos-block {
   display: grid;
   grid-template-columns: var(--rf-label-w) 1fr;
-  column-gap: var(--rf-pair-gap);
+  column-gap: 12px;
   row-gap: 10px;
   align-items: center;
 }
@@ -208,7 +319,7 @@
   grid-column: 2;
   grid-row: 1;
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: #999;
   line-height: 1.4;
 }
@@ -268,7 +379,7 @@
   flex: 1;
   text-align: center;
   padding: 8px 4px;
-  font-size: 13px;
+  font-size: 14px;
   color: #666;
   border-radius: 6px;
   cursor: pointer;
@@ -280,6 +391,87 @@
   background: #fff;
   color: var(--app-primary, #015cbb);
   font-weight: 600;
+}
+
+/* ---------- 项目年度 ---------- */
+#rf-form-overlay .m-year-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+#rf-form-overlay .m-year-btn {
+  flex: 1;
+  height: 36px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: #f0f4f8;
+  color: #666;
+  font-size: 14px;
+  line-height: 36px;
+  text-align: center;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+#rf-form-overlay .m-year-btn.is-active {
+  background: var(--app-primary, #015cbb);
+  color: #fff;
+  font-weight: 600;
+}
+
+#rf-form-overlay .m-report__yn-hint {
+  margin-left: 4px;
+  color: #999;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+/* ---------- 电子签名（仅保留大标题，画布拉满右栏） ---------- */
+#rf-form-overlay .rf-form-field--sign > .rf-form-field__ctrl {
+  grid-column: 1 / -1;
+}
+
+#rf-form-overlay .m-report__sign-board {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid #e5d4a8;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fffef8;
+  box-sizing: border-box;
+}
+
+#rf-form-overlay .m-report__sign-canvas {
+  display: block;
+  width: 100%;
+  height: 220px;
+  touch-action: none;
+  cursor: crosshair;
+  background: transparent;
+}
+
+#rf-form-overlay .m-report__sign-clear {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#rf-form-overlay .m-report__sign-clear:hover {
+  background: #f0f4f8;
 }
 
 /* ---------- 照片条 ---------- */
@@ -357,14 +549,7 @@
   height: 28px;
 }
 
-#rf-form-overlay .rf-form-split {
-  grid-column: 1 / -1;
-  height: 0;
-  border-top: 1px solid #f0f0f0;
-  margin: 4px 0 8px;
-}
-
-/* ---------- 类型字段块（仅显示当前类型；拍平进主栅格） ---------- */
+/* ---------- 类型字段块（仅显示当前类型；拍平进各栏栅格） ---------- */
 #rf-form-overlay .rf-type-fields {
   display: contents;
 }
@@ -679,6 +864,10 @@
   padding-left: 26px;
 }
 
+#rf-form-overlay #rf-f-region .tree-node.level-3 {
+  padding-left: 44px;
+}
+
 #rf-form-overlay #rf-f-region .node-arrow {
   width: 14px;
   height: 14px;
@@ -708,7 +897,7 @@
   padding: 16px;
   text-align: center;
   color: #999;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* ---------- 日期滚筒 / 照片 sheet（挂 body） ---------- */
@@ -870,23 +1059,20 @@
   cursor: pointer;
 }
 
-@media (max-width: 720px) {
-  #rf-form-overlay #rf-form.rf-form-report {
-    grid-template-columns: 7rem 1fr;
+@media (max-width: 900px) {
+  #rf-form-overlay .rf-form-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 8px minmax(0, 1fr);
   }
 
-  #rf-form-overlay .rf-form-grid > .rf-form-field:nth-child(2) > .rf-form-field__label,
-  #rf-form-overlay #rf-rAssignBlock > .rf-form-field:nth-child(2) > .rf-form-field__label,
-  #rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__yn-label,
-  #rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-label {
-    grid-column: auto;
+  #rf-form-overlay .rf-form-col--left {
+    grid-column: 1;
+    grid-row: 1;
   }
 
-  #rf-form-overlay .rf-form-grid > .rf-form-field:nth-child(2) > .rf-form-field__ctrl,
-  #rf-form-overlay #rf-rAssignBlock > .rf-form-field:nth-child(2) > .rf-form-field__ctrl,
-  #rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-yn-group,
-  #rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-ctrl,
-  #rf-form-overlay .m-report__type-block.is-active > .m-report__row:nth-child(even) > .m-report__row-input {
-    grid-column: auto;
+  #rf-form-overlay .rf-form-col--right {
+    grid-column: 1;
+    grid-row: 3;
+    --rf-label-w: 10rem;
   }
 }

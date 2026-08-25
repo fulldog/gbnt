@@ -110,26 +110,13 @@ func Register(r *gin.Engine, d *Deps) {
 			// DELETE /api/sys/roles/:id — 删除角色（数字主键）
 			sys.DELETE("/roles/:id", d.DeleteRole)
 
-			// GET /api/sys/dict/types — 数据字典类型（排查类型）
-			sys.GET("/dict/types", d.ListDictTypes)
-			// GET /api/sys/dict/fields — 字典字段列表
-			sys.GET("/dict/fields", d.ListDictFields)
-			// GET /api/sys/dict/items — 字典选项列表
-			sys.GET("/dict/items", d.ListDictItems)
-			// POST /api/sys/dict/items — 新增字典选项
-			sys.POST("/dict/items", d.CreateDictItem)
-			// PUT /api/sys/dict/items/:id — 更新字典选项
-			sys.PUT("/dict/items/:id", d.UpdateDictItem)
-			// DELETE /api/sys/dict/items/:id — 删除字典选项
-			sys.DELETE("/dict/items/:id", d.DeleteDictItem)
-
 			// GET /api/sys/op-logs — 操作日志列表
 			sys.GET("/op-logs", d.ListOpLogs)
 		}
 
 		att := api.Group("/attachments")
 		{
-			// POST /api/attachments/images — 批量直传图片（multipart，逐张打水印）
+			// POST /api/attachments/images — 批量直传图片（multipart；watermark=1|0 可选打水印，默认 1）
 			att.POST("/images", d.AttachUploadImages)
 		}
 	}
