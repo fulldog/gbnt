@@ -66,31 +66,117 @@ components:
         duration_ms: { type: integer, description: 滑动耗时毫秒，须在配置区间内 }
     IssueInput:
       type: object
+      description: |
+        上报/新增/更新问题。新建必填对齐 demo/miniapp/report.html：
+        type、street、village、project_name、description、address 或 location_text、
+        measures、plan_date、assignee_name、assignee_phone、file_uuids、type_ext。
+        type_ext 按 type 使用对应扩展对象；是/否题为 boolean（true=是，false=否）。
       properties:
-        type: { type: string, enum: [well, road, bridge, forest, transformer] }
-        street: { type: string }
-        village: { type: string }
-        project_name: { type: string }
-        code: { type: string }
-        location_text: { type: string }
-        address: { type: string }
-        lat: { type: number }
-        lng: { type: number }
-        description: { type: string }
-        measures: { type: string }
-        plan_date: { type: string, example: "2026-09-01" }
-        reporter_name: { type: string }
-        reporter_phone: { type: string }
-        assignee_name: { type: string }
-        assignee_phone: { type: string }
+        type: { type: string, enum: [well, road, bridge, forest, transformer], description: 问题类型 }
+        street: { type: string, description: 街道（区划） }
+        village: { type: string, description: 村/社区（区划） }
+        project_name: { type: string, description: 项目名称 }
+        code: { type: string, description: 设施编号（选填） }
+        location_text: { type: string, description: 位置描述；与 address 至少填一项 }
+        address: { type: string, description: 定位地址；与 location_text 至少填一项 }
+        lat: { type: number, description: 纬度 }
+        lng: { type: number, description: 经度 }
+        description: { type: string, description: 问题描述 }
+        measures: { type: string, description: 整改措施 }
+        plan_date: { type: string, example: "2026-09-01", description: 计划整改完成日 YYYY-MM-DD }
+        reporter_name: { type: string, description: 上报人姓名；空则用登录用户 }
+        reporter_phone: { type: string, description: 上报人电话（选填） }
+        assignee_name: { type: string, description: 整改责任人 }
+        assignee_phone: { type: string, description: 整改责任人电话 }
         file_uuids:
           type: array
-          description: 上传接口返回的 file_id 列表（字段名沿用 file_uuids；新建必填；修改且 photo_ref_uuid 为空时必填）
+          description: 现场照片 file_id 列表（字段名沿用 file_uuids；新建必填；修改且 photo_ref_uuid 为空时必填）
           items: { type: string, format: uuid }
         photo_ref_uuid:
           type: string
           description: 修改时有值=附件不变；为空则用 file_uuids 重新关联
-        type_ext: { type: object }
+        type_ext:
+          description: 类型专有字段，随 type 选择 WellExt / RoadExt / BridgeExt / ForestExt / TransformerExt
+          oneOf:
+            - $ref: "#/components/schemas/WellExt"
+            - $ref: "#/components/schemas/RoadExt"
+            - $ref: "#/components/schemas/BridgeExt"
+            - $ref: "#/components/schemas/ForestExt"
+            - $ref: "#/components/schemas/TransformerExt"
+        status: { type: string, enum: [pending, done], description: 仅更新用；新建忽略，固定 pending }
+    WellExt:
+      type: object
+      required: [build_kind, water_out, pipe_ok, wiring_ok, box_ok, cover_ok, outlet_total, outlet_damaged, casing_total, casing_damaged]
+      properties:
+        build_kind: { type: string, enum: [new, match], description: 新建/配套 }
+        water_out: { type: boolean, description: 机井是否出水（≥5分钟） }
+        pipe_ok: { type: boolean, description: 管道是否按要求连接 }
+        wiring_ok: { type: boolean, description: 走线是否规范 }
+        box_ok: { type: boolean, description: 配电箱是否完好 }
+        cover_ok: { type: boolean, description: 井台、井盖是否完整 }
+        outlet_total: { type: integer, minimum: 0, description: 出水口总数 }
+        outlet_damaged: { type: integer, minimum: 0, description: 出水口损坏数量 }
+        casing_total: { type: integer, minimum: 0, description: 护筒总数 }
+        casing_damaged: { type: integer, minimum: 0, description: 护筒损坏数量 }
+        keeper_name: { type: string, description: 井长及分管负责人（选填） }
+        keeper_phone: { type: string, description: 联系电话（选填） }
+    RoadExt:
+      type: object
+      required: [length, width, thickness, has_shoulder, has_ash, tree_survive]
+      properties:
+        length: { type: number, minimum: 0, description: 长度（千米） }
+        width: { type: number, minimum: 0, description: 宽度（米） }
+        thickness: { type: number, minimum: 0, description: 厚度（米） }
+        has_shoulder: { type: boolean, description: 是否有路肩 }
+        has_ash: { type: boolean, description: 是否有灰土层 }
+        tree_survive: { type: number, minimum: 0, description: 林网存活数量（棵） }
+        keeper_name: { type: string, description: 负责人（选填） }
+        keeper_phone: { type: string, description: 电话（选填） }
+    BridgeExt:
+      type: object
+      required: [kind, length, width]
+      properties:
+        kind: { type: string, enum: [bridge, culvert, gate], description: 设施类型 桥/涵/闸 }
+        length: { type: number, minimum: 0, description: 长度（米） }
+        width: { type: number, minimum: 0, description: 宽度（米） }
+        keeper_name: { type: string, description: 负责人（选填） }
+        keeper_phone: { type: string, description: 电话（选填） }
+    ForestExt:
+      type: object
+      required: [handover_count, existing_count, survive_rate, broken_belt, dead_trees, pest]
+      properties:
+        handover_count: { type: number, minimum: 0, description: 移交株数 }
+        existing_count: { type: number, minimum: 0, description: 现有株数 }
+        survive_rate: { type: number, minimum: 0, maximum: 100, description: 存活率 % }
+        broken_belt: { type: boolean, description: 林带是否断带 }
+        dead_trees: { type: boolean, description: 是否有枯死木 }
+        pest: { type: boolean, description: 是否发现病虫害 }
+        keeper_name: { type: string, description: 负责人（选填） }
+        keeper_phone: { type: string, description: 电话（选填） }
+    TransformerExt:
+      type: object
+      required: [capacity, voltage, powered, device_ok, cabinet_ok, illegal_wire]
+      properties:
+        capacity: { type: number, minimum: 0, description: 容量（kVA） }
+        model: { type: string, description: 型号（选填） }
+        voltage: { type: string, enum: [10kv, 0.4kv], description: 电压等级 }
+        powered: { type: boolean, description: 是否通电 }
+        device_ok: { type: boolean, description: 设备是否完好 }
+        cabinet_ok: { type: boolean, description: 配电设施是否完好 }
+        illegal_wire: { type: boolean, description: 是否私拉乱接 }
+        keeper_name: { type: string, description: 负责人（选填） }
+        keeper_phone: { type: string, description: 电话（选填） }
+    RectifyInput:
+      type: object
+      properties:
+        note: { type: string, description: 整改说明 }
+        file_uuids:
+          type: array
+          description: 整改照片 file_id；rectify_photo_ref_uuid 为空时必填
+          items: { type: string, format: uuid }
+        rectify_photo_ref_uuid:
+          type: string
+          description: 有值=整改附件不变；为空则用 file_uuids 重新关联
     FileItem:
       type: object
       properties:
@@ -109,20 +195,52 @@ components:
         address: { type: string, example: 程麻新村西排灌沟桥 }
     Org:
       type: object
+      description: 创建/更新组织
       properties:
-        parent_id: { type: integer, format: int64 }
-        name: { type: string }
-        sort: { type: integer }
+        name: { type: string, description: 组织名称（必填） }
+        parent_id: { type: integer, format: int64, description: 上级组织 ID，根为 0 }
+        sort: { type: integer, description: 排序号，越小越靠前 }
+    RoleInput:
+      type: object
+      description: 创建/更新角色
+      properties:
+        name: { type: string, description: 角色名称 }
+        desc: { type: string, description: 角色说明 }
+        status: { type: integer, description: 1 启用 / 0 禁用；新建为 0 时默认 1 }
+    DictItemInput:
+      type: object
+      description: 创建/更新字典选项
+      properties:
+        field_id: { type: integer, format: int64, description: 所属字典字段主键 }
+        label: { type: string, description: 选项展示文案 }
+        value: { type: string, description: 选项存储值 }
+        sort: { type: integer, description: 排序号 }
+    RoleAPIsInput:
+      type: object
+      required: [api_ids]
+      properties:
+        api_ids:
+          type: array
+          description: 覆盖授权的 API 主键列表
+          items: { type: integer, format: int64 }
+    ImportIssuesReq:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          description: 导入行，校验规则同新建 IssueInput
+          items: { $ref: "#/components/schemas/IssueInput" }
     UserInput:
       type: object
       properties:
-        username: { type: string }
-        password: { type: string }
-        name: { type: string }
-        phone: { type: string }
-        org_id: { type: integer, format: int64 }
-        role_id: { type: integer, format: int64 }
-        status: { type: integer }
+        username: { type: string, description: 登录账号（新建必填） }
+        password: { type: string, description: 明文密码（新建必填；更新时空则不改） }
+        name: { type: string, description: 姓名 }
+        phone: { type: string, description: 手机号 }
+        org_id: { type: integer, format: int64, description: 所属组织 ID }
+        role_id: { type: integer, format: int64, description: 角色 ID }
+        status: { type: integer, description: 1 启用 / 0 禁用；空则新建默认 1 }
 security:
   - bearerAuth: []
 paths:
@@ -281,16 +399,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                note: { type: string }
-                file_uuids:
-                  type: array
-                  items: { type: string }
-                rectify_photo_ref_uuid:
-                  type: string
-                  description: 有值=不变；空则用 file_uuids 重新关联
+            schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
         "200":
           description: ok
@@ -305,13 +414,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [rows]
-              properties:
-                rows:
-                  type: array
-                  items: { $ref: "#/components/schemas/IssueInput" }
+            schema: { $ref: "#/components/schemas/ImportIssuesReq" }
       responses:
         "200":
           description: ok
@@ -492,12 +595,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                desc: { type: string }
-                status: { type: integer, description: "1启用 0禁用" }
+            schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
         "200":
           description: ok
@@ -514,12 +612,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                desc: { type: string }
-                status: { type: integer, description: "1启用 0禁用" }
+            schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
         "200":
           description: ok
@@ -558,12 +651,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                api_ids:
-                  type: array
-                  items: { type: integer, format: int64 }
+            schema: { $ref: "#/components/schemas/RoleAPIsInput" }
       responses:
         "200":
           description: ok
@@ -625,13 +713,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                field_id: { type: integer }
-                label: { type: string }
-                value: { type: string }
-                sort: { type: integer }
+            schema: { $ref: "#/components/schemas/DictItemInput" }
       responses:
         "200":
           description: ok
@@ -648,12 +730,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                label: { type: string }
-                value: { type: string }
-                sort: { type: integer }
+            schema: { $ref: "#/components/schemas/DictItemInput" }
       responses:
         "200":
           description: ok
@@ -855,16 +932,7 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                note: { type: string }
-                file_uuids:
-                  type: array
-                  items: { type: string, format: uuid }
-                rectify_photo_ref_uuid:
-                  type: string
-                  description: 有值=附件不变；为空则用 file_uuids 重新关联
+            schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
         "200":
           description: 整改后问题（含 rectify_photos）

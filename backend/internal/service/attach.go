@@ -35,17 +35,17 @@ type AttachService struct {
 	WM  *watermark.Renderer
 }
 
-// FileItem 直传返回项。
+// FileItem 直传/反查返回项。
 type FileItem struct {
-	FileID string `json:"file_id"`
-	URL    string `json:"url"`
+	FileID string `json:"file_id"` // 文件业务 UUID
+	URL    string `json:"url"`     // 可访问相对路径 /uploads/y/m/d/...
 }
 
 // WatermarkInput 图片水印参数（姓名取自登录上下文）。
 type WatermarkInput struct {
-	Lat     *float64 `json:"lat" form:"lat"`
-	Lng     *float64 `json:"lng" form:"lng"`
-	Address string   `json:"address" form:"address"`
+	Lat     *float64 `json:"lat" form:"lat"`         // 纬度（可选）
+	Lng     *float64 `json:"lng" form:"lng"`         // 经度（可选）
+	Address string   `json:"address" form:"address"` // 定位地址（可选）
 }
 
 func (w WatermarkInput) toMeta(userName string) watermark.Meta {

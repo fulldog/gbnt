@@ -47,10 +47,10 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | --- | --- | --- |
 | GET | `/api/issues` | 列表，query: type/status/street/village/keyword/page/size |
 | GET | `/api/issues/:id` | 详情 |
-| POST | `/api/issues` | 新增（`file_uuids` 必填 → 落库 `photo_ref_uuid`） |
-| PUT | `/api/issues/:id` | 更新 |
+| POST | `/api/issues` | 新增（对齐 report.html 必填；`file_uuids` → `photo_ref_uuid`；`type_ext` 按类型） |
+| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按 type 校验；是/否为 boolean） |
 | DELETE | `/api/issues/:id` | 删除（软删） |
-| POST | `/api/issues/:id/rectify` | 整改闭环 `{note, file_uuids}` |
+| POST | `/api/issues/:id/rectify` | 整改闭环 `{note, file_uuids, rectify_photo_ref_uuid}` |
 | POST | `/api/issues/import` | 批量导入 `{rows:[]}` |
 
 ## 台账
@@ -64,9 +64,9 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/sys/orgs` | 列表 |
-| POST | `/api/sys/orgs` | 新增 |
-| PUT | `/api/sys/orgs/:id` | 更新 |
+| GET | `/api/sys/orgs` | 扁平列表 |
+| POST | `/api/sys/orgs` | 新增 `{name,parent_id,sort}` |
+| PUT | `/api/sys/orgs/:id` | 更新 `{name,parent_id,sort}` |
 | DELETE | `/api/sys/orgs/:id` | 删除（根节点 parent_id=0 不可删） |
 
 ## 系统 · 人员
@@ -74,8 +74,8 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/sys/users` | 列表，query: org_id/keyword/page/size |
-| POST | `/api/sys/users` | 新增（`role_id`） |
-| PUT | `/api/sys/users/:id` | 更新 |
+| POST | `/api/sys/users` | 新增 `{username,password,name,phone,org_id,role_id,status}` |
+| PUT | `/api/sys/users/:id` | 更新（password 空则不改） |
 | DELETE | `/api/sys/users/:id` | 删除 |
 
 ## 系统 · 角色
@@ -83,7 +83,7 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/sys/roles` | 列表（含 `status`） |
-| POST | `/api/sys/roles` | 新增 |
+| POST | `/api/sys/roles` | 新增 `{name,desc,status}` |
 | PUT | `/api/sys/roles/:id` | 更新（`:id=1` 不可编辑） |
 | DELETE | `/api/sys/roles/:id` | 删除（`:id=1` 不可删；仍有用户绑定时拒绝） |
 | GET | `/api/sys/roles/:id/apis` | 角色已授权 API id 列表（超管返回 `"*"`） |
@@ -97,8 +97,8 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | GET | `/api/sys/dict/types` | 排查类型 |
 | GET | `/api/sys/dict/fields` | 字段，query: type_code |
 | GET | `/api/sys/dict/items` | 选项，query: field_id |
-| POST | `/api/sys/dict/items` | 新增选项 |
-| PUT | `/api/sys/dict/items/:id` | 更新 |
+| POST | `/api/sys/dict/items` | 新增 `{field_id,label,value,sort}` |
+| PUT | `/api/sys/dict/items/:id` | 更新 `{field_id,label,value,sort}` |
 | DELETE | `/api/sys/dict/items/:id` | 删除 |
 
 ## 系统 · 操作日志
@@ -135,6 +135,22 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 4. 修改 Issue：`photo_ref_uuid` 非空 = 附件不变；为空则须重新传 `file_uuids`
 5. 整改：`file_uuids` / `rectify_photo_ref_uuid` 规则同上
 6. 查询：返回 `photo_ref_uuid` + **`photos:[{file_id,url}]`**（整改同理 `rectify_photos`）
+
+### 上报 `IssueInput` / `type_ext`
+
+公共字段与 `demo/miniapp/report.html` 对齐。新建必填：`type`、`street`、`village`、`project_name`、`description`、定位（`address` 或 `location_text`）、`measures`、`plan_date`、`assignee_name`、`assignee_phone`、`file_uuids`（≥1）、`type_ext`。`code` 选填。
+
+`type_ext` 随 `type` 使用不同对象；**是/否题为 JSON boolean**（`true`=是，`false`=否，未传视为未填）。
+
+| type | 扩展对象 | 布尔字段 | 其它要点 |
+| --- | --- | --- | --- |
+| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数 |
+| `road` | `RoadExt` | `has_shoulder` `has_ash` | 长宽厚、林网存活数量 |
+| `bridge` | `BridgeExt` | — | `kind`=`bridge`\|`culvert`\|`gate` |
+| `forest` | `ForestExt` | `broken_belt` `dead_trees` `pest` | 存活率 0–100 |
+| `transformer` | `TransformerExt` | `powered` `device_ok` `cabinet_ok` `illegal_wire` | `voltage`=`10kv`\|`0.4kv`；`model` 选填 |
+
+各类型 `keeper_name` / `keeper_phone` 选填。整改措施与计划日在顶层，不进 `type_ext`。
 
 ### 图片水印
 
@@ -173,7 +189,7 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 | GET | `/api/app/todos` | 待办列表；query: type/status/street/village/keyword/page/size；**未传 status 默认 pending**；`status=all` 不限 |
 | GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
 | GET | `/api/app/issues/:id` | 问题详情（含 lat/lng，地图页复用） |
-| POST | `/api/app/issues` | 上报（`file_uuids` → `photo_ref_uuid`；提交即 pending） |
+| POST | `/api/app/issues` | 上报（规则同管理端新建；提交即 pending） |
 | POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` / `rectify_photo_ref_uuid` |
 | GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}` |
 | GET | `/api/app/mine/issues` | 清单；query: `scope=reported\|pending\|done` + page/size |

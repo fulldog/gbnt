@@ -20,34 +20,39 @@ type IssueService struct {
 
 // IssueQuery 列表筛选。
 type IssueQuery struct {
-	Type, Status, Street, Village, Keyword string
-	Page, Size                             int
+	Type    string // 问题类型；空或 all 不限
+	Status  string // pending|done|all
+	Street  string // 街道
+	Village string // 村/社区
+	Keyword string // 编号/描述/项目名模糊
+	Page    int    // 页码，默认 1
+	Size    int    // 每页条数，默认 20
 }
 
-// IssueInput 创建/更新入参。
-// 新建：传 file_uuids（文件 uuid 列表）→ 后台建关联，落库 photo_ref_uuid。
-// 修改：传了 photo_ref_uuid 则附件不变；photo_ref_uuid 为空则用 file_uuids 重新关联。
+// IssueInput 创建/更新入参，公共字段对齐 demo/miniapp/report.html。
+// 新建：file_uuids → 建关联，落库 photo_ref_uuid；type_ext 按 type 校验（WellExt 等）。
+// 修改：photo_ref_uuid 有值则附件不变；为空则用 file_uuids 重新关联。
 type IssueInput struct {
-	Type          string          `json:"type"`
-	Street        string          `json:"street"`
-	Village       string          `json:"village"`
-	ProjectName   string          `json:"project_name"`
-	Code          string          `json:"code"`
-	LocationText  string          `json:"location_text"`
-	Address       string          `json:"address"`
-	Lat           float64         `json:"lat"`
-	Lng           float64         `json:"lng"`
-	Description   string          `json:"description"`
-	Measures      string          `json:"measures"`
-	PlanDate      string          `json:"plan_date"`
-	ReporterName  string          `json:"reporter_name"`
-	ReporterPhone string          `json:"reporter_phone"`
-	AssigneeName  string          `json:"assignee_name"`
-	AssigneePhone string          `json:"assignee_phone"`
-	FileUUIDs     []string        `json:"file_uuids"`     // 文件 uuid 列表（新建必填；修改且 ref 为空时必填）
-	PhotoRefUUID  string          `json:"photo_ref_uuid"` // 修改：有值=不变；空=重新关联
-	TypeExt       json.RawMessage `json:"type_ext"`
-	Status        string          `json:"status"`
+	Type          string          `json:"type"`           // 问题类型 well/road/bridge/forest/transformer（必填）
+	Street        string          `json:"street"`         // 街道（区划，必填）
+	Village       string          `json:"village"`        // 村/社区（区划，必填）
+	ProjectName   string          `json:"project_name"`   // 项目名称（必填）
+	Code          string          `json:"code"`           // 设施编号（选填）
+	LocationText  string          `json:"location_text"`  // 位置描述（与 address 至少填一项）
+	Address       string          `json:"address"`        // 定位地址（与 location_text 至少填一项）
+	Lat           float64         `json:"lat"`            // 纬度
+	Lng           float64         `json:"lng"`            // 经度
+	Description   string          `json:"description"`    // 问题描述（必填）
+	Measures      string          `json:"measures"`       // 整改措施（必填）
+	PlanDate      string          `json:"plan_date"`      // 计划整改完成日 YYYY-MM-DD（必填）
+	ReporterName  string          `json:"reporter_name"`  // 上报人姓名（空则用登录用户）
+	ReporterPhone string          `json:"reporter_phone"` // 上报人电话（选填）
+	AssigneeName  string          `json:"assignee_name"`  // 整改责任人（必填）
+	AssigneePhone string          `json:"assignee_phone"` // 整改责任人电话（必填）
+	FileUUIDs     []string        `json:"file_uuids"`     // 现场照片 file_id 列表（新建必填）
+	PhotoRefUUID  string          `json:"photo_ref_uuid"` // 修改：有值=附件不变；空=用 file_uuids 重绑
+	TypeExt       json.RawMessage `json:"type_ext"`       // 类型专有字段 JSON（新建必填，见 WellExt 等）
+	Status        string          `json:"status"`         // 更新用；新建忽略，固定 pending
 }
 
 // IssueVO 业务明细/列表项（含反查后的文件 list）。
@@ -213,19 +218,13 @@ func (s *IssueService) db(ctx context.Context) *gorm.DB {
 }
 
 func (s *IssueService) Create(ctx context.Context, in IssueInput, reporterID uint64, reporterName string) (*IssueVO, error) {
-	if in.Type == "" {
-		return nil, errors.New("type 必填")
-	}
-	if len(in.FileUUIDs) == 0 {
-		return nil, errors.New("file_uuids 至少 1 个")
+	ext, err := validateIssueCreate(in)
+	if err != nil {
+		return nil, err
 	}
 	refUUID, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
 	if err != nil {
 		return nil, err
-	}
-	ext := "{}"
-	if len(in.TypeExt) > 0 {
-		ext = string(in.TypeExt)
 	}
 	name := in.ReporterName
 	if name == "" {
@@ -267,7 +266,15 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 	}
 	ext := item.TypeExt
 	if len(in.TypeExt) > 0 {
-		ext = string(in.TypeExt)
+		typ := in.Type
+		if typ == "" {
+			typ = item.Type
+		}
+		canon, err := validateTypeExt(typ, in.TypeExt)
+		if err != nil {
+			return nil, err
+		}
+		ext = canon
 	}
 
 	// 附件：传了关联 uuid → 认为无变化；为空 → 用 file_uuids 重新关联
@@ -312,9 +319,14 @@ func (s *IssueService) Delete(ctx context.Context, id uint64) error {
 
 // RectifyInput 整改入参。
 type RectifyInput struct {
-	Note                string   `json:"note"`
-	FileUUIDs           []string `json:"file_uuids"`             // 新整改照片文件 uuid
-	RectifyPhotoRefUUID string   `json:"rectify_photo_ref_uuid"` // 有值=不变；空=重新关联
+	Note                string   `json:"note"`                   // 整改说明
+	FileUUIDs           []string `json:"file_uuids"`             // 整改照片 file_id 列表；rectify_photo_ref_uuid 为空时必填
+	RectifyPhotoRefUUID string   `json:"rectify_photo_ref_uuid"` // 有值=整改附件不变；空=用 file_uuids 重绑
+}
+
+// ImportIssuesReq 管理端批量导入。
+type ImportIssuesReq struct {
+	Rows []IssueInput `json:"rows" binding:"required"` // 导入行，校验规则同新建
 }
 
 // Rectify 提交整改照片闭环。

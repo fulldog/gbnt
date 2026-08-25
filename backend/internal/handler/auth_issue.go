@@ -14,13 +14,13 @@ import (
 
 // LoginReq 管理端登录请求（图形验证码）。
 type LoginReq struct {
-	Username  string `json:"username" binding:"required"`
-	Password  string `json:"password" binding:"required"`
-	CaptchaID string `json:"captcha_id"`
-	Captcha   string `json:"captcha"`
+	Username  string `json:"username" binding:"required"` // 登录账号
+	Password  string `json:"password" binding:"required"` // 登录密码
+	CaptchaID string `json:"captcha_id"`                  // 图形验证码会话 ID；captcha.enabled=false 时可省略
+	Captcha   string `json:"captcha"`                     // 图形验证码答案；captcha.enabled=false 时可省略
 }
 
-// GetCaptcha 获取图形验证码。
+// GetCaptcha GET /api/auth/captcha — 图形验证码（公开），返回 captcha_id / image_base64。
 func (d *Deps) GetCaptcha(c *gin.Context) {
 	if d.Captcha == nil {
 		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
@@ -34,7 +34,7 @@ func (d *Deps) GetCaptcha(c *gin.Context) {
 	response.OK(c, out)
 }
 
-// Login 账号密码 + 图形验证码登录，返回 JWT。
+// Login POST /api/auth/login — 账密 + 图形验证码登录（公开），返回 token / expires_at / user。
 func (d *Deps) Login(c *gin.Context) {
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -109,7 +109,7 @@ func (d *Deps) fillAPIs(out gin.H, roleID uint64) {
 	out["apis"] = ids
 }
 
-// Me 当前登录用户。
+// Me GET /api/auth/me — 当前用户（含 role_id、apis；超管 apis="*"）。
 func (d *Deps) Me(c *gin.Context) {
 	info, err := database.UserFromContext(c.Request.Context())
 	if err != nil {
@@ -119,7 +119,7 @@ func (d *Deps) Me(c *gin.Context) {
 	response.OK(c, d.userInfoPayload(info))
 }
 
-// WorkbenchStats 工作台统计。
+// WorkbenchStats GET /api/workbench/stats — 上报/待整改/已整改/完成率/分类型。
 func (d *Deps) WorkbenchStats(c *gin.Context) {
 	stats, err := d.Issue.Stats()
 	if err != nil {
@@ -129,7 +129,7 @@ func (d *Deps) WorkbenchStats(c *gin.Context) {
 	response.OK(c, stats)
 }
 
-// ListIssues 问题列表。
+// ListIssues GET /api/issues — 专项整改列表；query: type/status/street/village/keyword/page/size。
 func (d *Deps) ListIssues(c *gin.Context) {
 	q := service.IssueQuery{
 		Type:    c.Query("type"),
@@ -148,7 +148,7 @@ func (d *Deps) ListIssues(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size})
 }
 
-// GetIssue 问题详情。
+// GetIssue GET /api/issues/:id — 问题详情（含 photos / rectify_photos）。
 func (d *Deps) GetIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -162,7 +162,7 @@ func (d *Deps) GetIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// CreateIssue 新增排查问题（提交即待整改）。
+// CreateIssue POST /api/issues — 新增排查（提交即 pending）；body 见 IssueInput。
 func (d *Deps) CreateIssue(c *gin.Context) {
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -183,7 +183,7 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// UpdateIssue 更新问题。
+// UpdateIssue PUT /api/issues/:id — 更新问题；传 type_ext 时按 type 校验。
 func (d *Deps) UpdateIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -202,7 +202,7 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// DeleteIssue 删除问题。
+// DeleteIssue DELETE /api/issues/:id — 删除问题（软删）。
 func (d *Deps) DeleteIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -215,7 +215,7 @@ func (d *Deps) DeleteIssue(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// RectifyIssue 提交整改结果。
+// RectifyIssue POST /api/issues/:id/rectify — 整改闭环；body 见 RectifyInput。
 func (d *Deps) RectifyIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -234,11 +234,9 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// ImportIssues 批量导入。
+// ImportIssues POST /api/issues/import — 批量导入 {rows:IssueInput[]}。
 func (d *Deps) ImportIssues(c *gin.Context) {
-	var req struct {
-		Rows []service.IssueInput `json:"rows" binding:"required"`
-	}
+	var req service.ImportIssuesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
@@ -257,7 +255,7 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 	response.OK(c, gin.H{"imported": n})
 }
 
-// LedgerStreet 街道台账聚合。
+// LedgerStreet GET /api/ledger/street — 街道台账聚合；query: street/date_from/date_to。
 func (d *Deps) LedgerStreet(c *gin.Context) {
 	data, err := d.Issue.LedgerStreet(c.Query("street"), c.Query("date_from"), c.Query("date_to"))
 	if err != nil {
@@ -267,7 +265,7 @@ func (d *Deps) LedgerStreet(c *gin.Context) {
 	response.OK(c, data)
 }
 
-// LedgerSurvey 街道排查汇总。
+// LedgerSurvey GET /api/ledger/survey — 街道排查汇总；query: street/date_from/date_to。
 func (d *Deps) LedgerSurvey(c *gin.Context) {
 	data, err := d.Issue.LedgerSurvey(c.Query("street"), c.Query("date_from"), c.Query("date_to"))
 	if err != nil {

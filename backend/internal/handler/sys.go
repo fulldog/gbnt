@@ -5,14 +5,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gbnt/backend/internal/model"
 	"gbnt/backend/internal/perm"
 	"gbnt/backend/internal/service"
 	"gbnt/backend/pkg/response"
 )
 
-// —— 组织 ——
-
+// ListOrgs GET /api/sys/orgs — 组织扁平列表（含 parent_id/sort）。
 func (d *Deps) ListOrgs(c *gin.Context) {
 	list, err := d.Sys.ListOrgs()
 	if err != nil {
@@ -22,37 +20,41 @@ func (d *Deps) ListOrgs(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// CreateOrg POST /api/sys/orgs — 新增组织。
 func (d *Deps) CreateOrg(c *gin.Context) {
-	var req model.SysOrg
+	var req service.OrgInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateOrg(c.Request.Context(), &req); err != nil {
+	o := req.ToModel(0)
+	if err := d.Sys.CreateOrg(c.Request.Context(), o); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, o)
 }
 
+// UpdateOrg PUT /api/sys/orgs/:id — 更新组织名称/上级/排序。
 func (d *Deps) UpdateOrg(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req model.SysOrg
+	var req service.OrgInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	req.ID = id
-	if err := d.Sys.UpdateOrg(c.Request.Context(), &req); err != nil {
+	o := req.ToModel(id)
+	if err := d.Sys.UpdateOrg(c.Request.Context(), o); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, o)
 }
 
+// DeleteOrg DELETE /api/sys/orgs/:id — 删除组织（parent_id=0 的根节点不可删）。
 func (d *Deps) DeleteOrg(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -65,8 +67,7 @@ func (d *Deps) DeleteOrg(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// —— 用户 ——
-
+// ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size。
 func (d *Deps) ListUsers(c *gin.Context) {
 	var orgID uint64
 	if v := c.Query("org_id"); v != "" {
@@ -80,6 +81,7 @@ func (d *Deps) ListUsers(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total})
 }
 
+// CreateUser POST /api/sys/users — 新增工作人员（username/password 必填）。
 func (d *Deps) CreateUser(c *gin.Context) {
 	var req service.UserInput
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -94,6 +96,7 @@ func (d *Deps) CreateUser(c *gin.Context) {
 	response.OK(c, u)
 }
 
+// UpdateUser PUT /api/sys/users/:id — 更新工作人员（password 空则不改）。
 func (d *Deps) UpdateUser(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -112,6 +115,7 @@ func (d *Deps) UpdateUser(c *gin.Context) {
 	response.OK(c, u)
 }
 
+// DeleteUser DELETE /api/sys/users/:id — 删除工作人员（软删）。
 func (d *Deps) DeleteUser(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -124,8 +128,7 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// —— 角色 ——
-
+// ListRoles GET /api/sys/roles — 角色列表（含 status）。
 func (d *Deps) ListRoles(c *gin.Context) {
 	list, err := d.Sys.ListRoles()
 	if err != nil {
@@ -135,37 +138,41 @@ func (d *Deps) ListRoles(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// CreateRole POST /api/sys/roles — 新增角色。
 func (d *Deps) CreateRole(c *gin.Context) {
-	var req model.SysRole
+	var req service.RoleInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateRole(c.Request.Context(), &req); err != nil {
+	r := req.ToModel(0)
+	if err := d.Sys.CreateRole(c.Request.Context(), r); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, r)
 }
 
+// UpdateRole PUT /api/sys/roles/:id — 更新角色（id=1 超管不可编辑）。
 func (d *Deps) UpdateRole(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req model.SysRole
+	var req service.RoleInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	req.ID = id
-	if err := d.Sys.UpdateRole(c.Request.Context(), &req); err != nil {
+	r := req.ToModel(id)
+	if err := d.Sys.UpdateRole(c.Request.Context(), r); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, r)
 }
 
+// DeleteRole DELETE /api/sys/roles/:id — 删除角色（超管不可删；仍有用户绑定时拒绝）。
 func (d *Deps) DeleteRole(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -178,6 +185,7 @@ func (d *Deps) DeleteRole(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// GetRoleAPIs GET /api/sys/roles/:id/apis — 角色已授权 API id；超管返回 api_ids="*"。
 func (d *Deps) GetRoleAPIs(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -195,14 +203,13 @@ func (d *Deps) GetRoleAPIs(c *gin.Context) {
 	response.OK(c, gin.H{"api_ids": ids})
 }
 
+// SetRoleAPIs PUT /api/sys/roles/:id/apis — 覆盖授权 {api_ids:[...]}（超管不可编辑）。
 func (d *Deps) SetRoleAPIs(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req struct {
-		APIIDs []uint64 `json:"api_ids" binding:"required"`
-	}
+	var req service.RoleAPIsInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
@@ -215,6 +222,7 @@ func (d *Deps) SetRoleAPIs(c *gin.Context) {
 	response.OK(c, nil)
 }
 
+// ListAPIs GET /api/sys/apis — 全量 API 目录（供授权 UI）。
 func (d *Deps) ListAPIs(c *gin.Context) {
 	list, err := d.Sys.ListAPIs()
 	if err != nil {
@@ -224,8 +232,7 @@ func (d *Deps) ListAPIs(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// —— 字典 ——
-
+// ListDictTypes GET /api/sys/dict/types — 字典类型（排查类型 well/road/...）。
 func (d *Deps) ListDictTypes(c *gin.Context) {
 	list, err := d.Sys.ListDictTypes()
 	if err != nil {
@@ -235,6 +242,7 @@ func (d *Deps) ListDictTypes(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// ListDictFields GET /api/sys/dict/fields — 字典字段；query: type_code。
 func (d *Deps) ListDictFields(c *gin.Context) {
 	list, err := d.Sys.ListDictFields(c.Query("type_code"))
 	if err != nil {
@@ -244,6 +252,7 @@ func (d *Deps) ListDictFields(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// ListDictItems GET /api/sys/dict/items — 字典选项；query: field_id。
 func (d *Deps) ListDictItems(c *gin.Context) {
 	fid, _ := strconv.ParseUint(c.Query("field_id"), 10, 64)
 	list, err := d.Sys.ListDictItems(fid)
@@ -254,37 +263,41 @@ func (d *Deps) ListDictItems(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// CreateDictItem POST /api/sys/dict/items — 新增字典选项。
 func (d *Deps) CreateDictItem(c *gin.Context) {
-	var req model.SysDictItem
+	var req service.DictItemInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	if err := d.Sys.CreateDictItem(c.Request.Context(), &req); err != nil {
+	item := req.ToModel(0)
+	if err := d.Sys.CreateDictItem(c.Request.Context(), item); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, item)
 }
 
+// UpdateDictItem PUT /api/sys/dict/items/:id — 更新字典选项。
 func (d *Deps) UpdateDictItem(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req model.SysDictItem
+	var req service.DictItemInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	req.ID = id
-	if err := d.Sys.UpdateDictItem(c.Request.Context(), &req); err != nil {
+	item := req.ToModel(id)
+	if err := d.Sys.UpdateDictItem(c.Request.Context(), item); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, req)
+	response.OK(c, item)
 }
 
+// DeleteDictItem DELETE /api/sys/dict/items/:id — 删除字典选项（软删）。
 func (d *Deps) DeleteDictItem(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -297,8 +310,7 @@ func (d *Deps) DeleteDictItem(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// —— 操作日志 ——
-
+// ListOpLogs GET /api/sys/op-logs — 操作日志；query: keyword/page/size。
 func (d *Deps) ListOpLogs(c *gin.Context) {
 	list, total, err := d.OpLog.List(c.Query("keyword"), atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20))
 	if err != nil {

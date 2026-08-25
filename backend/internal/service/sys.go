@@ -48,11 +48,61 @@ func (s *SysService) ListOrgs() ([]model.SysOrg, error) {
 
 // OrgTreeNode 组织树节点。
 type OrgTreeNode struct {
-	ID       uint64        `json:"id"`
-	Name     string        `json:"name"`
-	ParentID uint64        `json:"parent_id"`
-	Sort     int           `json:"sort"`
-	Children []OrgTreeNode `json:"children"`
+	ID       uint64        `json:"id"`        // 组织主键
+	Name     string        `json:"name"`      // 组织名称
+	ParentID uint64        `json:"parent_id"` // 上级组织 ID，根为 0
+	Sort     int           `json:"sort"`      // 排序号
+	Children []OrgTreeNode `json:"children"`  // 子组织
+}
+
+// UserInput 创建/更新用户入参。
+type UserInput struct {
+	Username string `json:"username"` // 登录账号（新建必填）
+	Password string `json:"password"` // 明文密码（新建必填；更新时空则不改）
+	Name     string `json:"name"`     // 姓名
+	Phone    string `json:"phone"`    // 手机号
+	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
+	RoleID   uint64 `json:"role_id"`  // 角色 ID
+	Status   *int   `json:"status"`   // 1 启用 / 0 禁用；空则新建默认 1
+}
+
+// OrgInput 创建/更新组织入参。
+type OrgInput struct {
+	Name     string `json:"name"`      // 组织名称（必填）
+	ParentID uint64 `json:"parent_id"` // 上级组织 ID，根为 0
+	Sort     int    `json:"sort"`      // 排序号，越小越靠前
+}
+
+func (in OrgInput) ToModel(id uint64) *model.SysOrg {
+	return &model.SysOrg{Name: in.Name, ParentID: in.ParentID, Sort: in.Sort, Base: model.Base{ID: id}}
+}
+
+// RoleInput 创建/更新角色入参。
+type RoleInput struct {
+	Name   string `json:"name"`   // 角色名称
+	Desc   string `json:"desc"`   // 角色说明
+	Status int    `json:"status"` // 1 启用 / 0 禁用；新建为 0 时默认 1
+}
+
+func (in RoleInput) ToModel(id uint64) *model.SysRole {
+	return &model.SysRole{Name: in.Name, Desc: in.Desc, Status: in.Status, Base: model.Base{ID: id}}
+}
+
+// DictItemInput 创建/更新字典选项入参。
+type DictItemInput struct {
+	FieldID uint64 `json:"field_id"` // 所属字典字段主键
+	Label   string `json:"label"`    // 选项展示文案
+	Value   string `json:"value"`    // 选项存储值
+	Sort    int    `json:"sort"`     // 排序号
+}
+
+func (in DictItemInput) ToModel(id uint64) *model.SysDictItem {
+	return &model.SysDictItem{FieldID: in.FieldID, Label: in.Label, Value: in.Value, Sort: in.Sort, Base: model.Base{ID: id}}
+}
+
+// RoleAPIsInput 覆盖角色 API 授权。
+type RoleAPIsInput struct {
+	APIIDs []uint64 `json:"api_ids" binding:"required"` // 授权的 API 主键列表
 }
 
 // ListOrgTree 返回完整组织树（根节点 parent_id=0）。
@@ -131,24 +181,6 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 
 	return s.db(ctx).Delete(&model.SysOrg{}, id).Error
 
-}
-
-// UserInput 创建/更新用户入参。
-
-type UserInput struct {
-	Username string `json:"username"`
-
-	Password string `json:"password"`
-
-	Name string `json:"name"`
-
-	Phone string `json:"phone"`
-
-	OrgID uint64 `json:"org_id"`
-
-	RoleID uint64 `json:"role_id"`
-
-	Status *int `json:"status"`
 }
 
 func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {

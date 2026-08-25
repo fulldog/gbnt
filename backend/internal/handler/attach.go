@@ -40,7 +40,7 @@ func watermarkFromForm(c *gin.Context) (service.WatermarkInput, error) {
 	return meta, nil
 }
 
-// AttachUploadImages 批量直传图片：multipart files + lat/lng/address，水印姓名取自登录用户。
+// AttachUploadImages POST /api/attachments/images — 批量直传图片（multipart files/file + lat/lng/address）；水印姓名取登录用户。
 func (d *Deps) AttachUploadImages(c *gin.Context) {
 	maxMem := d.Cfg.Upload.MaxFileSize
 	if maxMem <= 0 {

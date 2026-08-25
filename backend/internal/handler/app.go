@@ -67,8 +67,8 @@ func (d *Deps) AppSliderStart(c *gin.Context) {
 // AppSliderFinish 完成滑动，换取一次性 pass_token。
 func (d *Deps) AppSliderFinish(c *gin.Context) {
 	var req struct {
-		SliderID   string `json:"slider_id" binding:"required"`
-		DurationMs int64  `json:"duration_ms" binding:"required"`
+		SliderID   string `json:"slider_id" binding:"required"`   // 滑动会话 ID
+		DurationMs int64  `json:"duration_ms" binding:"required"` // 滑动耗时毫秒，须在配置区间内
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
@@ -88,9 +88,9 @@ func (d *Deps) AppSliderFinish(c *gin.Context) {
 
 // AppLoginReq 小程序登录请求（滑动 pass_token）。
 type AppLoginReq struct {
-	Username  string `json:"username" binding:"required"`
-	Password  string `json:"password" binding:"required"`
-	PassToken string `json:"pass_token"`
+	Username  string `json:"username" binding:"required"` // 登录账号
+	Password  string `json:"password" binding:"required"` // 登录密码
+	PassToken string `json:"pass_token"`                  // 滑动验证一次性令牌；captcha.enabled=false 时可省略
 }
 
 // AppLogin 小程序登录：账密 + pass_token。
