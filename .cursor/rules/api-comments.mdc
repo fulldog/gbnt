@@ -1,11 +1,11 @@
 ---
-description: 后端新增/修改必须写中文注释，并同步 API 文档
+description: 后端接口代码写中文注释；默认不改接口文档，仅在明确要求重建时整份重写
 alwaysApply: true
 ---
 
-# 注释与文档同步（backend / doc）
+# 注释与接口文档（backend / doc）
 
-凡**新增或修改** `backend/`、`doc/` 中的接口与业务代码，必须遵守：
+凡**新增或修改** `backend/` 中的接口与业务代码，必须遵守：
 
 ## 代码注释（必写）
 
@@ -14,17 +14,25 @@ alwaysApply: true
 3. **业务关键规则**（状态机、权限、校验）：在实现处用简短中文注释标出意图；来自需求的可标 `[PRD]`。
 4. **禁止**：无注释的裸字段、无说明的公开 API；注释用英文凑数。
 
-## 文档同步（同一次改动）
+## 接口文档（默认不改）
 
-改动对外 HTTP 契约时，**同一次提交/同轮对话**更新：
+改代码时**优先只改 `backend/`**（及必要的规则/skill 惯例摘要）。**不要主动**增删改：
 
-- `doc/api.md`（路径、参数表、行为说明）
-- 若涉及 OpenAPI：`doc/apifox/openapi.yaml`
-- 惯例摘要：`.cursor/skills/golang-backend/SKILL.md`（如适用）
+- `doc/api.md`
+- `doc/apifox/openapi.yaml`
+- `doc/` 下其它对外接口说明
 
-未更新文档 = 未完成。
+未同步文档**不算**任务未完成。用户未点名时，不要为「契约变了」而顺手改文档。
+
+## 重建文档（仅当用户明确要求）
+
+仅当用户明确说「重建接口文档 / 重写 api 文档 / 重新生成 OpenAPI」等时：
+
+1. **删除**旧的 `doc/api.md`、`doc/apifox/openapi.yaml`（及相关过时接口说明）。
+2. **按当前代码**重新编写完整接口文档（路径、参数、行为、鉴权），不要在旧稿上打补丁。
+3. 仍**不**改 `demo/`（见 `no-demo-edits`）。
 
 ## 范围
 
 - 适用于：`backend/internal/handler`、`service`、`model`、请求 DTO、路由注册等。
-- **不**改 `demo/`（见 `no-demo-edits` 规则）。
+- **不**改 `demo/`。

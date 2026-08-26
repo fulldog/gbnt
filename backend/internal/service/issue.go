@@ -21,26 +21,20 @@ type IssueService struct {
 
 // IssueQuery 列表筛选。
 type IssueQuery struct {
-	Type          string // 问题类型 well/road/bridge/forest/transformer；空或 all 不限
-	Status        string // new|pending|done；空或 all 不限状态
-	RootOrgID     uint64 // 区划根组织 ID；0 不限
-	DistrictOrgID uint64 // 区划区级组织 ID；0 不限
-	StreetOrgID   uint64 // 区划街道组织 ID；0 不限
-	VillageOrgID  uint64 // 区划村级组织 ID；0 不限
-	ProjectYear   int    // 项目年度 2020–2023；0 不限
-	Keyword       string // 编号/地址模糊
-	Page          int    // 页码，默认 1
-	Size          int    // 每页条数，默认 20
+	Type        string // 问题类型 well/road/bridge/forest/transformer；空或 all 不限
+	Status      string // new|pending|done；空或 all 不限状态
+	OrgID       uint64 // 落点组织 ID；>0 时含该组织及全部下级；0 不限
+	ProjectYear int    // 项目年度 2020–2023；0 不限
+	Keyword     string // 编号/地址模糊
+	Page        int    // 页码，默认 1
+	Size        int    // 每页条数，默认 20
 }
 
 // IssueInput 创建/更新入参（对齐 miniapp 上报向导；责任人接口不传，库内可空）。
 type IssueInput struct {
 	Type                    string          `json:"type"`                       // 问题类型 well/road/bridge/forest/transformer（必填）
 	ProjectYear             int             `json:"project_year"`               // 项目年度 2020–2023（新建必填）
-	RootOrgID               uint64          `json:"root_org_id"`                // 区划根组织 ID（可空，与下级至少填一级）
-	DistrictOrgID           uint64          `json:"district_org_id"`            // 区划区级组织 ID（可空）
-	StreetOrgID             uint64          `json:"street_org_id"`              // 区划街道组织 ID（可空）
-	VillageOrgID            uint64          `json:"village_org_id"`             // 区划村级组织 ID（可空）
+	OrgID                   uint64          `json:"org_id"`                     // 落点组织 ID，对应 sys_orgs.id（新建必填；更新时 0 表示不改）
 	Code                    string          `json:"code"`                       // 设施编号（选填）
 	Address                 string          `json:"address"`                    // 定位地址（必填）
 	Lat                     float64         `json:"lat"`                        // 纬度
@@ -164,14 +158,19 @@ func (v IssueVO) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (s *IssueService) List(q IssueQuery) ([]IssueVO, int64, error) {
+func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Page <= 0 {
 		q.Page = 1
 	}
 	if q.Size <= 0 {
 		q.Size = 20
 	}
-	db := s.applyIssueFilters(s.DB.Model(&model.Issue{}), q)
+	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
+	var err error
+	db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
+	if err != nil {
+		return nil, 0, err
+	}
 	var total int64
 	_ = db.Count(&total).Error
 	var list []model.Issue
@@ -196,18 +195,6 @@ func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
 	if q.Status != "" && q.Status != "all" {
 		db = db.Where("status = ?", q.Status)
 	}
-	if q.RootOrgID > 0 {
-		db = db.Where("root_org_id = ?", q.RootOrgID)
-	}
-	if q.DistrictOrgID > 0 {
-		db = db.Where("district_org_id = ?", q.DistrictOrgID)
-	}
-	if q.StreetOrgID > 0 {
-		db = db.Where("street_org_id = ?", q.StreetOrgID)
-	}
-	if q.VillageOrgID > 0 {
-		db = db.Where("village_org_id = ?", q.VillageOrgID)
-	}
 	if q.ProjectYear > 0 {
 		db = db.Where("project_year = ?", q.ProjectYear)
 	}
@@ -216,20 +203,6 @@ func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
 		db = db.Where("code LIKE ? OR address LIKE ?", like, like)
 	}
 	return db
-}
-
-// issueLeafOrgID 问题落点组织：最细非 0 的区划 ID。
-func issueLeafOrgID(it model.Issue) uint64 {
-	if it.VillageOrgID > 0 {
-		return it.VillageOrgID
-	}
-	if it.StreetOrgID > 0 {
-		return it.StreetOrgID
-	}
-	if it.DistrictOrgID > 0 {
-		return it.DistrictOrgID
-	}
-	return it.RootOrgID
 }
 
 // orgSubtreeIDs 从扁平组织列表计算 rootID 及其全部下属（含自身）。
@@ -272,12 +245,11 @@ func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, o
 		return nil, err
 	}
 	ids := orgSubtreeIDs(orgs, orgID)
-	leaf := `(CASE WHEN village_org_id > 0 THEN village_org_id WHEN street_org_id > 0 THEN street_org_id WHEN district_org_id > 0 THEN district_org_id ELSE root_org_id END)`
-	return db.Where(leaf+" IN ?", ids), nil
+	return db.Where("org_id IN ?", ids), nil
 }
 
-// ListTodos 小程序待办：status 空或 all 查全部；排序 new > pending > done，同状态 id 降序。
-// 仅当前用户组织及下属的整改单（OrgID=0 不限）。
+// ListTodos 小程序待办：status 空或 all 查全部；排序 new > pending > done。
+// 权限范围为登录用户组织及下属（用户 OrgID=0 不限）；query org_id>0 再与该组织子树取交集。
 func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Status == "all" {
 		q.Status = ""
@@ -294,6 +266,10 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 	}
 	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
 	db, err = s.applyOrgSubtreeFilter(ctx, db, user.OrgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -379,72 +355,19 @@ func (s *IssueService) Get(id uint64) (*IssueVO, error) {
 	return s.toVO(&item)
 }
 
-// validateRegionOrgs 至少一级；子级有值则上级必填；类型与父子链合法。
-func (s *IssueService) validateRegionOrgs(rootID, districtID, streetID, villageID uint64) (streetName, villageName string, err error) {
-	if rootID == 0 && districtID == 0 && streetID == 0 && villageID == 0 {
-		return "", "", errors.New("请至少选择一级区划")
+// requireOrgID 校验 org_id 必填且 sys_orgs 中存在（不含已软删）。
+func (s *IssueService) requireOrgID(ctx context.Context, orgID uint64) error {
+	if orgID == 0 {
+		return errors.New("请选择组织")
 	}
-	if villageID > 0 && (streetID == 0 || districtID == 0 || rootID == 0) {
-		return "", "", errors.New("选择村级时须同时填写街道、区、根组织")
-	}
-	if streetID > 0 && villageID == 0 && (districtID == 0 || rootID == 0) {
-		return "", "", errors.New("选择街道时须同时填写区、根组织")
-	}
-	if districtID > 0 && streetID == 0 && villageID == 0 && rootID == 0 {
-		return "", "", errors.New("选择区级时须同时填写根组织")
-	}
-
-	load := func(id uint64, want model.OrgType) (*model.SysOrg, error) {
-		if id == 0 {
-			return nil, nil
+	var o model.SysOrg
+	if err := s.db(ctx).First(&o, orgID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("组织不存在")
 		}
-		var o model.SysOrg
-		if err := s.DB.First(&o, id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, fmt.Errorf("组织不存在: %d", id)
-			}
-			return nil, err
-		}
-		if o.Type != want {
-			return nil, fmt.Errorf("组织 %d 类型应为 %s", id, want)
-		}
-		return &o, nil
+		return err
 	}
-
-	root, err := load(rootID, model.OrgTypeRoot)
-	if err != nil {
-		return "", "", err
-	}
-	district, err := load(districtID, model.OrgTypeDistrict)
-	if err != nil {
-		return "", "", err
-	}
-	street, err := load(streetID, model.OrgTypeStreet)
-	if err != nil {
-		return "", "", err
-	}
-	village, err := load(villageID, model.OrgTypeVillage)
-	if err != nil {
-		return "", "", err
-	}
-
-	if district != nil && root != nil && district.ParentID != root.ID {
-		return "", "", errors.New("区级组织的上级须为所选根组织")
-	}
-	if street != nil && district != nil && street.ParentID != district.ID {
-		return "", "", errors.New("街道组织的上级须为所选区组织")
-	}
-	if village != nil && street != nil && village.ParentID != street.ID {
-		return "", "", errors.New("村级组织的上级须为所选街道组织")
-	}
-
-	if street != nil {
-		streetName = street.Name
-	}
-	if village != nil {
-		villageName = village.Name
-	}
-	return streetName, villageName, nil
+	return nil
 }
 
 func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, error) {
@@ -455,7 +378,7 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if !model.ProjectYear(in.ProjectYear).Valid() {
 		return nil, errors.New("请选择项目年度")
 	}
-	if _, _, err := s.validateRegionOrgs(in.RootOrgID, in.DistrictOrgID, in.StreetOrgID, in.VillageOrgID); err != nil {
+	if err := s.requireOrgID(ctx, in.OrgID); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(in.Address) == "" {
@@ -486,10 +409,7 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		IssueKey:                "issue-" + uuid.NewString()[:8],
 		Type:                    typ,
 		ProjectYear:             in.ProjectYear,
-		RootOrgID:               in.RootOrgID,
-		DistrictOrgID:           in.DistrictOrgID,
-		StreetOrgID:             in.StreetOrgID,
-		VillageOrgID:            in.VillageOrgID,
+		OrgID:                   in.OrgID,
 		Code:                    in.Code,
 		Address:                 in.Address,
 		Lat:                     in.Lat,
@@ -525,11 +445,11 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 		return nil, errors.New("请选择项目年度")
 	}
 
-	rootID, districtID, streetID, villageID := in.RootOrgID, in.DistrictOrgID, in.StreetOrgID, in.VillageOrgID
-	if rootID == 0 && districtID == 0 && streetID == 0 && villageID == 0 {
-		rootID, districtID, streetID, villageID = item.RootOrgID, item.DistrictOrgID, item.StreetOrgID, item.VillageOrgID
+	orgID := in.OrgID
+	if orgID == 0 {
+		orgID = item.OrgID
 	}
-	if _, _, err := s.validateRegionOrgs(rootID, districtID, streetID, villageID); err != nil {
+	if err := s.requireOrgID(ctx, orgID); err != nil {
 		return nil, err
 	}
 
@@ -553,9 +473,7 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 	}
 
 	updates := map[string]interface{}{
-		"type": typ, "project_year": year,
-		"root_org_id": rootID, "district_org_id": districtID,
-		"street_org_id": streetID, "village_org_id": villageID,
+		"type": typ, "project_year": year, "org_id": orgID,
 		"code": in.Code, "address": addr,
 		"lat": in.Lat, "lng": in.Lng,
 		"plan_date": in.PlanDate, "type_ext": ext,
@@ -798,30 +716,33 @@ func (s *IssueService) applyLedgerDate(q *gorm.DB, from, to string) *gorm.DB {
 	return q
 }
 
-func (s *IssueService) filterStreetOrg(q *gorm.DB, streetOrgID uint64) *gorm.DB {
-	if streetOrgID > 0 {
-		return q.Where("street_org_id = ?", streetOrgID)
-	}
-	return q
+func (s *IssueService) filterLedgerOrg(q *gorm.DB, orgID uint64) (*gorm.DB, error) {
+	return s.applyOrgSubtreeFilter(context.Background(), q, orgID)
 }
 
 func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interface{}, error) {
-	q := s.filterStreetOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+	if err != nil {
+		return nil, err
+	}
 	type row struct {
-		VillageOrgID uint64 `json:"village_org_id"` // 村级组织 ID
-		Type         string `json:"type"`           // 问题类型
-		Total        int64  `json:"total"`          // 条数
-		Pending      int64  `json:"pending"`        // new+pending
-		Done         int64  `json:"done"`           // done
+		OrgID   uint64 `json:"org_id"`  // 落点组织 ID
+		Type    string `json:"type"`    // 问题类型
+		Total   int64  `json:"total"`   // 条数
+		Pending int64  `json:"pending"` // new+pending
+		Done    int64  `json:"done"`    // done
 	}
 	var list []row
-	err := q.Select("village_org_id, type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
-		Group("village_org_id, type").Scan(&list).Error
+	err = q.Select("org_id, type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
+		Group("org_id, type").Scan(&list).Error
 	return ginH{"rows": list, "street_org_id": streetOrgID}, err
 }
 
 func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interface{}, error) {
-	q := s.filterStreetOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+	if err != nil {
+		return nil, err
+	}
 	type row struct {
 		Type    string `json:"type"`    // 问题类型
 		Total   int64  `json:"total"`   // 条数
@@ -829,7 +750,7 @@ func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interf
 		Done    int64  `json:"done"`    // done
 	}
 	var list []row
-	err := q.Select("type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
+	err = q.Select("type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
 		Group("type").Scan(&list).Error
 	return ginH{"rows": list, "street_org_id": streetOrgID}, err
 }

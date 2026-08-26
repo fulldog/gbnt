@@ -133,20 +133,18 @@ func (d *Deps) AppMe(c *gin.Context) {
 	d.Me(c)
 }
 
-// AppListTodos 小程序待办：筛选 type/status/*_org_id/project_year/keyword/page/size。
+// AppListTodos 小程序待办：筛选 type/status/org_id/project_year/keyword/page/size。
 // status 空或 all 表示不限状态；结果按 new > pending > done，同状态 id 降序。
+// org_id>0 时含该组织及下级，并与登录用户组织子树取交集。
 func (d *Deps) AppListTodos(c *gin.Context) {
 	q := service.IssueQuery{
-		Type:          c.Query("type"),
-		Status:        c.Query("status"),
-		RootOrgID:     parseUint64Query(c.Query("root_org_id")),
-		DistrictOrgID: parseUint64Query(c.Query("district_org_id")),
-		StreetOrgID:   parseUint64Query(c.Query("street_org_id")),
-		VillageOrgID:  parseUint64Query(c.Query("village_org_id")),
-		ProjectYear:   atoiDefault(c.Query("project_year"), 0),
-		Keyword:       c.Query("keyword"),
-		Page:          atoiDefault(c.Query("page"), 1),
-		Size:          atoiDefault(c.Query("size"), 20),
+		Type:        c.Query("type"),
+		Status:      c.Query("status"),
+		OrgID:       parseUint64Query(c.Query("org_id")),
+		ProjectYear: atoiDefault(c.Query("project_year"), 0),
+		Keyword:     c.Query("keyword"),
+		Page:        atoiDefault(c.Query("page"), 1),
+		Size:        atoiDefault(c.Query("size"), 20),
 	}
 	list, total, err := d.Issue.ListTodos(c.Request.Context(), q)
 	if err != nil {

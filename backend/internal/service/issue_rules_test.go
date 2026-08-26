@@ -69,26 +69,12 @@ func TestBindQuizBoolOKWhenNoIssue(t *testing.T) {
 	}
 }
 
-func TestValidateRegionOrgsChain(t *testing.T) {
+func TestRequireOrgIDZero(t *testing.T) {
 	t.Parallel()
 	s := &IssueService{}
-	cases := []struct {
-		name                            string
-		root, district, street, village uint64
-		wantSub                         string
-	}{
-		{"empty", 0, 0, 0, 0, "至少选择一级"},
-		{"village without street", 1, 2, 0, 4, "村级"},
-		{"street without district", 1, 0, 3, 0, "街道"},
-		{"district without root", 0, 2, 0, 0, "区级"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := s.validateRegionOrgs(tc.root, tc.district, tc.street, tc.village)
-			if err == nil || !strings.Contains(err.Error(), tc.wantSub) {
-				t.Fatalf("err=%v want substring %q", err, tc.wantSub)
-			}
-		})
+	err := s.requireOrgID(context.Background(), 0)
+	if err == nil || !strings.Contains(err.Error(), "请选择组织") {
+		t.Fatalf("got %v", err)
 	}
 }
 
@@ -211,22 +197,6 @@ func TestBindChecklistOK(t *testing.T) {
 	}
 	if len(out) != 2 || out[0].Type != model.QuizHasShoulder || out[1].Type != model.QuizHasAsh {
 		t.Fatalf("canonical order: %+v", out)
-	}
-}
-
-func TestIssueLeafOrgID(t *testing.T) {
-	t.Parallel()
-	if issueLeafOrgID(model.Issue{VillageOrgID: 4, StreetOrgID: 3}) != 4 {
-		t.Fatal("village")
-	}
-	if issueLeafOrgID(model.Issue{StreetOrgID: 3, DistrictOrgID: 2}) != 3 {
-		t.Fatal("street")
-	}
-	if issueLeafOrgID(model.Issue{DistrictOrgID: 2, RootOrgID: 1}) != 2 {
-		t.Fatal("district")
-	}
-	if issueLeafOrgID(model.Issue{RootOrgID: 1}) != 1 {
-		t.Fatal("root")
 	}
 }
 

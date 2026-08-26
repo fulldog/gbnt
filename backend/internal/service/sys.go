@@ -219,33 +219,18 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 }
 
 func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
-
-	q := s.DB.Model(&model.SysUser{})
-
-	if orgID > 0 {
-
-		q = q.Where("org_id = ?", orgID)
-
+	if page <= 0 {
+		page = 1
 	}
-
-	if keyword != "" {
-
-		like := "%" + keyword + "%"
-
-		q = q.Where("username LIKE ? OR name LIKE ? OR phone LIKE ?", like, like, like)
-
+	if size <= 0 {
+		size = 20
 	}
-
+	q := s.userListQuery(orgID, keyword)
 	var total int64
-
 	_ = q.Count(&total).Error
-
 	var list []model.SysUser
-
 	err := q.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error
-
 	return list, total, err
-
 }
 
 func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUser, error) {

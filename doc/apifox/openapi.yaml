@@ -2,15 +2,16 @@ openapi: 3.0.3
 info:
   title: 高标农田专项整治后台 API
   description: |
-    Go 1.27 · Gin + Zap + MySQL + JWT。
-    统一响应：`{ code, data, message, cost_ms, trace_id }`，成功 `code=0`。
+    统一信封 `{ code, data, message, cost_ms, trace_id }`，成功 `code=0`。
+    鉴权 Bearer JWT。`/api/app/*` 仅 JWT、不做 RBAC。
   version: 1.0.0
 servers:
   - url: http://127.0.0.1:8080
-    description: 本地开发
+    description: 本地
 tags:
   - name: 健康检查
   - name: 鉴权
+  - name: 附件
   - name: 工作台
   - name: 专项整改
   - name: 台账
@@ -18,9 +19,9 @@ tags:
   - name: 人员
   - name: 角色
   - name: 操作日志
-  - name: 附件
   - name: 小程序
-    description: 小程序端独立 API（/api/app）；附件直传 POST /api/attachments/images
+security:
+  - bearerAuth: []
 components:
   securitySchemes:
     bearerAuth:
@@ -40,162 +41,58 @@ components:
         code: { type: integer, example: 0 }
         data: {}
         message: { type: string, example: ok }
-        cost_ms: { type: integer, example: 12 }
+        cost_ms: { type: integer }
         trace_id: { type: string }
     LoginReq:
       type: object
       required: [username, password]
       properties:
-        username: { type: string, example: admin }
-        password: { type: string, example: "admin" }
-        captcha_id: { type: string, description: Web 图形验证码会话 ID；captcha.enabled=false 时可省略 }
-        captcha: { type: string, description: 图形验证码答案；captcha.enabled=false 时可省略 }
+        username: { type: string }
+        password: { type: string }
+        captcha_id: { type: string, description: captcha.enabled=false 时可省略 }
+        captcha: { type: string }
     AppLoginReq:
       type: object
       required: [username, password]
       properties:
-        username: { type: string, example: admin }
-        password: { type: string, example: "admin" }
-        pass_token: { type: string, description: 滑动验证一次性令牌；captcha.enabled=false 时可省略 }
-    SliderFinishReq:
+        username: { type: string }
+        password: { type: string }
+        pass_token: { type: string, description: captcha.enabled=false 时可省略 }
+    ChangePasswordReq:
       type: object
-      required: [slider_id, duration_ms]
+      required: [old_password, new_password, confirm_password]
       properties:
-        slider_id: { type: string }
-        duration_ms: { type: integer, description: 滑动耗时毫秒，须在配置区间内 }
-    IssueInput:
-      type: object
-      description: |
-        上报/新增/更新问题。新建核心：type、project_year、四级区划 ID（至少一级）、
-        address、reporter_signature_file_id、type_ext（checklist 为 QuizBool 数组）。
-        QuizBool 按答题推导 needs_rectify：无问题 status=done，有问题 status=new。
-        有问题时 plan_date 必填。assignee_user 接口不传，库内可空由服务端后续填充。
-      properties:
-        type: { type: string, enum: [well, road, bridge, forest, transformer], description: 问题类型 }
-        project_year: { type: integer, enum: [2020, 2021, 2022, 2023], description: 项目年度 }
-        root_org_id: { type: integer, format: int64, description: 区划根组织 ID（可空） }
-        district_org_id: { type: integer, format: int64, description: 区划区级组织 ID（可空） }
-        street_org_id: { type: integer, format: int64, description: 区划街道组织 ID（可空） }
-        village_org_id: { type: integer, format: int64, description: 区划村级组织 ID（可空） }
-        code: { type: string, description: 设施编号（选填） }
-        address: { type: string, description: 定位地址（必填） }
-        lat: { type: number, description: 纬度 }
-        lng: { type: number, description: 经度 }
-        plan_date: { type: string, example: "2026-09-01", description: 计划整改完成日；需整改时必填 }
-        reporter_signature_file_id: { type: string, format: uuid, description: 排查电子签名 file_id }
-        type_ext:
-          description: 类型专有字段；是/否题在 checklist
-          oneOf:
-            - $ref: "#/components/schemas/WellExt"
-            - $ref: "#/components/schemas/RoadExt"
-            - $ref: "#/components/schemas/BridgeExt"
-            - $ref: "#/components/schemas/ForestExt"
-            - $ref: "#/components/schemas/TransformerExt"
-        status: { type: string, enum: [new, pending, done], description: 仅更新用；新建由 quiz 推导 }
+        old_password: { type: string }
+        new_password: { type: string, minLength: 6, maxLength: 14, description: 字母+数字 }
+        confirm_password: { type: string }
     QuizBool:
       type: object
-      required: [type, value]
-      description: 是/否排查项；放在 type_ext.checklist；导致需整改时 desc 必填；mustImg=true 时 files 长度须 >0；回显含 photos
       properties:
-        type:
-          type: string
-          description: 排查项类型；须属于当前问题类型允许的枚举且不重复
-          enum:
-            - water_out
-            - pipe_ok
-            - wiring_ok
-            - box_ok
-            - cover_ok
-            - transformer_ok
-            - has_shoulder
-            - has_ash
-            - needs_rectify
-            - broken_belt
-            - dead_trees
-            - pest
-            - powered
-            - device_ok
-            - cabinet_ok
-            - illegal_wire
-        value: { type: boolean, description: 是=true / 否=false }
-        desc: { type: string, description: 说明（异常时必填） }
-        mustImg: { type: boolean, description: 是否必填现场照片；true 时 files 长度须 >0 }
+        type: { type: string }
+        value: { type: boolean }
+        desc: { type: string }
+        mustImg: { type: boolean }
         files:
           type: array
-          description: 现场照片 file_id 列表；mustImg=true 时必填
           items: { type: string, format: uuid }
         photos:
           type: array
-          description: 回显；入参忽略
           items: { $ref: "#/components/schemas/FileItem" }
-    WellExt:
+    IssueInput:
       type: object
-      required: [build_kind, checklist, outlet_total, outlet_damaged, casing_total, casing_damaged]
+      description: 新建须 type、project_year、org_id、address、reporter_signature_file_id、type_ext
       properties:
-        build_kind: { type: string, enum: [new, match], description: 新建/配套 }
-        checklist:
-          type: array
-          description: 须含 water_out/pipe_ok/wiring_ok/box_ok/cover_ok/transformer_ok 各一条
-          items: { $ref: "#/components/schemas/QuizBool" }
-        outlet_total: { type: integer, minimum: 0, description: 出水口总数 }
-        outlet_damaged: { type: integer, minimum: 0, description: 出水口损坏数量 }
-        casing_total: { type: integer, minimum: 0, description: 护筒总数 }
-        casing_damaged: { type: integer, minimum: 0, description: 护筒损坏数量 }
-        keeper_name: { type: string, description: 井长及分管负责人（选填） }
-        keeper_phone: { type: string, description: 联系电话（选填） }
-    RoadExt:
-      type: object
-      required: [length, width, thickness, checklist, tree_survive]
-      properties:
-        length: { type: number, minimum: 0, description: 长度（千米） }
-        width: { type: number, minimum: 0, description: 宽度（米） }
-        thickness: { type: number, minimum: 0, description: 厚度（米） }
-        checklist:
-          type: array
-          description: 须含 has_shoulder、has_ash 各一条
-          items: { $ref: "#/components/schemas/QuizBool" }
-        tree_survive: { type: number, minimum: 0, description: 林网存活数量（棵） }
-        keeper_name: { type: string, description: 负责人（选填） }
-        keeper_phone: { type: string, description: 电话（选填） }
-    BridgeExt:
-      type: object
-      required: [kind, length, width, checklist]
-      properties:
-        kind: { type: string, enum: [bridge, culvert, gate], description: 设施类型 桥/涵/闸 }
-        length: { type: number, minimum: 0, description: 长度（米） }
-        width: { type: number, minimum: 0, description: 宽度（米） }
-        checklist:
-          type: array
-          description: 须含 needs_rectify 一条
-          items: { $ref: "#/components/schemas/QuizBool" }
-        keeper_name: { type: string, description: 负责人（选填） }
-        keeper_phone: { type: string, description: 电话（选填） }
-    ForestExt:
-      type: object
-      required: [handover_count, existing_count, survive_rate, checklist]
-      properties:
-        handover_count: { type: number, minimum: 0, description: 移交株数 }
-        existing_count: { type: number, minimum: 0, description: 现有株数 }
-        survive_rate: { type: number, minimum: 0, maximum: 100, description: 存活率 % }
-        checklist:
-          type: array
-          description: 须含 broken_belt、dead_trees、pest 各一条
-          items: { $ref: "#/components/schemas/QuizBool" }
-        keeper_name: { type: string, description: 负责人（选填） }
-        keeper_phone: { type: string, description: 电话（选填） }
-    TransformerExt:
-      type: object
-      required: [capacity, voltage, checklist]
-      properties:
-        capacity: { type: number, minimum: 0, description: 容量（kVA） }
-        model: { type: string, description: 型号（选填） }
-        voltage: { type: string, enum: [10kv, 0.4kv], description: 电压等级 }
-        checklist:
-          type: array
-          description: 须含 powered、device_ok、cabinet_ok、illegal_wire 各一条
-          items: { $ref: "#/components/schemas/QuizBool" }
-        keeper_name: { type: string, description: 负责人（选填） }
-        keeper_phone: { type: string, description: 电话（选填） }
+        type: { type: string, enum: [well, road, bridge, forest, transformer] }
+        project_year: { type: integer, enum: [2020, 2021, 2022, 2023] }
+        org_id: { type: integer, format: int64, description: 落点组织；新建必填且须存在；更新 0 不改 }
+        code: { type: string }
+        address: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        plan_date: { type: string, description: 需整改时必填 YYYY-MM-DD }
+        reporter_signature_file_id: { type: string, format: uuid }
+        type_ext: { type: object, description: 含 checklist[] QuizBool }
+        status: { type: string, enum: [new, pending, done], description: 仅更新 }
     RectifyInput:
       type: object
       required: [rectify_list]
@@ -203,128 +100,93 @@ components:
         rectify_list:
           type: array
           minItems: 1
-          description: 分项整改；同一 type 可重复；对照 checklist 需整改项覆盖齐全则 done 否则 pending
           items:
             type: object
             required: [type, note, file_uuids]
             properties:
-              type:
-                type: string
-                description: 整改项 QuizType（与 checklist 项 type 对应）
-              note:
-                type: string
-                description: 该项整改说明（必填）
+              type: { type: string, description: QuizType }
+              note: { type: string }
               file_uuids:
                 type: array
-                description: 该项整改照片 file_id 列表
                 items: { type: string, format: uuid }
     ReassignInput:
       type: object
       required: [assignee_user]
       properties:
-        assignee_user:
-          type: integer
-          format: int64
-          description: 整改责任人用户 ID（必填，须为启用账号）
-    FileItem:
-      type: object
-      properties:
-        file_id: { type: string, format: uuid }
-        url: { type: string, example: "/uploads/2026/08/24/photo_1_1724512345678.jpg" }
-    AttachImageForm:
-      type: object
-      description: multipart 表单；上报人姓名由服务端从 JWT 读取，无需传 user_name
-      properties:
-        files:
-          type: array
-          items: { type: string, format: binary }
-          description: 多图字段名 files；单图可用 file
-        watermark:
-          type: string
-          description: 是否烧录水印；1/true/yes/on 或 0/false/no/off；省略默认打水印
-          example: "1"
-        lat: { type: number, example: 36.4489, description: 纬度（仅 watermark 开启时写入水印） }
-        lng: { type: number, example: 115.982, description: 经度（仅 watermark 开启时写入水印） }
-        address: { type: string, example: 程麻新村西排灌沟桥, description: 地址（仅 watermark 开启时写入水印） }
-    Org:
-      type: object
-      description: 新增组织。parent_id=0 创建根；否则类型由上级逐级推导
-      required: [name]
-      properties:
-        name: { type: string, description: 组织名称（必填） }
-        parent_id: { type: integer, format: int64, description: 上级组织 ID；0 或不传表示新增根节点 }
-        sort: { type: integer, description: 排序号；省略或 0 则追加到同级末尾 }
-    OrgUpdate:
-      type: object
-      description: 编辑组织（仅名称）
-      required: [name]
-      properties:
-        name: { type: string, description: 组织名称（必填） }
-    RoleInput:
-      type: object
-      description: 创建/更新角色
-      properties:
-        name: { type: string, description: 角色名称 }
-        desc: { type: string, description: 角色说明 }
-        status: { type: integer, description: 1 启用 / 0 禁用；新建为 0 时默认 1 }
-    RoleAPIsInput:
-      type: object
-      required: [api_ids]
-      properties:
-        api_ids:
-          type: array
-          description: 覆盖授权的 API 主键列表
-          items: { type: integer, format: int64 }
+        assignee_user: { type: integer, format: int64 }
     ImportIssuesReq:
       type: object
       required: [rows]
       properties:
         rows:
           type: array
-          description: 导入行，校验规则同新建 IssueInput
           items: { $ref: "#/components/schemas/IssueInput" }
+    FileItem:
+      type: object
+      properties:
+        file_id: { type: string, format: uuid }
+        url: { type: string }
+    OrgCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        parent_id: { type: integer, format: int64, description: 0 为根 }
+        sort: { type: integer }
+    OrgUpdate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
     UserInput:
       type: object
       properties:
-        username: { type: string, description: 登录账号（新建必填） }
-        password: { type: string, description: 明文密码（新建空则=账户名；更新时空则不改） }
-        name: { type: string, description: 姓名 }
-        phone: { type: string, description: 手机号 }
-        org_id: { type: integer, format: int64, description: 所属组织 ID }
-        role_id: { type: integer, format: int64, description: 角色 ID }
-        status: { type: integer, description: 1 启用 / 0 禁用；空则新建默认 1 }
-security:
-  - bearerAuth: []
+        username: { type: string }
+        password: { type: string, description: 新建空则=账号；更新空则不改 }
+        name: { type: string }
+        phone: { type: string }
+        org_id: { type: integer, format: int64 }
+        role_id: { type: integer, format: int64 }
+        status: { type: integer, description: 1 启用 0 停用 }
+    RoleInput:
+      type: object
+      properties:
+        name: { type: string }
+        desc: { type: string }
+        status: { type: integer }
+    RoleAPIsInput:
+      type: object
+      required: [api_ids]
+      properties:
+        api_ids:
+          type: array
+          items: { type: integer, format: int64 }
 paths:
   /api/health:
     get:
       tags: [健康检查]
-      summary: 健康检查
       security: []
+      summary: 健康检查
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/auth/captcha:
     get:
       tags: [鉴权]
-      summary: 获取图形验证码
-      description: 返回 captcha_id 与 PNG base64（含 data URI 前缀）。公开接口。
       security: []
+      summary: 图形验证码
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/auth/login:
     post:
       tags: [鉴权]
-      summary: 登录
-      description: 账号密码 + 图形验证码（captcha.enabled=false 时可省略验证码字段）。
       security: []
+      summary: 管理端登录
       requestBody:
         required: true
         content:
@@ -332,7 +194,6 @@ paths:
             schema: { $ref: "#/components/schemas/LoginReq" }
       responses:
         "200":
-          description: 返回 token 与用户信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -342,29 +203,20 @@ paths:
       summary: 当前用户
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/auth/password:
     put:
       tags: [鉴权]
-      summary: 本人修改密码
-      description: JWT 即可，不做 RBAC。body old_password / new_password / confirm_password。新密码 6–14 位、须同时含字母与数字（区分大小写）。成功后递增 token_ver，旧 token 全部失效。
+      summary: 本人改密
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [old_password, new_password, confirm_password]
-              properties:
-                old_password: { type: string }
-                new_password: { type: string, minLength: 6, maxLength: 14, description: 字母+数字组合，区分大小写 }
-                confirm_password: { type: string, description: 须与 new_password 一致 }
+            schema: { $ref: "#/components/schemas/ChangePasswordReq" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -372,10 +224,29 @@ paths:
     post:
       tags: [鉴权]
       summary: 退出登录
-      description: JWT 即可，不做 RBAC。将当前 token 的 jti 加入黑名单至该 token 过期。
       responses:
         "200":
-          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/attachments/images:
+    post:
+      tags: [附件]
+      summary: 批量上传图片
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files: { type: array, items: { type: string, format: binary } }
+                watermark: { type: string, description: 省略/真打水印；0 原图 }
+                lat: { type: number }
+                lng: { type: number }
+                address: { type: string }
+      responses:
+        "200":
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -385,7 +256,6 @@ paths:
       summary: 工作台统计
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -401,26 +271,12 @@ paths:
           name: status
           schema: { type: string, enum: [new, pending, done, all] }
         - in: query
-          name: street
-          schema: { type: string }
-        - in: query
-          name: village
-          schema: { type: string }
-        - in: query
-          name: root_org_id
+          name: org_id
           schema: { type: integer, format: int64 }
-        - in: query
-          name: district_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: street_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: village_org_id
-          schema: { type: integer, format: int64 }
+          description: >0 含该组织及下级
         - in: query
           name: project_year
-          schema: { type: integer, enum: [2020, 2021, 2022, 2023] }
+          schema: { type: integer }
         - in: query
           name: keyword
           schema: { type: string }
@@ -432,13 +288,12 @@ paths:
           schema: { type: integer, default: 20 }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     post:
       tags: [专项整改]
-      summary: 新增问题（按 quiz 推导 new/done）
+      summary: 新增问题
       requestBody:
         required: true
         content:
@@ -446,27 +301,37 @@ paths:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
         "200":
-          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues/import:
+    post:
+      tags: [专项整改]
+      summary: 批量导入问题
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImportIssuesReq" }
+      responses:
+        "200":
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/issues/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     get:
       tags: [专项整改]
       summary: 问题详情
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: type_ext 含 photos；rectify_records[].photos
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     put:
       tags: [专项整改]
       summary: 更新问题
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
@@ -474,29 +339,22 @@ paths:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     delete:
       tags: [专项整改]
       summary: 删除问题
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/issues/{id}/rectify:
     post:
       tags: [专项整改]
-      summary: 提交整改结果
-      description: |
-        仅 status∈{new,pending}；body 为 rectify_list[]（type/note/file_uuids，type 可重复）。
-        覆盖判定：Need=上报 checklist 中需整改的 QuizType；Covered=历史 quiz_type∪本次 type；Need⊆Covered → done，否则 pending。
-        写入 assignee_user=当前用户。Need 为空则提交后 done。管理端不校验认领互斥。
+      summary: 提交整改
+      description: Need⊆Covered → done 否则 pending；写入 assignee_user。管理端不校验认领。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -506,7 +364,6 @@ paths:
             schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -514,12 +371,10 @@ paths:
     post:
       tags: [专项整改]
       summary: 重新整改
-      description: 仅 done 且仍有需整改 QuizType → pending；保留历史整改记录（累计覆盖）；不改 assignee_user
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -527,7 +382,6 @@ paths:
     post:
       tags: [专项整改]
       summary: 重新指派整改人
-      description: 仅管理端。body assignee_user 须为启用用户；只更新认领人，不改 status、不删整改记录。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -537,55 +391,38 @@ paths:
             schema: { $ref: "#/components/schemas/ReassignInput" }
       responses:
         "200":
-          description: ok
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-  /api/issues/import:
-    post:
-      tags: [专项整改]
-      summary: 批量导入
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ImportIssuesReq" }
-      responses:
-        "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/ledger/street:
     get:
       tags: [台账]
-      summary: 街道台账聚合
+      summary: 街道台账
       parameters:
         - in: query
           name: street_org_id
           schema: { type: integer, format: int64 }
-          description: 街道组织 ID；0 或不传则不限
+          description: >0 含子树
         - in: query
           name: date_from
-          schema: { type: string, example: "2026-01-01" }
+          schema: { type: string }
         - in: query
           name: date_to
           schema: { type: string }
       responses:
         "200":
-          description: rows 按 village_org_id + type 分组
+          description: rows 按 org_id+type
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/ledger/survey:
     get:
       tags: [台账]
-      summary: 街道排查汇总
+      summary: 排查汇总
       parameters:
         - in: query
           name: street_org_id
           schema: { type: integer, format: int64 }
-          description: 街道组织 ID；0 或不传则不限
         - in: query
           name: date_from
           schema: { type: string }
@@ -594,7 +431,6 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -604,34 +440,28 @@ paths:
       summary: 组织列表
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     post:
       tags: [组织]
       summary: 新增组织
-      description: |
-        - `parent_id=0`（或不传）：创建根节点 `root`
-        - 指定上级：按 root→district→street→village 逐级推导类型
-        - 村为末级，不可再向下新增
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Org" }
+            schema: { $ref: "#/components/schemas/OrgCreate" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/orgs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     put:
       tags: [组织]
       summary: 更新组织名称
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
@@ -639,48 +469,42 @@ paths:
             schema: { $ref: "#/components/schemas/OrgUpdate" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     delete:
       tags: [组织]
       summary: 删除组织
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/users:
     get:
       tags: [人员]
-      summary: 人员列表
+      summary: 用户列表
       parameters:
         - in: query
           name: org_id
-          schema: { type: string }
+          schema: { type: integer, format: int64 }
         - in: query
           name: keyword
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer }
+          schema: { type: integer, default: 1 }
         - in: query
           name: size
-          schema: { type: integer }
+          schema: { type: integer, default: 20 }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     post:
       tags: [人员]
-      summary: 新增人员
-      description: password 空则初始化为账户名（username）
+      summary: 新增用户
       requestBody:
         required: true
         content:
@@ -688,16 +512,50 @@ paths:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
         "200":
-          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/sys/users/export:
+    get:
+      tags: [人员]
+      summary: 导出 xlsx
+      parameters:
+        - in: query
+          name: org_id
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: keyword
+          schema: { type: string }
+      responses:
+        "200":
+          description: users.xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+  /api/sys/users/import:
+    post:
+      tags: [人员]
+      summary: 导入 xlsx（仅新增）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     put:
       tags: [人员]
-      summary: 更新人员
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 更新用户
       requestBody:
         required: true
         content:
@@ -705,18 +563,14 @@ paths:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     delete:
       tags: [人员]
-      summary: 删除人员
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 删除用户
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -724,12 +578,10 @@ paths:
     post:
       tags: [人员]
       summary: 重置密码
-      description: 将密码重置为账户名（username）；需工作人员 edit 权限。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -739,7 +591,6 @@ paths:
       summary: 角色列表
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -753,16 +604,15 @@ paths:
             schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     put:
       tags: [角色]
-      summary: 更新角色（id=1 不可编辑）
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 更新角色
       requestBody:
         required: true
         content:
@@ -770,38 +620,31 @@ paths:
             schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     delete:
       tags: [角色]
-      summary: 删除角色（id=1 不可删）
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 删除角色
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/roles/{id}/apis:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     get:
       tags: [角色]
-      summary: 角色 API 权限（path id 为 role_id）
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 角色 API 权限
       responses:
         "200":
-          description: ok；超管 role_id=1 时 data.api_ids 为 "*"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
     put:
       tags: [角色]
-      summary: 覆盖角色 API 权限
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 设置角色 API
       requestBody:
         required: true
         content:
@@ -809,96 +652,72 @@ paths:
             schema: { $ref: "#/components/schemas/RoleAPIsInput" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/apis:
     get:
       tags: [角色]
-      summary: API 目录列表（供授权 UI）
+      summary: API 目录
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/sys/op-logs:
     get:
       tags: [操作日志]
-      summary: 操作日志列表
+      summary: 操作日志
       parameters:
         - in: query
           name: keyword
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer }
+          schema: { type: integer, default: 1 }
         - in: query
           name: size
-          schema: { type: integer }
+          schema: { type: integer, default: 20 }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
-  /api/attachments/images:
-    post:
-      tags: [附件]
-      summary: 批量直传图片（可选水印）
-      description: |
-        当前唯一附件 HTTP 接口。分片 init/chunk/complete、bind、download 等未实现。
-        表单 watermark=1|0 控制是否烧录水印（省略默认打水印）。静态访问返回的 url（/uploads/...）。一次最多 20 张。
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: "#/components/schemas/AttachImageForm"
-      responses:
-        "200":
-          description: data.list = FileItem[]（file_id + url）
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
-
-  # ---------- 小程序 /api/app ----------
   /api/app/auth/slider/start:
     post:
       tags: [小程序]
-      summary: 开始滑动验证
-      description: 返回 slider_id。公开接口。
       security: []
+      summary: 开始滑动验证
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/auth/slider/finish:
     post:
       tags: [小程序]
-      summary: 完成滑动验证
-      description: 校验 duration_ms 后签发一次性 pass_token。公开接口。
       security: []
+      summary: 完成滑动
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/SliderFinishReq" }
+            schema:
+              type: object
+              required: [slider_id, duration_ms]
+              properties:
+                slider_id: { type: string }
+                duration_ms: { type: integer }
       responses:
         "200":
-          description: 返回 pass_token
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/auth/login:
     post:
       tags: [小程序]
-      summary: 小程序登录
-      description: 账密 + pass_token（captcha.enabled=false 时可省略 pass_token）。签发与管理端同一套 JWT。公开接口。
       security: []
+      summary: 小程序登录
       requestBody:
         required: true
         content:
@@ -906,7 +725,6 @@ paths:
             schema: { $ref: "#/components/schemas/AppLoginReq" }
       responses:
         "200":
-          description: 返回 token 与用户信息
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -916,70 +734,46 @@ paths:
       summary: 当前用户
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/auth/password:
     put:
       tags: [小程序]
-      summary: 本人修改密码
-      description: 规则同 PUT /api/auth/password
+      summary: 改密
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [old_password, new_password, confirm_password]
-              properties:
-                old_password: { type: string }
-                new_password: { type: string, minLength: 6, maxLength: 14, description: 字母+数字组合，区分大小写 }
-                confirm_password: { type: string, description: 须与 new_password 一致 }
+            schema: { $ref: "#/components/schemas/ChangePasswordReq" }
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/auth/logout:
     post:
       tags: [小程序]
-      summary: 退出登录
-      description: 规则同 POST /api/auth/logout
+      summary: 退出
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/todos:
     get:
       tags: [小程序]
-      summary: 待办列表
-      description: |
-        status 空或 all 表示不限状态；结果按 new > pending > done 排序（同状态 id 降序）。
-        组织范围：当前用户 OrgID 及其下属；问题落点为最细非 0 的区划 ID（村→街道→区→根）；OrgID=0 不加组织过滤。
-        筛选：type / status / *_org_id / project_year / keyword / page / size。
+      summary: 待办
+      description: status 空或 all 查全部，排序 new>pending>done。用户组织子树 ∩ query org_id 子树。
       parameters:
         - in: query
           name: type
           schema: { type: string }
         - in: query
           name: status
-          description: new|pending|done|all；省略或空表示全部，按 new>pending>done 排序
           schema: { type: string }
         - in: query
-          name: root_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: district_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: street_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: village_org_id
+          name: org_id
           schema: { type: integer, format: int64 }
         - in: query
           name: project_year
@@ -995,7 +789,6 @@ paths:
           schema: { type: integer, default: 20 }
       responses:
         "200":
-          description: data.list / total / page / size / status
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -1003,18 +796,15 @@ paths:
     get:
       tags: [小程序]
       summary: 组织树
-      description: 按 sys_orgs.parent_id 嵌套 children（含 type），供上报/待办区划选择。
       responses:
         "200":
-          description: data.list = [{id,name,type,parent_id,sort,children:[...]}]
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/issues:
     post:
       tags: [小程序]
-      summary: 上报问题
-      description: 按 quiz 推导 needs_rectify 与 status（new/done）；先上传附件再写入 type_ext.checklist[].files。
+      summary: 上报
       requestBody:
         required: true
         content:
@@ -1022,7 +812,6 @@ paths:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
         "200":
-          description: 新建问题（type_ext 含 photos）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -1030,22 +819,17 @@ paths:
     get:
       tags: [小程序]
       summary: 问题详情
-      description: 含 lat/lng、rectify_records（含 photos）；issue-map 可复用定位字段。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/issues/{id}/rectify:
     post:
       tags: [小程序]
-      summary: 提交整改
-      description: |
-        页内整改；规则同管理端覆盖判定。
-        认领互斥：assignee_user>0 且不等于当前用户 → 400「该问题已由他人认领整改」。
+      summary: 整改（认领互斥）
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1055,35 +839,26 @@ paths:
             schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
         "200":
-          description: 整改后问题（rectify_records 含 photos）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/issues/{id}/re-rectify:
     post:
       tags: [小程序]
-      summary: 重新整改
-      description: |
-        done 且仍有需整改 QuizType → pending；保留历史记录。
-        认领互斥同 rectify；不改 assignee_user。
+      summary: 重新整改（认领互斥）
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: ok
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
   /api/app/mine/stats:
     get:
       tags: [小程序]
-      summary: 我的概览数量
-      description: |
-        reported=本人上报数；pending 对齐 status=new（待整改）；done=已整改。
-        pending/done 统计范围为本人上报或整改责任人同名。
+      summary: 我的概览
       responses:
         "200":
-          description: "{ reported, pending, done }"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -1094,8 +869,7 @@ paths:
       parameters:
         - in: query
           name: scope
-          required: true
-          schema: { type: string, enum: [reported, pending, done] }
+          schema: { type: string, enum: [reported, pending, done], default: reported }
         - in: query
           name: page
           schema: { type: integer, default: 1 }
@@ -1104,7 +878,6 @@ paths:
           schema: { type: integer, default: 20 }
       responses:
         "200":
-          description: data.list / total / page / size / scope
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }

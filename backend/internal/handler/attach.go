@@ -12,6 +12,11 @@ import (
 	"gbnt/backend/pkg/response"
 )
 
+func (d *Deps) registerAttach(api *gin.RouterGroup) {
+	att := api.Group("/attachments")
+	att.POST("/images", d.AttachUploadImages)
+}
+
 func parseOptionalFloat(s string) (*float64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {

@@ -2,10 +2,10 @@
 
 Base URL：`http://127.0.0.1:8080`  
 鉴权：`Authorization: Bearer <token>`（标注「公开」的除外）。  
-滑动续期：剩余有效期进入窗口时响应头带回 `X-New-Token`、`X-Token-Expires-At`，前端应替换本地 token。  
-退出：`POST /api/auth/logout`（或 app 镜像）将当前 token `jti` 拉黑；改密/重置密码会递增 `token_ver`，旧 token 全部失效。
+滑动续期：剩余有效期进入窗口时响应头 `X-New-Token`、`X-Token-Expires-At`。  
+统一信封：`{ code, data, message, cost_ms, trace_id }`，成功 `code === 0`。详见 [README.md](./README.md)。
 
-统一响应见 [README.md](./README.md) §3.1。
+Apifox：导入 [apifox/openapi.yaml](./apifox/openapi.yaml)。
 
 ---
 
@@ -13,254 +13,172 @@ Base URL：`http://127.0.0.1:8080`
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/auth/captcha` | 图形验证码，返回 `{captcha_id,image_base64,expire_seconds}` |
-| POST | `/api/auth/login` | 登录，body: `{username,password,captcha_id,captcha}`（`captcha.enabled=false` 时可省略验证码） |
+| GET | `/api/health` | 健康检查 `{status:up}` |
+| GET | `/api/auth/captcha` | 图形验证码 `{captcha_id,image_base64,expire_seconds}` |
+| POST | `/api/auth/login` | 登录 `{username,password,captcha_id,captcha}` → JWT；`captcha.enabled=false` 可省略验证码 |
+| POST | `/api/app/auth/slider/start` | 滑动验证开始 `{slider_id,expire_seconds}` |
+| POST | `/api/app/auth/slider/finish` | 滑动完成 `{slider_id,duration_ms}` → `{pass_token,expire_seconds}` |
+| POST | `/api/app/auth/login` | 小程序登录 `{username,password,pass_token}` |
 
-## 鉴权
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/auth/me` | 当前用户（含 `role_id`、`is_super_admin`、`apis`；超管 `apis` 为 `"*"`） |
-| PUT | `/api/auth/password` | 本人改密（JWT，不做 RBAC） |
-| POST | `/api/auth/logout` | 退出登录：当前 token 的 `jti` 入黑名单至过期（JWT，不做 RBAC） |
-
-### `PUT /api/auth/password` 参数
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `old_password` | string | 是 | 原密码 |
-| `new_password` | string | 是 | 新密码：6–14 位，须同时含字母与数字，仅字母数字，区分大小写 |
-| `confirm_password` | string | 是 | 确认新密码，须与 `new_password` 一致 |
-
-成功后递增 `token_ver`，该用户全部旧 token 失效。
-
-### `GET /api/auth/me` 主要返回字段
-
-| 字段 | 说明 |
-| --- | --- |
-| `id` / `username` / `name` / `phone` | 用户基本信息 |
-| `org_id` / `role_id` | 组织、角色；可为 0 |
-| `is_super_admin` | 是否超级管理员 |
-| `apis` | 授权 API id 列表；超管为 `"*"` |
-
-### RBAC 接口权限
-
-JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac.enabled=false` 时跳过）。
-
-| 项 | 说明 |
-| --- | --- |
-| 超管 | `sys_users.is_super_admin=true`（全库仅一名，种子 id=1）；拥有全部 API（`apis="*"`）；不可编辑/删除，可改密与重置密码 |
-| 管理员保护 | `sys_roles.id = 1` 角色记录不可删改（含 API 授权） |
-| 角色状态 | `sys_roles.status`：`1` 启用 / `0` 禁用；禁用后该角色用户无法登录且 token 失效 |
-| action 继承 | 同 `module` 下 `create/edit/delete/import/export` 均隐含 `view` |
-| 登录即可 | `/api/auth/me`、`PUT /api/auth/password`、`POST /api/auth/logout`、`POST /api/attachments/images` 不做 RBAC |
-| 小程序 | **`/api/app/*` 整段仅 JWT**，不入 `sys_apis`、不做 RBAC |
-
-## 工作台
+## 鉴权（JWT，不做 RBAC）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/workbench/stats` | 上报/待整改/已整改/完成率/分类型 |
+| GET | `/api/auth/me` | 当前用户（含 `org_id`、`role_id`、`is_super_admin`、`apis`；超管 `apis="*"`） |
+| PUT | `/api/auth/password` | 本人改密：`old_password` / `new_password` / `confirm_password`。新密码 6–14 位且同时含字母与数字 |
+| POST | `/api/auth/logout` | 当前 token `jti` 拉黑至过期 |
 
-## 专项整改 Issues
+改密成功递增 `token_ver`，该用户全部旧 token 失效。
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/issues` | 列表，query: type/status/`*_org_id`/project_year/keyword/page/size；status=`new`\|`pending`\|`done` |
-| GET | `/api/issues/:id` | 详情（`type_ext` 内 `photos`、`rectify_records[].photos`） |
-| POST | `/api/issues` | 新增；四级区划 ID + `type_ext.checklist`；无问题 → `done`，有问题 → `new` |
-| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按问题类型校验 checklist） |
-| DELETE | `/api/issues/:id` | 删除（软删） |
-| POST | `/api/issues/:id/rectify` | 整改：body `rectify_list[]`；覆盖全部需整改 type → `done`，否则 `pending`；写入 `assignee_user` |
-| POST | `/api/issues/:id/re-rectify` | 重新整改：仅 `done` 且仍有需整改 type → `pending`；不删历史记录 |
-| POST | `/api/issues/:id/reassign` | 重新指派整改人：`{assignee_user}` 须为启用用户；只改认领人，不改 status |
-| POST | `/api/issues/import` | 批量导入 `{rows:[]}` |
+### RBAC
 
-## 台账
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/ledger/street` | 街道台账聚合，query: street_org_id/date_from/date_to；按 village_org_id + type 分组 |
-| GET | `/api/ledger/survey` | 排查汇总，query: street_org_id/date_from/date_to |
-
-## 系统 · 组织
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/sys/orgs` | 扁平列表（含 `type`：`root`/`district`/`street`/`village`） |
-| POST | `/api/sys/orgs` | 新增 `{name,parent_id,sort?}`；`parent_id=0` 建根（`root`）；否则按上级逐级推导 `district→street→village`；村下不可再增 |
-| PUT | `/api/sys/orgs/:id` | 仅改名称 `{name}` |
-| DELETE | `/api/sys/orgs/:id` | 删除（根不可删；有下级时拒绝） |
-
-## 系统 · 人员
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/sys/users` | 列表，query: org_id/keyword/page/size |
-| POST | `/api/sys/users` | 新增；`password` 空则初始化为账户名；不可创建超管 |
-| PUT | `/api/sys/users/:id` | 更新（password 空则不改）；**超管用户不可编辑** |
-| POST | `/api/sys/users/:id/reset-password` | 重置密码为账户名（username），并递增 `token_ver`（超管可用） |
-| DELETE | `/api/sys/users/:id` | 删除；**超管用户不可删除** |
-
-### `POST/PUT /api/sys/users` 参数（UserInput）
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `username` | string | 登录账号（新建必填） |
-| `password` | string | 明文密码；新建空则=账户名；更新空则不改 |
-| `name` | string | 姓名 |
-| `phone` | string | 手机号 |
-| `org_id` | uint64 | 所属组织 ID |
-| `role_id` | uint64 | 角色 ID |
-| `status` | int | 1 启用 / 0 禁用；新建省略默认 1 |
-
-## 系统 · 角色
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/sys/roles` | 列表（含 `status`） |
-| POST | `/api/sys/roles` | 新增 `{name,desc,status}` |
-| PUT | `/api/sys/roles/:id` | 更新（`:id=1` 不可编辑） |
-| DELETE | `/api/sys/roles/:id` | 删除（`:id=1` 不可删；仍有用户绑定时拒绝） |
-| GET | `/api/sys/roles/:id/apis` | 角色已授权 API id 列表（超管返回 `"*"`） |
-| PUT | `/api/sys/roles/:id/apis` | 覆盖授权 `{api_ids:[1,2,3]}`（`:id=1` 不可编辑） |
-| GET | `/api/sys/apis` | 全量 API 目录（供授权 UI） |
-
-## 系统 · 操作日志
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/sys/op-logs` | 列表，query: keyword/page/size |
-
-## 附件（独立）
-
-当前仅实现**批量直传**一条 HTTP 接口；分片 init / chunk / complete、bind、download 等**未注册路由**（业务侧在提交 Issue 时由后台内部 `Bind` 关联，无需单独调 bind）。
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/api/attachments/images` | 批量直传图片（multipart）；**登录即可**，不做 RBAC |
-
-**静态访问**：落盘文件经 Gin 静态目录 **`GET /uploads/...`** 直接访问（非 `/api/attachments/*`）。
-
-### `POST /api/attachments/images`
-
-| 项 | 说明 |
-| --- | --- |
-| Content-Type | `multipart/form-data` |
-| 文件字段 | `files`（多选）；无 `files` 时可退化为单字段 `file` |
-| 水印开关 | `watermark`（可选）：`1`/`true`/`yes`/`on` 打水印；`0`/`false`/`no`/`off` 原图入库；**省略默认打水印** |
-| 水印表单 | `lat`、`lng`、`address`（可选；仅 `watermark` 开启时烧入图）；**上报人姓名取当前登录用户**，不传 `user_name` |
-| 限制 | jpg/png/gif/webp；单张 ≤ `upload.max_file_size`；**一次最多 20 张** |
-| 响应 | `data.list = [{file_id, url}, ...]`；`url` 形如 `/uploads/2026/08/24/xxx_{user_id}_{ms}.jpg` |
-
-### 业务附件字段
-
-1. 先调 **`POST /api/attachments/images`**，收集返回的 **`file_id`**
-2. 排查现场图：写入 `type_ext.checklist[].files`（`file_id` 数组），服务端校验存在后原样存进 **`type_ext` JSON**
-3. 整改图：body **`file_uuids`**（历史字段名），落库 **`photo_file_ids` JSON 数组**
-4. 查询：解码 JSON，按 `file_id` 查 `attachments`，`checklist` 各项增加 **`photos:[{file_id,url}]`**；`rectify_records[]` 每条带 **`photos`**；签名可选 **`reporter_signature`**
-5. 不再使用 `att_id` / `photo_ref_uuid` / `attachment_ref_items`
-
-### 上报 `IssueInput` / `type_ext`
-
-新建核心：`type`、`project_year`（2020–2023）、四级区划 ID（至少一级）、`address`、`reporter_signature_file_id`、`type_ext`（`checklist[].files` 存现场图）。`code` 选填。
-
-| 字段 | 说明 |
-| --- | --- |
-| `type` | well / road / bridge / forest / transformer |
-| `project_year` | 2020–2023 |
-| `root_org_id` / `district_org_id` / `street_org_id` / `village_org_id` | 四级区划，至少一级；子级有值则上级必填 |
-| `code` | 设施编号（选填） |
-| `address` | 定位地址（必填） |
-| `lat` / `lng` | 经纬度 |
-| `plan_date` | YYYY-MM-DD；需整改时必填 |
-| `reporter_signature_file_id` | 排查电子签名 file_id |
-| `type_ext` | 类型扩展（`checklist` 为 QuizBool 数组） |
-| `status` | 仅更新用 |
-
-**已从入参移除**（对齐 miniapp 上报向导）：`project_name`、`location_text`、`description`、`measures`、`reporter_name` / `reporter_phone`、`assignee_name` / `assignee_phone`。排查人记在 `created_id`；整改责任人为 `assignee_user`（用户 ID，接口不传，可空，后续由服务端填充）。冗余街道/村名称列已删除，区划只存四级组织 ID。
-
-**区划**：`root_org_id` / `district_org_id` / `street_org_id` / `village_org_id`（可空，未填为 0）。至少填 1 个；填了子级则其全部上级必填；组织须存在且类型匹配，相邻级须父子关系。
-
-**状态推导**：按 quiz 算 `needs_rectify`——无任何问题 → `needs_rectify=false`、`status=done`；有问题 → `true`、`status=new`。有问题时 `plan_date` 必填。
-
-**QuizBool**（是/否题）：入参 `{type, value, desc, mustImg, files}`，放在 `type_ext.checklist` 数组中；回显另含 `photos`。缺项视为未答。导致需整改的答题须 `desc` 非空。`mustImg=true` 时 `files` 长度须 >0（与是否异常无关）。正向题（出水/路肩等）`value=false` 为异常；负向题（断带/私拉乱接/桥涵需整改）`value=true` 为异常。`type` 不得重复，且须属于当前问题类型允许的枚举。
-
-| 问题 type | 扩展对象 | checklist[].type | 其它要点 |
-| --- | --- | --- | --- |
-| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` `transformer_ok`（正向，均须出现） | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数；损坏>0 亦需整改 |
-| `road` | `RoadExt` | `has_shoulder` `has_ash`（正向） | 长宽厚、林网存活数量 |
-| `bridge` | `BridgeExt` | `needs_rectify`（负向） | `kind`=`bridge`\|`culvert`\|`gate` |
-| `forest` | `ForestExt` | `broken_belt` `dead_trees` `pest`（负向） | 存活率 0–100 |
-| `transformer` | `TransformerExt` | `powered` `device_ok` `cabinet_ok`（正向）；`illegal_wire`（负向） | `voltage`=`10kv`\|`0.4kv`；`model` 选填 |
-
-各类型 `keeper_name` / `keeper_phone` 选填。`plan_date` 在顶层。
-
-### 整改 / 重新整改
-
-- **Rectify** body：`{ "rectify_list": [ { "type": QuizType, "note": "...", "file_uuids": [] } ] }`，列表不能为空。`type` 合法、`note` 非空、照片 `EnsureFiles`。同一 `type` **允许重复提交**（多行历史）。每条写入 `issue_rectify_records.quiz_type`。
-- 门禁：`status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。
-- **覆盖判定**：从上报 `type_ext.checklist` 取出「判定为需整改」的 QuizType 集合 `Need`（井口损坏等非 QuizBool 不进入）。`Covered` = 该 issue **全部**历史 `quiz_type` ∪ 本次 `rectify_list` 的 `type`。`Need ⊆ Covered` → `status=done`，否则 `pending`（允许部分整改）。`Need` 为空则提交成功后视为已覆盖 → `done`。
-- 同时将 `assignee_user` 写成当前登录用户 ID（管理端与 App 共用）。
-- **Re-rectify**：仅 `status==done` 且 `Need` 非空 → `pending`；**不删**历史记录、不改 `assignee_user`。再次整改时历史 type 仍计入 `Covered`（累计覆盖）。无问题排查（`Need` 空）不可调用。
-- **Reassign**（仅管理端）：`POST /api/issues/:id/reassign`，body `{assignee_user}`。目标用户须存在且启用；只更新 `assignee_user`。指派后 App 认领互斥对新人生效。
-
-### 图片水印
-
-当表单 **`watermark` 未传或为真** 时，对 jpg/png/gif/webp **烧录**左下角取证水印；`watermark=0` 时落盘原图、不烧录：
-
-1. 最上一行加粗 **地址** `address`
-2. 黄竖条 + **度分秒** `lat/lng`
-3. **时间** `YYYY年M月D日 HH:MM`（服务器本地时区）
-4. **上报人** = JWT 当前用户姓名
-
-Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测微软雅黑。
-
-### 上传配置（`upload`）
-
-| 参数 | 生效 | 说明 |
-| --- | --- | --- |
-| `root` | 是 | 落盘根目录；静态访问 `GET /uploads/...` |
-| `max_file_size` | 是 | 单张图片大小上限（字节） |
-| `font` | 是 | 水印中文字体路径；空则自动探测 |
-| `chunk_size` | **否** | **预留**；分片上传未实现，直传流程不读取 |
+JWT 之后校验 `sys_apis` + `sys_role_apis`（`rbac.enabled=false` 则跳过）。超管：`sys_users.is_super_admin`（全库一名），bypass。同 `module` 下 `create/edit/delete/import/export` 隐含 `view`。`POST /api/attachments/images` 仅 JWT。**`/api/app/*` 仅 JWT，不入目录、不做 RBAC。**
 
 ---
 
-## 小程序 app API（`/api/app`）
-
-面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，排查写入 `type_ext.checklist[].files`，整改 body 传 `rectify_list[].file_uuids`。
-
-白名单额外包含：`POST /api/app/auth/slider/start`、`POST /api/app/auth/slider/finish`、`POST /api/app/auth/login`。
+## 附件
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/app/auth/slider/start` | 开始滑动验证 → `{slider_id,expire_seconds}`（公开） |
-| POST | `/api/app/auth/slider/finish` | 完成滑动，body: `{slider_id,duration_ms}` → `{pass_token,expire_seconds}`（公开；耗时须在配置区间内） |
-| POST | `/api/app/auth/login` | 登录，body: `{username,password,pass_token}` → JWT（公开；`captcha.enabled=false` 时可省略 pass_token） |
-| GET | `/api/app/auth/me` | 当前用户（含 `role_id`、`apis`） |
-| PUT | `/api/app/auth/password` | 本人改密（同管理端） |
-| POST | `/api/app/auth/logout` | 退出登录（同管理端） |
-| GET | `/api/app/todos` | 待办；query 同管理端列表；**status 空或 `all` 查全部**，排序 **new > pending > done**（同状态 id 降序）。组织范围：登录用户 `OrgID` 及其下属；问题落点=最细非 0 区划 ID；`OrgID=0` 不限 |
-| GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
-| GET | `/api/app/issues/:id` | 问题详情（含 lat/lng、`rectify_records`，含 `quiz_type`） |
-| POST | `/api/app/issues` | 上报（规则同管理端；按 quiz 推导 `new`/`done`） |
-| POST | `/api/app/issues/:id/rectify` | 页内整改 `{rectify_list:[{type,note,file_uuids}]}`；覆盖判定同管理端；认领互斥 |
-| POST | `/api/app/issues/:id/re-rectify` | 重新整改（`done` → `pending`）；认领互斥 |
-| GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}`（pending 对齐 status=`new`） |
-| GET | `/api/app/mine/issues` | 清单；query: `scope=reported\|pending\|done` + page/size |
+| POST | `/api/attachments/images` | multipart：`files`（或 `file`）；可选 `watermark`（省略/真打水印，`0` 原图）、`lat`/`lng`/`address`。返回 `data.list=[{file_id,url}]` |
+
+排查图写入 `type_ext.checklist[].files`；整改图走 `rectify_list[].file_uuids`。
+
+---
+
+## 工作台 `web.workbench`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/workbench/stats` | `{total,new,pending,done,complete_rate,by_type}` |
+
+---
+
+## 专项整改 `web.rectify`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/issues` | 列表 query：`type`/`status`/`org_id`/`project_year`/`keyword`/`page`/`size`。`org_id>0` 含子树 |
+| GET | `/api/issues/:id` | 详情：`type_ext` 含 `photos`；`rectify_records[].photos`、`quiz_type` |
+| POST | `/api/issues` | 新增。`org_id` 必填且须存在于 `sys_orgs`。无问题 → `done`，有问题 → `new` |
+| PUT | `/api/issues/:id` | 更新；`org_id=0` 不改组织 |
+| DELETE | `/api/issues/:id` | 软删 |
+| POST | `/api/issues/import` | `{rows:[IssueInput]}` |
+| POST | `/api/issues/:id/rectify` | `{rectify_list:[{type,note,file_uuids}]}`；覆盖判定见下 |
+| POST | `/api/issues/:id/re-rectify` | `done` → `pending`；不删历史、不改 `assignee_user` |
+| POST | `/api/issues/:id/reassign` | `{assignee_user}` 须启用用户；只改认领人 |
+
+### 上报 `IssueInput`
+
+必填（新建）：`type`（well/road/bridge/forest/transformer）、`project_year`（2020–2023）、`org_id`、`address`、`reporter_signature_file_id`、`type_ext`。`code`/`lat`/`lng` 选填。需整改时 `plan_date` 必填。
+
+`type_ext.checklist[]` 为 **QuizBool**：`{type,value,desc,mustImg,files}`。`mustImg=true` 时 `files` 须非空。缺项视为未答。导致需整改的答题须有 `desc`。正向题 `value=false` 为异常；负向题 `value=true` 为异常。
+
+| type | checklist[].type | 其它 |
+| --- | --- | --- |
+| well | water_out, pipe_ok, wiring_ok, box_ok, cover_ok, transformer_ok（正向） | build_kind=new\|match；出水口/护筒损坏>0 亦需整改 |
+| road | has_shoulder, has_ash（正向） | 长宽厚、林网存活 |
+| bridge | needs_rectify（负向） | kind=bridge\|culvert\|gate |
+| forest | broken_belt, dead_trees, pest（负向） | 存活率 0–100 |
+| transformer | powered, device_ok, cabinet_ok（正向）；illegal_wire（负向） | voltage=10kv\|0.4kv |
+
+### 整改覆盖判定
+
+`Need` = 上报 checklist 中判定需整改的 QuizType（不含井口损坏等非题项）。`Covered` = 历史记录 `quiz_type` ∪ 本次 `rectify_list.type`（允许同一 type 多行）。`Need ⊆ Covered` → `status=done`，否则 `pending`。`Need` 空则提交后 `done`。`rectify_list` 不能为空。成功时 `assignee_user` = 当前用户。
+
+管理端不校验认领互斥。重新整改要求仍有需整改类型。
+
+---
+
+## 台账
+
+| 方法 | 路径 | 模块 | 说明 |
+| --- | --- | --- | --- |
+| GET | `/api/ledger/street` | `web.ledger-street` | query：`street_org_id`/`date_from`/`date_to`。`street_org_id>0` 含子树；按 `org_id`+`type` 分组 |
+| GET | `/api/ledger/survey` | `web.ledger-survey` | 同上过滤；按 `type` 汇总 |
+
+---
+
+## 组织 `web.sys-org`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/sys/orgs` | 扁平列表（`type`：root/district/street/village） |
+| POST | `/api/sys/orgs` | `{name,parent_id,sort?}`；`parent_id=0` 建根 |
+| PUT | `/api/sys/orgs/:id` | `{name}` |
+| DELETE | `/api/sys/orgs/:id` | 根不可删；有下级拒绝 |
+
+---
+
+## 人员 `web.sys-staff`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/sys/users` | query：`org_id`/`keyword`/`page`/`size`（`org_id` 精确匹配） |
+| POST | `/api/sys/users` | `{username,password?,name,phone,org_id,role_id,status?}`；密码空则=账号 |
+| PUT | `/api/sys/users/:id` | 超管用户不可编辑 |
+| DELETE | `/api/sys/users/:id` | 超管不可删 |
+| POST | `/api/sys/users/:id/reset-password` | 密码重置为账号，递增 `token_ver` |
+| GET | `/api/sys/users/export` | 下载 xlsx（筛选同列表、不分页） |
+| POST | `/api/sys/users/import` | multipart `file`（xlsx），仅新增 |
+
+### 导入导出表头
+
+列名：姓名、手机号、登录账号、所属单位、角色名称、状态、创建时间。
+
+- **导出**：所属单位为组织路径根→叶，`/` 分隔；角色名为 `role_id` 反查；状态 `启用`/`停用`；时间 `2006-01-02 15:04:05`。
+- **导入**：按列名识别。必有前五列；状态、创建时间可缺。无状态或空 → 启用；无时间或空 → 当前时间。所属单位按 `/` 拆段，叶名匹配，重名则沿上级递推至唯一。角色名精确匹配且须唯一。仅新增；任一登录账号已存在则整批失败。密码=登录账号。
+
+---
+
+## 角色 `web.sys-roles`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/sys/roles` | 列表 |
+| POST | `/api/sys/roles` | `{name,desc,status}` |
+| PUT | `/api/sys/roles/:id` | `id=1` 系统角色不可改 |
+| DELETE | `/api/sys/roles/:id` | 超管角色不可删；仍有用户绑定拒绝 |
+| GET | `/api/sys/roles/:id/apis` | 授权 API id；超管角色 `api_ids="*"` |
+| PUT | `/api/sys/roles/:id/apis` | `{api_ids:[]}` |
+| GET | `/api/sys/apis` | API 目录 |
+
+---
+
+## 操作日志 `web.sys-logs`
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/sys/op-logs` | query：`keyword`/`page`/`size` |
+
+---
+
+## 小程序 `/api/app`
+
+JWT 与管理端同一套。改密/退出复用管理端 handler。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/app/auth/me` | 同管理端 me |
+| PUT | `/api/app/auth/password` | 同改密 |
+| POST | `/api/app/auth/logout` | 同退出 |
+| GET | `/api/app/todos` | 待办。`status` 空/`all` 查全部，排序 new>pending>done。权限：登录用户组织子树（`OrgID=0` 不限）∩ query `org_id` 子树 |
+| GET | `/api/app/regions` | 组织树（`children`） |
+| GET | `/api/app/issues/:id` | 详情 |
+| POST | `/api/app/issues` | 上报，规则同管理端新建 |
+| POST | `/api/app/issues/:id/rectify` | 分项整改；认领互斥 |
+| POST | `/api/app/issues/:id/re-rectify` | 重新整改；认领互斥 |
+| GET | `/api/app/mine/stats` | `{reported,pending,done}` |
+| GET | `/api/app/mine/issues` | query：`scope=reported\|pending\|done` + page/size |
 
 ### App 认领互斥
 
-App `rectify` / `re-rectify`：若 `assignee_user > 0` 且不等于当前用户 → 400「该问题已由他人认领整改」。管理端不校验。首次整改成功后写入当前用户为认领人。
+`assignee_user>0` 且 ≠ 当前用户 → 400「该问题已由他人认领整改」。
 
-### 我的 scope 规则
+### 我的 scope
 
 | scope | 含义 |
 | --- | --- |
-| `reported` | `created_id` = 当前用户 |
-| `pending` | 状态 **`new`（待整改）**，且本人上报或 `assignee_user` = 当前用户 ID |
-| `done` | 状态 done，且本人上报或 `assignee_user` = 当前用户 ID |
-
-Apifox：导入 [apifox/openapi.yaml](./apifox/openapi.yaml)（tag「小程序」）。
+| reported | `created_id` = 当前用户 |
+| pending | status=`new`，且本人上报或 `assignee_user` = 当前用户 |
+| done | status=`done`，且本人上报或 `assignee_user` = 当前用户 |

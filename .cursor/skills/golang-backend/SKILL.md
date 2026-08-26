@@ -3,7 +3,8 @@ name: golang-backend
 description: >-
   Go backend conventions for gbnt (Gin + Zap + MySQL + JWT + GORM).
   Use when writing or changing backend/, API handlers, middleware, migrations,
-  attachment upload, logging, or OpenAPI under doc/.
+  attachment upload, or logging. Do not edit doc/ API files unless the user
+  explicitly asks to rebuild API docs.
 ---
 
 # gbnt Golang Backend
@@ -21,7 +22,7 @@ backend/
   cmd/server/main.go
   configs/
   internal/{config,middleware,logger,model,migrate,handler,service,repo,upload}
-  pkg/{response,jwtutil,traceid}
+  pkg/{response,jwtutil,traceid,xlsxutil}
   storage/uploads/
   logs/{info,access,error,slow,sql}/
 ```
@@ -32,7 +33,8 @@ backend/
 - Envelope: `{ code, data, message, cost_ms, trace_id }` — success `code === 0`
 - Return request duration in body `cost_ms` and header `X-Response-Time`
 - Propagate `X-Request-Id` / `trace_id` through context → logs → SQL
-- **Comments required**: every new/changed exported API type, handler, and request/response field needs Chinese comments; sync `doc/api.md` (+ openapi) in the same change (see `.cursor/rules/api-comments.mdc`)
+- **Comments required**: every new/changed exported API type, handler, and request/response field needs Chinese comments (see `.cursor/rules/api-comments.mdc`)
+- **Do not** update `doc/api.md` / `doc/apifox/openapi.yaml` during ordinary code changes. Only when the user explicitly asks to rebuild API docs: delete those files and rewrite them from current code.
 
 ## Logging
 
@@ -62,18 +64,18 @@ backend/
 ## Issues (report / rectify)
 
 - Status: `new` / `pending` / `done`; Create derives from QuizBool → `needs_rectify` (`false`→`done`, `true`→`new`)
-- Region: four org IDs (at least one; ancestors required); QuizBool = `{type,value,desc,mustImg,files}` in `type_ext.checklist[]`; `mustImg=true` 时 `files` 长度须 >0
+- Region: 单一 `org_id`（`sys_orgs.id`，新建必填且须存在）；QuizBool = `{type,value,desc,mustImg,files}` in `type_ext.checklist[]`; `mustImg=true` 时 `files` 长度须 >0
 - Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; reporter=`created_id`; assignee=`assignee_user`（Rectify 写成当前用户）
 - Rectify: body `rectify_list[]`（`type`/`note`/`file_uuids`，type 可重复）；`Need`=checklist 需整改 QuizType；`Covered`=历史∪本次；齐全 → `done` 否则 `pending`；`Need` 空 → `done`
-- App `GET /api/app/todos`：按登录用户 OrgID 子树过滤问题落点组织；`OrgID=0` 不限；`status` 空/`all` 查全部，排序 `new > pending > done`
+- App `GET /api/app/todos`：登录用户组织子树 ∩ query `org_id` 子树（均含自身）；用户 `OrgID=0` 不限权限范围；`status` 空/`all` 查全部，排序 `new > pending > done`
 - App rectify/re-rectify：`assignee_user>0` 且 ≠ 当前用户 → 拒绝；管理端不校验
 - Admin `POST /api/issues/:id/reassign`：body `{assignee_user}`，须启用用户；只改认领人
 - `POST .../re-rectify`：`done`→`pending`，不删历史（累计覆盖）
 
 ## Docs
 
-- Project docs: `doc/`
-- Apifox import: `doc/apifox/openapi.yaml` (OpenAPI 3)
+- Project docs live under `doc/` (`api.md`, Apifox `doc/apifox/openapi.yaml`)
+- Agents must **not** patch these on feature work. Rebuild only on explicit user request: delete then rewrite from handlers/routes/DTOs.
 
 ## Migration
 

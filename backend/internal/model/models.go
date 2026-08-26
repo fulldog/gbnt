@@ -118,10 +118,7 @@ type Issue struct {
 	IssueKey                string  `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
 	Type                    string  `gorm:"size:32;index;comment:问题类型 well/road/bridge/forest/transformer" json:"type"`
 	ProjectYear             int     `gorm:"index;default:0;comment:项目年度 2020-2023" json:"project_year"`
-	RootOrgID               uint64  `gorm:"index;default:0;comment:区划根组织ID" json:"root_org_id"`
-	DistrictOrgID           uint64  `gorm:"index;default:0;comment:区划区级组织ID" json:"district_org_id"`
-	StreetOrgID             uint64  `gorm:"index;default:0;comment:区划街道组织ID" json:"street_org_id"`
-	VillageOrgID            uint64  `gorm:"index;default:0;comment:区划村级组织ID" json:"village_org_id"`
+	OrgID                   uint64  `gorm:"index;not null;comment:落点组织ID 对应sys_orgs.id" json:"org_id"`
 	Code                    string  `gorm:"size:64;comment:设施编号或点位编号" json:"code"`
 	Address                 string  `gorm:"size:255;comment:详细地址" json:"address"`
 	Lat                     float64 `gorm:"comment:纬度" json:"lat"`
