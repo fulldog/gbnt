@@ -1,13 +1,12 @@
 /**
- * 项目编号规则（移动端巡查 · 管理端新增/编辑须对齐）
+ * 设施编号规则（移动端巡查 · 管理端新增/编辑须对齐）
  *
- * 1. 界面标签：项目编号（数据字段仍为 issue.code）
- * 2. 自动填充格式：{问题类型中文名}{序号}号
- *    例：机井 → 机井01号；道路 → 道路01号（类型名见 AppData.TYPE_LABEL）
+ * 1. 界面标签：设施编号（数据字段仍为 issue.code）
+ * 2. 自动填充格式：{序号}号（不含问题类型前缀）
+ *    例：01号、02号、06号
  * 3. 序号位数：至少 2 位（01–99）；满 100 起至少 3 位（100–999）；满 1000 起至少 4 位，以此类推
  * 4. 自动填充仅为建议，用户可在输入框内修改
- * 5. 下次建议序号：清单中已有编号里，同类型前缀且符合「{类型名}{数字}号」的最大序号 + 1
- *    例：已提交 机井01号 后，再次进入巡查页（类型为机井）默认 机井02号
+ * 5. 下次建议序号：清单中已有编号（含旧版「{类型名}{数字}号」）的最大序号 + 1
  * 6. 提交校验：issue.code 全库不可重复（trim 后精确匹配，不分类型）
  */
 (function (global) {
@@ -28,6 +27,21 @@
     return TYPE_LABEL[type] || '';
   }
 
+  function allTypeLabels() {
+    var labels = {};
+    Object.keys(TYPE_LABEL).forEach(function (key) {
+      var label = typeLabel(key);
+      if (label) labels[label] = true;
+    });
+    if (global.AppData && global.AppData.TYPE_LABEL) {
+      Object.keys(global.AppData.TYPE_LABEL).forEach(function (key) {
+        var lbl = global.AppData.TYPE_LABEL[key];
+        if (lbl) labels[lbl] = true;
+      });
+    }
+    return Object.keys(labels);
+  }
+
   function getIssues() {
     if (global.AppData && typeof global.AppData.getIssues === 'function') {
       return global.AppData.getIssues() || [];
@@ -46,37 +60,45 @@
     return String(num).padStart(width, '0');
   }
 
-  function build(type, seq) {
-    var label = typeLabel(type);
-    if (!label) return '';
-    return label + formatSeq(seq) + '号';
+  function build(seq) {
+    return formatSeq(seq) + '号';
   }
 
-  /** 解析「{类型名}{数字}号」，不匹配返回 null */
-  function parse(code, type) {
-    var label = typeof type === 'string' && TYPE_LABEL[type] == null && type.indexOf('号') < 0
-      ? type
-      : typeLabel(type);
+  /** 解析「{数字}号」或旧版「{类型名}{数字}号」，不匹配返回 null */
+  function parseSeq(code) {
     var c = String(code || '').trim();
-    if (!c || !label || c.indexOf(label) !== 0) return null;
-    var m = c.slice(label.length).match(/^(\d+)号$/);
-    if (!m) return null;
-    return parseInt(m[1], 10);
+    if (!c) return null;
+    var plain = c.match(/^(\d+)号$/);
+    if (plain) return parseInt(plain[1], 10);
+    var labels = allTypeLabels();
+    var i;
+    for (i = 0; i < labels.length; i++) {
+      var label = labels[i];
+      if (c.indexOf(label) !== 0) continue;
+      var legacy = c.slice(label.length).match(/^(\d+)号$/);
+      if (legacy) return parseInt(legacy[1], 10);
+    }
+    return null;
   }
 
-  function maxSeqForType(type) {
-    var label = typeLabel(type);
-    if (!label) return 0;
+  /** @deprecated 兼容旧调用 parse(code, type) */
+  function parseLegacy(code, type) {
+    return parseSeq(code);
+  }
+
+  function maxSeq() {
     var max = 0;
     getIssues().forEach(function (issue) {
-      var seq = parse(issue.code, label);
+      var seq = parseSeq(issue.code);
       if (seq != null && seq > max) max = seq;
     });
     return max;
   }
 
+  /** type 参数保留兼容，序号全库递增 */
   function suggest(type) {
-    return build(type, maxSeqForType(type) + 1);
+    void type;
+    return build(maxSeq() + 1);
   }
 
   function isTaken(code, excludeId) {
@@ -92,8 +114,10 @@
     typeLabel: typeLabel,
     formatSeq: formatSeq,
     build: build,
-    parse: parse,
-    maxSeqForType: maxSeqForType,
+    parse: parseLegacy,
+    parseSeq: parseSeq,
+    maxSeq: maxSeq,
+    maxSeqForType: maxSeq,
     suggest: suggest,
     isTaken: isTaken,
   };

@@ -4,6 +4,16 @@
 (function (global) {
   'use strict';
 
+  var STREET_LEDGER_YEARS = ['2020', '2021', '2022', '2023', '2024'];
+  var HANDOVER_FIELDS = ['wellHandover', 'bridgeHandover', 'forestHandover', 'transformerHandover'];
+  var HANDOVER_LABELS = {
+    wellHandover: '机井移交数量',
+    bridgeHandover: '桥涵移交数量',
+    forestHandover: '林网移交数量',
+    transformerHandover: '变压器移交数量',
+  };
+  var OVERRIDES_KEY = 'streetLedgerOverrides';
+
   function streets() {
     var orgs = (global.AppStorage && global.AppStorage.get('orgs', [])) || [];
     return orgs.filter(function (o) {
@@ -39,19 +49,6 @@
       if (filters.dateEnd && d && d > filters.dateEnd) return false;
       return true;
     });
-  }
-
-  function groupByVillage(issues, streetName) {
-    var map = {};
-    villagesOfStreet(streetName).forEach(function (v) {
-      map[v] = [];
-    });
-    issues.forEach(function (i) {
-      if (i.street !== streetName || !i.village) return;
-      if (!map[i.village]) map[i.village] = [];
-      map[i.village].push(i);
-    });
-    return map;
   }
 
   function bridgeText(list) {
@@ -117,58 +114,158 @@
     return { handover: hand, existing: exist };
   }
 
-  function projectNameOf(list) {
-    for (var i = 0; i < list.length; i++) {
-      if (list[i].projectName) return list[i].projectName;
+  function aggregateRow(list) {
+    var wells = list.filter(function (i) {
+      return i.type === 'well';
+    });
+    var wellCount = wells.length;
+    var forest = forestNums(list);
+    var tf = transformerNums(list);
+    var bridgeSummary = bridgeText(list);
+    return {
+      wellHandover: wellCount ? wellCount + 2 : '',
+      wellExisting: wellCount || '',
+      bridgeHandover: bridgeSummary,
+      bridgeExisting: bridgeSummary
+        ? list.filter(function (i) {
+            return i.type === 'bridge';
+          }).length
+        : '',
+      roadKm: sumRoadKm(list),
+      forestHandover: forest.handover,
+      forestExisting: forest.existing,
+      transformerHandover: tf.handover,
+      transformerExisting: tf.existing,
+    };
+  }
+
+  function rowKey(street, year, village, naturalVillage) {
+    return [street, year, village, naturalVillage || ''].join('|');
+  }
+
+  function getHandoverOverrides() {
+    return (global.AppStorage && global.AppStorage.get(OVERRIDES_KEY, {})) || {};
+  }
+
+  function applyOverridesToRow(row, defaults, overrides) {
+    var rowOverrides = overrides[row.rowKey] || {};
+    HANDOVER_FIELDS.forEach(function (field) {
+      if (rowOverrides[field] != null && rowOverrides[field] !== '') {
+        row[field] = rowOverrides[field];
+        row._overrideFields = row._overrideFields || {};
+        row._overrideFields[field] = true;
+      } else {
+        row[field] = defaults[field];
+      }
+    });
+    row.defaults = defaults;
+  }
+
+  function annotateRowSpans(yearRows) {
+    if (!yearRows.length) return;
+    var vi = 0;
+    while (vi < yearRows.length) {
+      var v = yearRows[vi].village;
+      var span = 1;
+      while (vi + span < yearRows.length && yearRows[vi + span].village === v) span += 1;
+      yearRows[vi]._villageRowSpan = span;
+      for (var j = vi + 1; j < vi + span; j++) yearRows[j]._villageRowSpan = 0;
+      vi += span;
     }
-    return '高标农田建设项目';
+    yearRows[0]._yearRowSpan = yearRows.length;
+    yearRows[0]._streetRowSpan = yearRows.length;
+    for (var k = 1; k < yearRows.length; k++) {
+      yearRows[k]._yearRowSpan = 0;
+      yearRows[k]._streetRowSpan = 0;
+    }
   }
 
   function buildStreetLedger(filters) {
     filters = filters || {};
     var street = filters.street || '蒋官屯街道';
     var issues = filterIssues(global.AppData.getIssues(), filters);
-    var grouped = groupByVillage(issues, street);
-    var villages = Object.keys(grouped).sort();
-    var rows = [];
+    var overrides = getHandoverOverrides();
+    var sections = [];
+    var allRows = [];
     var seq = 0;
-    villages.forEach(function (village) {
-      var list = grouped[village] || [];
-      var wells = list.filter(function (i) {
-        return i.type === 'well';
+
+    STREET_LEDGER_YEARS.forEach(function (year) {
+      var yearIssues = issues.filter(function (i) {
+        return String(i.projectYear || '') === year;
       });
-      var wellCount = wells.length;
-      var forest = forestNums(list);
-      var tf = transformerNums(list);
-      var bridgeSummary = bridgeText(list);
-      var hasData =
-        wellCount ||
-        bridgeSummary ||
-        sumRoadKm(list) ||
-        forest.handover !== '' ||
-        tf.handover !== '';
-      if (!hasData && !filters.includeEmpty) return;
-      seq += 1;
-      rows.push({
-        seq: seq,
-        projectName: projectNameOf(list),
-        village: village,
-        wellHandover: wellCount ? wellCount + 2 : '',
-        wellExisting: wellCount || '',
-        bridgeHandover: bridgeSummary,
-        bridgeExisting: bridgeSummary ? list.filter(function (i) {
-          return i.type === 'bridge';
-        }).length : '',
-        roadKm: sumRoadKm(list),
-        forestHandover: forest.handover,
-        forestExisting: forest.existing,
-        transformerHandover: tf.handover,
-        transformerExisting: tf.existing,
-        signer: '',
-        phone: '',
+      if (!yearIssues.length && !filters.includeEmpty) return;
+
+      var grouped = {};
+      yearIssues.forEach(function (i) {
+        if (i.street !== street || !i.village) return;
+        var nv = i.naturalVillage || '';
+        var key = i.village + '\0' + nv;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(i);
       });
+
+      var keys = Object.keys(grouped).sort();
+      var yearRows = [];
+      keys.forEach(function (key) {
+        var parts = key.split('\0');
+        var village = parts[0];
+        var naturalVillage = parts[1] || '';
+        var list = grouped[key];
+        var defaults = aggregateRow(list);
+        var hasData =
+          defaults.wellHandover ||
+          defaults.bridgeHandover ||
+          defaults.roadKm ||
+          defaults.forestHandover !== '' ||
+          defaults.transformerHandover !== '';
+        if (!hasData && !filters.includeEmpty) return;
+
+        seq += 1;
+        var row = {
+          seq: seq,
+          projectYear: year + '年',
+          year: year,
+          street: street,
+          village: village,
+          naturalVillage: naturalVillage || '—',
+          rowKey: rowKey(street, year, village, naturalVillage),
+          wellExisting: defaults.wellExisting,
+          bridgeExisting: defaults.bridgeExisting,
+          roadKm: defaults.roadKm,
+          forestExisting: defaults.forestExisting,
+          transformerExisting: defaults.transformerExisting,
+          signer: '',
+          phone: '',
+        };
+        applyOverridesToRow(row, defaults, overrides);
+        yearRows.push(row);
+      });
+
+      if (yearRows.length) {
+        annotateRowSpans(yearRows);
+        sections.push({ year: year, rows: yearRows });
+        allRows = allRows.concat(yearRows);
+      }
     });
-    return { street: street, rows: rows };
+
+    return { street: street, sections: sections, rows: allRows };
+  }
+
+  function saveHandoverOverrides(changes, removals) {
+    var store = getHandoverOverrides();
+    (changes || []).forEach(function (item) {
+      if (!item || !item.rowKey || !item.field) return;
+      if (!store[item.rowKey]) store[item.rowKey] = {};
+      store[item.rowKey][item.field] = item.value;
+    });
+    (removals || []).forEach(function (item) {
+      if (!item || !item.rowKey || !item.field) return;
+      if (!store[item.rowKey]) return;
+      delete store[item.rowKey][item.field];
+      if (!Object.keys(store[item.rowKey]).length) delete store[item.rowKey];
+    });
+    if (global.AppStorage) global.AppStorage.set(OVERRIDES_KEY, store);
+    return store;
   }
 
   function typeStats(list, type) {
@@ -186,11 +283,21 @@
     filters = filters || {};
     var street = filters.street || '蒋官屯街道';
     var issues = filterIssues(global.AppData.getIssues(), filters);
-    var grouped = groupByVillage(issues, street);
-    var villages = Object.keys(grouped).sort();
+    var grouped = {};
+    issues.forEach(function (i) {
+      if (i.street !== street || !i.village) return;
+      var nv = i.naturalVillage || '';
+      var key = i.village + '\0' + nv;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(i);
+    });
+    var keys = Object.keys(grouped).sort();
     var rows = [];
-    villages.forEach(function (village) {
-      var list = grouped[village] || [];
+    keys.forEach(function (key) {
+      var parts = key.split('\0');
+      var village = parts[0];
+      var naturalVillage = parts[1] || '';
+      var list = grouped[key] || [];
       if (!list.length && !filters.includeEmpty) return;
       var well = typeStats(list, 'well');
       var bridge = typeStats(list, 'bridge');
@@ -202,6 +309,7 @@
       rows.push({
         street: street,
         village: village,
+        naturalVillage: naturalVillage || '—',
         surveyDone: list.length ? (allDone ? '是' : '否') : '',
         wellInspected: well.inspected || '',
         wellNormal: well.inspected ? Math.max(0, well.inspected - well.problems) : '',
@@ -229,11 +337,17 @@
   }
 
   global.HSFLedgerData = {
+    STREET_LEDGER_YEARS: STREET_LEDGER_YEARS,
+    HANDOVER_FIELDS: HANDOVER_FIELDS,
+    HANDOVER_LABELS: HANDOVER_LABELS,
     streets: streets,
     villagesOfStreet: villagesOfStreet,
     filterIssues: filterIssues,
     buildStreetLedger: buildStreetLedger,
     buildSurveySummary: buildSurveySummary,
     streetTitleShort: streetTitleShort,
+    getHandoverOverrides: getHandoverOverrides,
+    saveHandoverOverrides: saveHandoverOverrides,
+    rowKey: rowKey,
   };
 })(window);

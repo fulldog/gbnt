@@ -140,6 +140,7 @@
     if (txt.indexOf("合同") >= 0) return "合同管理";
     if (txt.indexOf("资产") >= 0 || txt.indexOf("服务区") >= 0 || txt.indexOf("土地") >= 0) return "资产管理";
     if (txt.indexOf("财务") >= 0 || txt.indexOf("收款") >= 0) return "财务管理";
+    if (txt.indexOf("街道台账") >= 0 || txt.indexOf("汇总") >= 0) return "汇总管理";
     return "系统管理";
   }
 

@@ -118,7 +118,50 @@
 }
 
 #combined-table-ld .ledger-sheet-table--street {
-  min-width: 1200px;
+  min-width: 1320px;
+}
+
+#table-tools-ld .ld-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-cell {
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: background 0.15s ease;
+  min-height: 36px;
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-cell:hover {
+  background: #f0f7ff;
+  box-shadow: inset 0 0 0 1px rgba(1, 92, 187, 0.25);
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-cell.is-dirty {
+  background: #fffbe6;
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-cell.is-override {
+  color: var(--app-primary, #015cbb);
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-cell.is-editing {
+  padding: 4px 6px;
+}
+
+#combined-table-ld .ledger-sheet-table .ld-handover-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  border: 1px solid var(--app-primary, #015cbb);
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
 }
 
 #combined-table-ld .ledger-sheet-table--survey {
@@ -182,11 +225,17 @@
   text-align: center;
 }
 
-/* 街道排查汇总：固定左 3 列（街道 / 村 / 是否完成排查） */
+/* 街道排查汇总：固定左 4 列（街道 / 新村·社区 / 自然村 / 是否完成排查） */
 #combined-table-ld .ledger-sheet-table--survey .ld-sticky-col {
   position: sticky;
   background: #fff;
   z-index: 2;
+}
+
+#combined-table-ld .ledger-sheet-table--survey .ld-sticky-col-0,
+#combined-table-ld .ledger-sheet-table--survey .ld-sticky-col-1 {
+  white-space: nowrap;
+  word-break: keep-all;
 }
 
 #combined-table-ld .ledger-sheet-table--survey thead .ld-sticky-col {
@@ -360,4 +409,20 @@
 #table-tools-ld .btn-ghost:hover {
   color: var(--app-primary, #015cbb);
   border-color: var(--app-primary, #015cbb);
+}
+
+#table-tools-ld .btn-primary {
+  background: var(--app-primary, #015cbb);
+  border: none;
+  padding: 0 16px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+#table-tools-ld .btn-primary:hover {
+  opacity: 0.92;
 }

@@ -1,7 +1,7 @@
 /**
  * 问题上报 · 现场优先
  * 无框描述 + 多图横滑 + 摘要行；类型分段 + 区划滚筒；整改责任人/联系电话手输
- * 项目编号规则见 frontend/js/project-code.js
+ * 设施编号规则见 frontend/js/project-code.js
  */
 (function () {
   var session = AppStorage.get('session', null);
@@ -83,16 +83,18 @@
   var wellQuizYnHost = document.getElementById('rWellQuizYnHost');
   var wellStepDescEl = document.getElementById('rWellStepDesc');
   var wellStepPhotosEl = document.getElementById('rWellStepPhotos');
+  var wellFillPhotosEl = document.getElementById('rWellFillPhotos');
   var typesEl = document.querySelector('.m-report__types');
 
   /** 机井分页向导：填写页 → 单选题×6 → 电子签名（排查必签，与最终状态无关）→ 提交 */
-  var WELL_QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'];
-  var WELL_QUIZ_HINTS = { waterOut: '(≥5分钟)' };
-  /** 道路分页向导：填写页 → 单选题×2 → 电子签名 → 提交 */
-  var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh'];
+  var WELL_QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk'];
+  var WELL_QUIZ_HINTS = { waterOut: '(≥1分钟)' };
+  /** 道路分页向导：填写页 → 路肩 / 灰土层 / 是否有道路损坏 → 电子签名 → 提交 */
+  var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh', 'hasRoadDamage'];
   var ROAD_QUIZ_NAMES = {
     hasShoulder: '是否有路肩',
     hasAsh: '是否有灰土层',
+    hasRoadDamage: '是否有道路损坏',
   };
   var FOREST_QUIZ_FIELDS = ['brokenBelt', 'deadTrees', 'pest'];
   var FOREST_QUIZ_NAMES = {
@@ -107,10 +109,10 @@
     cabinetOk: '配电设施是否完好',
     illegalWire: '是否私拉乱接',
   };
-  /** 桥涵闸：无台账核查项，填完后单独问「是否需要整改」 */
+  /** 桥涵闸：无台账核查项，填完后单独问「是否有淤堵与损坏」 */
   var BRIDGE_QUIZ_FIELDS = ['needsRectify'];
   var BRIDGE_QUIZ_NAMES = {
-    needsRectify: '是否需要整改',
+    needsRectify: '是否有淤堵与损坏',
   };
   /**
    * 选项页「须描述+照片」判定（全类型统一）
@@ -118,10 +120,11 @@
    * - 反向题（是=有问题）：选「是」→ 必填描述 + 至少 1 张照片
    *   林网：断带 / 枯死木 / 病虫害
    *   变压器：私拉乱接
-   *   桥涵闸：是否需要整改（选「是」须描述+照片）
+   *   桥涵闸：是否有淤堵与损坏（选「是」须描述+照片）
    * 机井「出水=是」另走 AppWellWaterPhotos，不在此列
    */
   var NEGATIVE_QUIZ_FIELDS = {
+    road: ['hasRoadDamage'],
     bridge: ['needsRectify'],
     forest: ['brokenBelt', 'deadTrees', 'pest'],
     transformer: ['illegalWire'],
@@ -142,6 +145,8 @@
   var stepPhotos = [];
   var stepPhotoProof = null;
   var stepPhotoStrip = null;
+  var wellFillPhotos = [];
+  var wellFillPhotoStrip = null;
 
   var WELL_YN_FIELDS = [
     'buildKind',
@@ -150,7 +155,6 @@
     'wiringOk',
     'boxOk',
     'coverOk',
-    'transformerOk',
   ];
   var WELL_YN_NAMES = {
     buildKind: '设施类型',
@@ -159,7 +163,6 @@
     wiringOk: '走线是否规范',
     boxOk: '配电箱及电表等设施是否完好',
     coverOk: '井台、井盖是否完整',
-    transformerOk: '变压器是否正常使用',
   };
 
   function mountHost() {
@@ -302,6 +305,8 @@
     if (quizAnswerIndicatesIssue(ans, currentWellQuizField())) {
       if (!(wellStepDescEl && (wellStepDescEl.value || '').trim())) return false;
       if (!stepPhotos.length) return false;
+    } else if (quizStepRequiresPhoto(currentWellQuizField(), ans)) {
+      if (!stepPhotos.length) return false;
     }
     if (isLastWellQuizStep() && wizardNeedsRectify() && !form.planDate) return false;
     return true;
@@ -312,9 +317,23 @@
     return list.indexOf(field) !== -1;
   }
 
+  function quizStepRequiresPhoto(field, ans) {
+    if (window.AppWellSubmitRules && typeof AppWellSubmitRules.quizStepRequiresPhoto === 'function') {
+      return AppWellSubmitRules.quizStepRequiresPhoto(field, ans);
+    }
+    if (!field || !ans) return false;
+    if (field === 'wiringOk') return false;
+    if (field === 'waterOut' && ans === 'yes') return false;
+    return true;
+  }
+
   /** 当前答案是否表示「存在问题」，须在本页填写描述并上传照片 */
   function quizAnswerIndicatesIssue(ans, field) {
+    if (window.AppWellSubmitRules && typeof AppWellSubmitRules.quizAnswerIndicatesIssue === 'function') {
+      return AppWellSubmitRules.quizAnswerIndicatesIssue(ans, field, form.type);
+    }
     if (!ans || !field) return false;
+    if (field === 'hasShoulder' || field === 'hasAsh') return false;
     if (isNegativeQuizField(field)) return ans === 'yes';
     return ans === 'no';
   }
@@ -376,6 +395,11 @@
         if (showToast) AppUI.toast('请填写问题描述', 'warn');
         return false;
       }
+      if (!stepPhotos.length) {
+        if (showToast) AppUI.toast('请上传现场照片', 'warn');
+        return false;
+      }
+    } else if (quizStepRequiresPhoto(field, ans)) {
       if (!stepPhotos.length) {
         if (showToast) AppUI.toast('请上传现场照片', 'warn');
         return false;
@@ -533,6 +557,31 @@
     syncNextBtn();
     syncReportFoot();
     syncWellProgress();
+    if (isWellWizard() && wellStep === 0) {
+      attachWellFillPhotos();
+    } else {
+      destroyWellFillPhotos();
+    }
+  }
+
+  function destroyWellFillPhotos() {
+    if (wellFillPhotoStrip) {
+      wellFillPhotoStrip.destroy();
+      wellFillPhotoStrip = null;
+    }
+  }
+
+  function attachWellFillPhotos() {
+    destroyWellFillPhotos();
+    if (!wellFillPhotosEl || !window.AppMpPhotos || !isWellWizard()) return;
+    wellFillPhotoStrip = AppMpPhotos.attach({
+      el: wellFillPhotosEl,
+      photos: wellFillPhotos,
+      max: MAX_PHOTOS,
+      logScope: 'm-report',
+      previewMeta: previewMeta,
+      onChange: syncNextBtn,
+    });
   }
 
   function destroySignaturePad() {
@@ -602,6 +651,7 @@
 
   function canProceedWellFill() {
     if (!canProceedStep1()) return false;
+    if (!wellFillPhotos.length) return false;
     return true;
   }
 
@@ -620,10 +670,15 @@
     }
     var code = codeInputEl ? (codeInputEl.value || '').trim() : '';
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return false;
     }
-    return validateWellFillNums();
+    if (!validateWellFillNums()) return false;
+    if (!wellFillPhotos.length) {
+      AppUI.toast('请上传全景照片', 'warn');
+      return false;
+    }
+    return true;
   }
 
   function isWaterOutProofStep() {
@@ -780,7 +835,7 @@
   }
 
   function mergeWellPhotos() {
-    var all = [];
+    var all = wellFillPhotos.slice();
     activeQuizFields().forEach(function (key) {
       var slot = wellQuizData[key];
       if (slot && slot.photos && slot.photos.length) {
@@ -813,6 +868,7 @@
       outletDamaged: isNaN(outletDamaged) ? null : outletDamaged,
       casingTotal: isNaN(casing) ? null : casing,
       casingDamaged: isNaN(casingDamaged) ? null : casingDamaged,
+      fillPhotos: wellFillPhotos.slice(),
       wellPlanDate: form.planDate || '',
       quizSteps: wellQuizData,
     };
@@ -841,7 +897,6 @@
     if (parseNum('rRoadLength') == null) return false;
     if (parseNum('rRoadWidth') == null) return false;
     if (parseNum('rRoadThickness') == null) return false;
-    if (parseNum('rRoadTreeSurvive') == null) return false;
     return true;
   }
 
@@ -856,7 +911,7 @@
     }
     var code = codeInputEl ? (codeInputEl.value || '').trim() : '';
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return false;
     }
     if (parseNum('rRoadLength') == null) {
@@ -871,10 +926,6 @@
       AppUI.toast('请填写道路厚度', 'warn');
       return false;
     }
-    if (parseNum('rRoadTreeSurvive') == null) {
-      AppUI.toast('请填写林网树木存活数量', 'warn');
-      return false;
-    }
     return true;
   }
 
@@ -883,7 +934,6 @@
       length: parseNum('rRoadLength'),
       width: parseNum('rRoadWidth'),
       thickness: parseNum('rRoadThickness'),
-      treeSurvive: parseNum('rRoadTreeSurvive'),
       planDate: form.planDate || '',
       quizSteps: wellQuizData,
     };
@@ -912,7 +962,7 @@
     }
     var code = codeInputEl ? (codeInputEl.value || '').trim() : '';
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return false;
     }
     if (!readRadioIn(bridgeFillExtra, 'kind')) {
@@ -961,7 +1011,7 @@
     }
     var code = codeInputEl ? (codeInputEl.value || '').trim() : '';
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return false;
     }
     if (parseNum('rForestHandover') == null) {
@@ -1017,7 +1067,7 @@
     }
     var code = codeInputEl ? (codeInputEl.value || '').trim() : '';
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return false;
     }
     if (parseNum('rTfCapacity') == null) {
@@ -1193,7 +1243,6 @@
       wiringOk: readRadio('wiringOk'),
       boxOk: readRadio('boxOk'),
       coverOk: readRadio('coverOk'),
-      transformerOk: readRadio('transformerOk'),
       outletTotal: isNaN(total) ? null : total,
       outletDamaged: isNaN(outletDamaged) ? null : outletDamaged,
       casingTotal: isNaN(casing) ? null : casing,
@@ -1366,6 +1415,14 @@
       return null;
     }
     return data;
+  }
+
+  function ensureDefaultBuildKind() {
+    if (!facilityKindRow || form.type !== 'well') return;
+    if (!readRadio('buildKind')) {
+      var inp = facilityKindRow.querySelector('input[value="new"]');
+      if (inp) inp.checked = true;
+    }
   }
 
   function applySuggestedCode() {
@@ -1846,6 +1903,7 @@
   syncMeta();
   renderTypeSeg();
   syncTypeBlocks();
+  ensureDefaultBuildKind();
   applySuggestedCode();
   relocate();
   syncWellWizardLayout();
@@ -1868,6 +1926,8 @@
     wellStep = 0;
     wellQuizData = {};
     wellSignatureData = '';
+    wellFillPhotos = [];
+    destroyWellFillPhotos();
     destroySignaturePad();
     destroyStepPhotos();
     if (isTypeWizard() && photoStrip) {
@@ -1885,6 +1945,7 @@
     }
     renderTypeSeg();
     syncTypeBlocks();
+    ensureDefaultBuildKind();
     applySuggestedCode();
     if (window.AppLog) AppLog.info('m-report', 'type change', { type: form.type });
   });
@@ -1912,7 +1973,7 @@
     if (el) el.addEventListener('input', syncNextBtn);
   });
 
-  ['rRoadLength', 'rRoadWidth', 'rRoadThickness', 'rRoadTreeSurvive'].forEach(function (id) {
+  ['rRoadLength', 'rRoadWidth', 'rRoadThickness'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', syncNextBtn);
   });
@@ -2005,7 +2066,7 @@
     saveWellQuizStep();
     var code = (codeInputEl.value || '').trim();
     if (window.AppProjectCode && AppProjectCode.isTaken(code)) {
-      AppUI.toast('项目编号已存在，请更换', 'error');
+      AppUI.toast('设施编号已存在，请更换', 'error');
       return;
     }
     if (
@@ -2066,7 +2127,7 @@
       payload.thickness = String(roadExtra.thickness);
       payload.hasShoulder = roadExtra.hasShoulder === 'yes' ? '是' : '否';
       payload.hasAsh = roadExtra.hasAsh === 'yes' ? '是' : '否';
-      payload.treeSurvive = String(roadExtra.treeSurvive);
+      payload.hasRoadDamage = roadExtra.hasRoadDamage === 'yes' ? '是' : '否';
     } else if (isBridgeWizard()) {
       var bridgeExtra = collectBridgeFieldsFromWizard();
       payload.bridge = bridgeExtra;
@@ -2147,11 +2208,11 @@
     }
     var code = (codeInputEl.value || '').trim();
     if (!code) {
-      AppUI.toast('请填写项目编号', 'error');
+      AppUI.toast('请填写设施编号', 'error');
       return;
     }
     if (window.AppProjectCode && AppProjectCode.isTaken(code)) {
-      AppUI.toast('项目编号已存在，请更换', 'error');
+      AppUI.toast('设施编号已存在，请更换', 'error');
       return;
     }
     var projectName = form.projectYear + ' 高标农田建设项目';
@@ -2293,6 +2354,7 @@
   function onLeave() {
     closePicker(false);
     destroyStepPhotos();
+    destroyWellFillPhotos();
     destroySignaturePad();
     if (photoStrip) {
       photoStrip.destroy();

@@ -1,5 +1,5 @@
 /**
- * 排查 / 待办清单 · 种子数据（issues-seed-v20）
+ * 排查 / 待办清单 · 种子数据（issues-seed-v24）
  *
  * 每类型 5 条：待整改 ×1、已整改 ×2、已排查 ×2
  * 图片统一 picsum 网络图；含 quizSteps / 类型块 / 电子签名，对齐巡查向导与详情页
@@ -71,6 +71,9 @@
     function baseIssue(opt) {
       var quizSteps = opt.quizSteps || {};
       var mergedPhotos = mergeQuizPhotos(quizSteps);
+      if (opt.type === 'well' && opt.block && opt.block.fillPhotos && opt.block.fillPhotos.length) {
+        mergedPhotos = opt.block.fillPhotos.concat(mergedPhotos);
+      }
       if (!mergedPhotos.length && opt.fallbackPhotos) mergedPhotos = opt.fallbackPhotos.slice();
       if (!mergedPhotos.length) mergedPhotos = [pic('hsf-' + opt.id)];
 
@@ -121,7 +124,7 @@
         issue.thickness = String(opt.block.thickness);
         issue.hasShoulder = opt.block.hasShoulder === 'yes' ? '是' : '否';
         issue.hasAsh = opt.block.hasAsh === 'yes' ? '是' : '否';
-        issue.treeSurvive = String(opt.block.treeSurvive);
+        issue.hasRoadDamage = opt.block.hasRoadDamage === 'yes' ? '是' : '否';
       }
       if (opt.type === 'bridge' && opt.block) {
         issue.bridgeKind = opt.block.kind;
@@ -140,7 +143,6 @@
       wiringOk: '走线是否规范',
       boxOk: '配电箱及电表等设施是否完好',
       coverOk: '井台、井盖是否完整',
-      transformerOk: '变压器是否正常使用',
     };
 
     /* —— 机井 —— */
@@ -159,7 +161,6 @@
       wiringOk: slot('yes'),
       boxOk: slot('no', { photos: [pic('hsf-well-p-box1')] }),
       coverOk: slot('yes'),
-      transformerOk: slot('yes'),
     };
 
     var wellInspectedQuiz1 = {
@@ -168,7 +169,6 @@
       wiringOk: slot('yes'),
       boxOk: slot('yes'),
       coverOk: slot('yes'),
-      transformerOk: slot('yes'),
     };
 
     var wellInspectedQuiz2 = {
@@ -177,7 +177,6 @@
       wiringOk: slot('yes'),
       boxOk: slot('yes'),
       coverOk: slot('yes'),
-      transformerOk: slot('yes'),
     };
 
     var wellDoneQuiz1 = {
@@ -186,7 +185,6 @@
       wiringOk: slot('no', { desc: '线缆未套管固定' }),
       boxOk: slot('yes'),
       coverOk: slot('yes'),
-      transformerOk: slot('yes'),
     };
 
     var wellDoneQuiz2 = {
@@ -195,33 +193,46 @@
       wiringOk: slot('yes'),
       boxOk: slot('no', { desc: '箱门锈蚀', photos: [pic('hsf-well-d2-box1')] }),
       coverOk: slot('yes'),
-      transformerOk: slot('yes'),
     };
 
     /* —— 道路 —— */
     var roadPendingQuiz = {
       hasShoulder: slot('no', { desc: '东侧路肩塌陷约 3 米' }),
       hasAsh: slot('yes'),
+      hasRoadDamage: slot('yes', {
+        desc: '路面局部沉陷、开裂',
+        photos: [pic('hsf-road-p-dmg1'), pic('hsf-road-p-dmg2')],
+      }),
     };
 
     var roadInspectedQuiz1 = {
       hasShoulder: slot('yes'),
       hasAsh: slot('yes'),
+      hasRoadDamage: slot('no'),
     };
 
     var roadInspectedQuiz2 = {
       hasShoulder: slot('yes'),
       hasAsh: slot('yes'),
+      hasRoadDamage: slot('no'),
     };
 
     var roadDoneQuiz1 = {
       hasShoulder: slot('no', { desc: '路肩缺失', photos: [pic('hsf-road-d1-s1')] }),
       hasAsh: slot('yes'),
+      hasRoadDamage: slot('yes', {
+        desc: '路肩缺失并伴有路面破损',
+        photos: [pic('hsf-road-d1-dmg')],
+      }),
     };
 
     var roadDoneQuiz2 = {
       hasShoulder: slot('yes'),
       hasAsh: slot('no', { desc: '灰土层局部剥落', photos: [pic('hsf-road-d2-a1')] }),
+      hasRoadDamage: slot('yes', {
+        desc: '灰土层剥落导致路面损坏',
+        photos: [pic('hsf-road-d2-dmg')],
+      }),
     };
 
     /* —— 桥涵闸 —— */
@@ -326,7 +337,7 @@
         village: '李官屯新村',
         naturalVillage: '蒋官屯村',
         projectYear: '2022',
-        code: '机井01号',
+        code: '01号',
         locationText: '李官屯新村东机耕路北侧',
         lat: 36.4567,
         lng: 115.9876,
@@ -346,6 +357,7 @@
           outletDamaged: 1,
           casingTotal: 4,
           casingDamaged: 0,
+          fillPhotos: [pic('hsf-well-fill-01'), pic('hsf-well-fill-01b')],
           wellPlanDate: fmt(planOverdue),
           quizSteps: wellPendingQuiz,
           waterOut: 'yes',
@@ -353,7 +365,6 @@
           wiringOk: 'yes',
           boxOk: 'no',
           coverOk: 'yes',
-          transformerOk: 'yes',
         },
       }),
       baseIssue({
@@ -362,7 +373,7 @@
         street: '蒋官屯街道',
         village: '中心社区',
         projectYear: '2023',
-        code: '机井02号',
+        code: '02号',
         locationText: '中心社区北地块机井',
         lat: 36.451,
         lng: 115.984,
@@ -379,6 +390,7 @@
           outletDamaged: 0,
           casingTotal: 2,
           casingDamaged: 0,
+          fillPhotos: [pic('hsf-well-fill-02')],
           wellPlanDate: fmt(planFar),
           quizSteps: wellInspectedQuiz1,
           waterOut: 'yes',
@@ -386,7 +398,6 @@
           wiringOk: 'yes',
           boxOk: 'yes',
           coverOk: 'yes',
-          transformerOk: 'yes',
         },
       }),
       baseIssue({
@@ -395,7 +406,7 @@
         street: '北城街道',
         village: '和谐新村',
         projectYear: '2021',
-        code: '机井03号',
+        code: '03号',
         locationText: '和谐新村西排灌站旁',
         lat: 36.468,
         lng: 115.972,
@@ -415,6 +426,7 @@
           outletDamaged: 0,
           casingTotal: 3,
           casingDamaged: 0,
+          fillPhotos: [pic('hsf-well-fill-03')],
           wellPlanDate: fmt(planFar),
           quizSteps: wellInspectedQuiz2,
           waterOut: 'yes',
@@ -422,7 +434,6 @@
           wiringOk: 'yes',
           boxOk: 'yes',
           coverOk: 'yes',
-          transformerOk: 'yes',
         },
       }),
       baseIssue({
@@ -431,7 +442,7 @@
         street: '东城街道',
         village: '团结新村',
         projectYear: '2021',
-        code: '机井04号',
+        code: '04号',
         locationText: '团结新村西机井',
         lat: 36.44,
         lng: 116.01,
@@ -454,6 +465,7 @@
           outletDamaged: 0,
           casingTotal: 3,
           casingDamaged: 0,
+          fillPhotos: [pic('hsf-well-fill-04')],
           wellPlanDate: fmt(new Date(doneThisYear.getTime() - 7 * 86400000)),
           quizSteps: wellDoneQuiz1,
           waterOut: 'yes',
@@ -461,7 +473,6 @@
           wiringOk: 'no',
           boxOk: 'yes',
           coverOk: 'yes',
-          transformerOk: 'yes',
         },
       }),
       baseIssue({
@@ -470,7 +481,7 @@
         street: '北城街道',
         village: '杨集新村',
         projectYear: '2022',
-        code: '机井05号',
+        code: '05号',
         locationText: '杨集新村北地块机井',
         lat: 36.472,
         lng: 115.96,
@@ -493,6 +504,7 @@
           outletDamaged: 1,
           casingTotal: 2,
           casingDamaged: 0,
+          fillPhotos: [pic('hsf-well-fill-05')],
           wellPlanDate: fmt(new Date(doneLastYear.getTime() - 10 * 86400000)),
           quizSteps: wellDoneQuiz2,
           waterOut: 'yes',
@@ -500,7 +512,6 @@
           wiringOk: 'yes',
           boxOk: 'no',
           coverOk: 'yes',
-          transformerOk: 'yes',
         },
       }),
 
@@ -512,7 +523,7 @@
         village: '冯庄新村',
         naturalVillage: '冯庄村',
         projectYear: '2021',
-        code: '道路01号',
+        code: '06号',
         locationText: '冯庄新村南主干道',
         lat: 36.4612,
         lng: 115.991,
@@ -525,16 +536,16 @@
         assigneePhone: '13800000000',
         measures: '路肩回填夯实',
         quizSteps: roadPendingQuiz,
-        quizNames: { hasShoulder: '是否有路肩', hasAsh: '是否有灰土层' },
+        quizNames: { hasShoulder: '是否有路肩', hasAsh: '是否有灰土层', hasRoadDamage: '是否有道路损坏' },
         block: {
           length: 1.2,
           width: 4.5,
           thickness: 0.18,
-          treeSurvive: 86,
           planDate: fmt(planSoon),
           quizSteps: roadPendingQuiz,
           hasShoulder: 'no',
           hasAsh: 'yes',
+          hasRoadDamage: 'yes',
         },
       }),
       baseIssue({
@@ -544,7 +555,7 @@
         village: '海盛新村',
         naturalVillage: '贺海村',
         projectYear: '2023',
-        code: '道路02号',
+        code: '07号',
         locationText: '海盛新村东侧田间路',
         lat: 36.452,
         lng: 115.995,
@@ -559,11 +570,11 @@
           length: 0.8,
           width: 4.0,
           thickness: 0.16,
-          treeSurvive: 120,
           planDate: fmt(planFar),
           quizSteps: roadInspectedQuiz1,
           hasShoulder: 'yes',
           hasAsh: 'yes',
+          hasRoadDamage: 'no',
         },
       }),
       baseIssue({
@@ -572,7 +583,7 @@
         street: '北城街道',
         village: '物流园社区',
         projectYear: '2022',
-        code: '道路03号',
+        code: '08号',
         locationText: '物流园社区北环路',
         lat: 36.465,
         lng: 115.968,
@@ -587,11 +598,11 @@
           length: 2.1,
           width: 5.0,
           thickness: 0.2,
-          treeSurvive: 95,
           planDate: fmt(planFar),
           quizSteps: roadInspectedQuiz2,
           hasShoulder: 'yes',
           hasAsh: 'yes',
+          hasRoadDamage: 'no',
         },
       }),
       baseIssue({
@@ -601,7 +612,7 @@
         village: '程麻新村',
         naturalVillage: '麻庄村',
         projectYear: '2022',
-        code: '道路04号',
+        code: '09号',
         locationText: '程麻新村西生产路',
         lat: 36.4488,
         lng: 115.982,
@@ -621,11 +632,11 @@
           length: 1.5,
           width: 4.2,
           thickness: 0.18,
-          treeSurvive: 78,
           planDate: fmt(new Date(doneThisYear.getTime() - 5 * 86400000)),
           quizSteps: roadDoneQuiz1,
           hasShoulder: 'no',
           hasAsh: 'yes',
+          hasRoadDamage: 'yes',
         },
       }),
       baseIssue({
@@ -634,7 +645,7 @@
         street: '东城街道',
         village: '李太屯社区',
         projectYear: '2020',
-        code: '道路05号',
+        code: '10号',
         locationText: '李太屯社区南支路',
         lat: 36.438,
         lng: 116.005,
@@ -654,11 +665,11 @@
           length: 0.6,
           width: 3.5,
           thickness: 0.15,
-          treeSurvive: 64,
           planDate: fmt(new Date(doneLastYear.getTime() - 8 * 86400000)),
           quizSteps: roadDoneQuiz2,
           hasShoulder: 'yes',
           hasAsh: 'no',
+          hasRoadDamage: 'yes',
         },
       }),
 
@@ -670,7 +681,7 @@
         village: '程麻新村',
         naturalVillage: '老程庄村',
         projectYear: '2022',
-        code: '桥涵闸01号',
+        code: '11号',
         locationText: '程麻新村西排灌沟桥',
         lat: 36.449,
         lng: 115.981,
@@ -683,7 +694,7 @@
         assigneePhone: '13800000003',
         measures: '加固栏杆并修补桥面',
         quizSteps: bridgePendingQuiz,
-        quizNames: { needsRectify: '是否需要整改' },
+        quizNames: { needsRectify: '是否有淤堵与损坏' },
         block: {
           kind: 'bridge',
           length: 12,
@@ -699,7 +710,7 @@
         street: '蒋官屯街道',
         village: '滨河社区',
         projectYear: '2023',
-        code: '桥涵闸02号',
+        code: '12号',
         locationText: '滨河社区排涝涵洞',
         lat: 36.453,
         lng: 115.979,
@@ -725,7 +736,7 @@
         street: '北城街道',
         village: '孙屯新村',
         projectYear: '2021',
-        code: '桥涵闸03号',
+        code: '13号',
         locationText: '孙屯新村灌溉闸',
         lat: 36.47,
         lng: 115.965,
@@ -752,7 +763,7 @@
         village: '久安新村',
         naturalVillage: '安庄村',
         projectYear: '2022',
-        code: '桥涵闸04号',
+        code: '14号',
         locationText: '久安新村生产桥',
         lat: 36.447,
         lng: 115.988,
@@ -783,7 +794,7 @@
         street: '东城街道',
         village: '大胡社区',
         projectYear: '2020',
-        code: '桥涵闸05号',
+        code: '15号',
         locationText: '大胡社区田间闸',
         lat: 36.442,
         lng: 116.008,
@@ -817,7 +828,7 @@
         village: '泰和新村',
         naturalVillage: '姜庄村',
         projectYear: '2022',
-        code: '林网01号',
+        code: '16号',
         locationText: '泰和新村南侧林带',
         lat: 36.455,
         lng: 115.993,
@@ -853,7 +864,7 @@
         village: '河东新村',
         naturalVillage: '前铺村',
         projectYear: '2023',
-        code: '林网02号',
+        code: '17号',
         locationText: '河东新村东侧防护林',
         lat: 36.45,
         lng: 115.99,
@@ -881,7 +892,7 @@
         street: '北城街道',
         village: '常楼新村',
         projectYear: '2021',
-        code: '林网03号',
+        code: '18号',
         locationText: '常楼新村道路两侧林网',
         lat: 36.466,
         lng: 115.97,
@@ -910,7 +921,7 @@
         village: '海盛新村',
         naturalVillage: '季海村',
         projectYear: '2022',
-        code: '林网04号',
+        code: '19号',
         locationText: '海盛新村西侧林带',
         lat: 36.4515,
         lng: 115.9945,
@@ -943,7 +954,7 @@
         street: '东城街道',
         village: '辛屯社区',
         projectYear: '2020',
-        code: '林网05号',
+        code: '20号',
         locationText: '辛屯社区北侧林网',
         lat: 36.436,
         lng: 116.002,
@@ -979,7 +990,7 @@
         village: '李官屯新村',
         naturalVillage: '王行村',
         projectYear: '2022',
-        code: '变压器01号',
+        code: '21号',
         locationText: '李官屯新村配电房',
         lat: 36.457,
         lng: 115.986,
@@ -1017,7 +1028,7 @@
         village: '冯庄新村',
         naturalVillage: '四合村',
         projectYear: '2023',
-        code: '变压器02号',
+        code: '22号',
         locationText: '冯庄新村东台区',
         lat: 36.462,
         lng: 115.992,
@@ -1046,7 +1057,7 @@
         street: '北城街道',
         village: '河刘新村',
         projectYear: '2021',
-        code: '变压器03号',
+        code: '23号',
         locationText: '河刘新村灌溉台区',
         lat: 36.469,
         lng: 115.963,
@@ -1076,7 +1087,7 @@
         village: '程麻新村',
         naturalVillage: '麻庄村',
         projectYear: '2022',
-        code: '变压器04号',
+        code: '24号',
         locationText: '程麻新村排灌站配电室',
         lat: 36.4485,
         lng: 115.983,
@@ -1110,7 +1121,7 @@
         street: '东城街道',
         village: '光岳社区',
         projectYear: '2020',
-        code: '变压器05号',
+        code: '25号',
         locationText: '光岳社区低压配电箱',
         lat: 36.441,
         lng: 116.006,
@@ -1143,6 +1154,6 @@
 
   global.HSFIssuesSeed = {
     build: buildIssuesSeed,
-    VERSION: 'issues-seed-v20',
+    VERSION: 'issues-seed-v24',
   };
 })(window);

@@ -239,8 +239,8 @@
           </div>
 
           <div class="rf-form-field" data-field="code">
-            <label class="rf-form-field__label" for="rf-rCode"><span class="rf-fp-req">*</span>项目编号</label>
-            <div class="rf-form-field__ctrl"><input id="rf-rCode" class="rf-form-input" type="text" placeholder="如：机井01号" aria-label="项目编号" autocomplete="off" required /></div>
+            <label class="rf-form-field__label" for="rf-rCode"><span class="rf-fp-req">*</span>设施编号</label>
+            <div class="rf-form-field__ctrl"><input id="rf-rCode" class="rf-form-input" type="text" placeholder="如：01号" aria-label="设施编号" autocomplete="off" required /></div>
           </div>
 
           <div class="rf-form-field" data-field="reporterName">
@@ -265,7 +265,7 @@
               <span class="m-report__yn-label"><span class="rf-fp-req">*</span>设施类型</span>
               <div class="m-yn-group" data-field="buildKind">
                 <label class="m-yn-item">
-                  <input type="radio" name="rf-rWellBuild" value="new" />
+                  <input type="radio" name="rf-rWellBuild" value="new" checked />
                   <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
                   <span class="m-yn-text">新建</span>
                 </label>
@@ -304,6 +304,10 @@
                 <span class="m-report__row-unit">个</span>
               </div>
             </div>
+            <div class="m-report__row m-report__row--fill-photos">
+              <span class="m-report__row-label"><span class="rf-fp-req">*</span>全景照片</span>
+              <div class="m-report__photos rf-well-fill-photos" id="rf-rWellFillPhotos" aria-label="全景照片"></div>
+            </div>
           </div>
 
           <div class="m-report__type-block" id="rf-rRoadBlock" hidden>
@@ -326,13 +330,6 @@
               <div class="m-report__row-ctrl rf-form-input-unit">
                 <input id="rf-rRoadThickness" class="m-report__row-input" type="number" min="0" step="any" inputmode="decimal" placeholder="请输入" aria-label="道路厚度" />
                 <span class="m-report__row-unit">米</span>
-              </div>
-            </div>
-            <div class="m-report__row m-report__row--input m-report__row--unit">
-              <span class="m-report__row-label">林网存活率</span>
-              <div class="m-report__row-ctrl rf-form-input-unit">
-                <input id="rf-rRoadTreeSurvive" class="m-report__row-input" type="number" min="0" inputmode="numeric" placeholder="请输入" aria-label="护林林网树木存活率" />
-                <span class="m-report__row-unit">棵</span>
               </div>
             </div>
           </div>
@@ -389,13 +386,6 @@
                 <span class="m-report__row-unit">株</span>
               </div>
             </div>
-            <div class="m-report__row m-report__row--input m-report__row--unit">
-              <span class="m-report__row-label">存活率</span>
-              <div class="m-report__row-ctrl rf-form-input-unit">
-                <input id="rf-rForestSurviveRate" class="m-report__row-input" type="number" min="0" max="100" step="any" inputmode="decimal" placeholder="请输入" aria-label="存活率" />
-                <span class="m-report__row-unit">%</span>
-              </div>
-            </div>
           </div>
 
           <div class="m-report__type-block" id="rf-rTransformerBlock" hidden>
@@ -428,18 +418,11 @@
           </div>
           </div>
 
-          <div class="rf-form-section" aria-hidden="true">地址与计划</div>
+          <div class="rf-form-section" aria-hidden="true">地址</div>
 
           <div class="rf-form-field" data-field="address">
             <label class="rf-form-field__label" for="rf-rAddress"><span class="rf-fp-req">*</span>地址</label>
             <div class="rf-form-field__ctrl"><input id="rf-rAddress" class="rf-form-input" type="text" placeholder="请输入现场地址" aria-label="现场地址" autocomplete="off" required /></div>
-          </div>
-
-          <div class="rf-form-field" data-field="planDate">
-            <label class="rf-form-field__label"><span class="rf-fp-req">*</span>计划完成</label>
-            <div class="rf-form-field__ctrl">
-              <div id="rf-rPlanDate" class="hsf-date-picker" aria-label="计划完成日期"></div>
-            </div>
           </div>
             </div>
 
@@ -450,7 +433,7 @@
           <div class="m-report__type-block rf-quiz-block" id="rf-rWellQuiz" hidden>
             <div class="rf-quiz-item" data-quiz-field="waterOut">
               <div class="m-report__row m-report__row--yn">
-                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>机井是否出水<span class="m-report__yn-hint">(≥5分钟)</span></span>
+                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>机井是否出水<span class="m-report__yn-hint">(≥1分钟)</span></span>
                 <div class="m-yn-group" data-field="waterOut">
                   <label class="m-yn-item"><input type="radio" name="rf-rWellWater" value="yes" /><span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span><span class="m-yn-text">是</span></label>
                   <label class="m-yn-item"><input type="radio" name="rf-rWellWater" value="no" /><span class="m-yn-box m-yn-box--no" aria-hidden="true"></span><span class="m-yn-text">否</span></label>
@@ -513,19 +496,6 @@
                 <div class="m-report__photos rf-quiz-photos" id="rf-quiz-photos-coverOk" aria-label="井台井盖现场照片"></div>
               </div>
             </div>
-            <div class="rf-quiz-item" data-quiz-field="transformerOk">
-              <div class="m-report__row m-report__row--yn">
-                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>变压器是否正常使用</span>
-                <div class="m-yn-group" data-field="transformerOk">
-                  <label class="m-yn-item"><input type="radio" name="rf-rWellTf" value="yes" /><span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span><span class="m-yn-text">是</span></label>
-                  <label class="m-yn-item"><input type="radio" name="rf-rWellTf" value="no" /><span class="m-yn-box m-yn-box--no" aria-hidden="true"></span><span class="m-yn-text">否</span></label>
-                </div>
-              </div>
-              <div class="rf-quiz-extra" hidden>
-                <textarea class="rf-form-textarea rf-quiz-desc" rows="2" placeholder="发现了什么问题？" aria-label="变压器问题描述"></textarea>
-                <div class="m-report__photos rf-quiz-photos" id="rf-quiz-photos-transformerOk" aria-label="变压器现场照片"></div>
-              </div>
-            </div>
           </div>
 
           <div class="m-report__type-block rf-quiz-block" id="rf-rRoadQuiz" hidden>
@@ -555,12 +525,25 @@
                 <div class="m-report__photos rf-quiz-photos" id="rf-quiz-photos-hasAsh" aria-label="灰土层现场照片"></div>
               </div>
             </div>
+            <div class="rf-quiz-item" data-quiz-field="hasRoadDamage">
+              <div class="m-report__row m-report__row--yn">
+                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>是否有道路损坏</span>
+                <div class="m-yn-group" data-field="hasRoadDamage">
+                  <label class="m-yn-item"><input type="radio" name="rf-rRoadDamage" value="yes" /><span class="m-yn-box m-yn-box--no" aria-hidden="true"></span><span class="m-yn-text">是</span></label>
+                  <label class="m-yn-item"><input type="radio" name="rf-rRoadDamage" value="no" /><span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span><span class="m-yn-text">否</span></label>
+                </div>
+              </div>
+              <div class="rf-quiz-extra" hidden>
+                <textarea class="rf-form-textarea rf-quiz-desc" rows="2" placeholder="发现了什么问题？" aria-label="道路损坏问题描述"></textarea>
+                <div class="m-report__photos rf-quiz-photos" id="rf-quiz-photos-hasRoadDamage" aria-label="道路损坏现场照片"></div>
+              </div>
+            </div>
           </div>
 
           <div class="m-report__type-block rf-quiz-block" id="rf-rBridgeQuiz" hidden>
             <div class="rf-quiz-item" data-quiz-field="needsRectify">
               <div class="m-report__row m-report__row--yn">
-                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>是否需要整改</span>
+                <span class="m-report__yn-label"><span class="rf-fp-req">*</span>是否有淤堵与损坏</span>
                 <div class="m-yn-group" data-field="needsRectify">
                   <label class="m-yn-item"><input type="radio" name="rf-rBridgeNeeds" value="yes" /><span class="m-yn-box m-yn-box--no" aria-hidden="true"></span><span class="m-yn-text">是</span></label>
                   <label class="m-yn-item"><input type="radio" name="rf-rBridgeNeeds" value="no" /><span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span><span class="m-yn-text">否</span></label>
@@ -669,6 +652,13 @@
               </div>
             </div>
           </div>
+          </div>
+
+          <div class="rf-form-field rf-form-field--plan-date" id="rf-quiz-plan-date-row" data-field="planDate" hidden>
+            <label class="rf-form-field__label" for="rf-rPlanDate"><span class="rf-fp-req">*</span>整改计划日期</label>
+            <div class="rf-form-field__ctrl">
+              <div id="rf-rPlanDate" class="hsf-date-picker" aria-label="整改计划日期"></div>
+            </div>
           </div>
 
           <div class="rf-form-section" aria-hidden="true">电子签名</div>

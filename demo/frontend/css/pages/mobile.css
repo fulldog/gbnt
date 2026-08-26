@@ -2637,6 +2637,19 @@ a.m-mine__row:visited {
   margin: 0 16px;
 }
 
+.m-report__fill-photos {
+  padding: 12px 0 4px;
+}
+
+.m-report__fill-photos-label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.m-report__fill-photos .m-report__photos {
+  margin: 0;
+}
+
 .m-report__row--loc-in-fill {
   margin: 0;
   width: 100%;

@@ -4,6 +4,8 @@
 (function (global) {
   'use strict';
 
+  var COL_COUNT = 16;
+
   function ensureXlsx() {
     if (!global.XLSX) {
       global.AppUI && global.AppUI.toast('表格组件未加载', 'error');
@@ -14,6 +16,20 @@
 
   function cell(v) {
     return v == null || v === '' ? '' : v;
+  }
+
+  function pushRowSpanMerges(merges, rows, colIndex, spanKey, startRow) {
+    var i = 0;
+    while (i < rows.length) {
+      var span = rows[i][spanKey];
+      if (span > 1) {
+        merges.push({
+          s: { r: startRow + i, c: colIndex },
+          e: { r: startRow + i + span - 1, c: colIndex },
+        });
+      }
+      i += span > 0 ? span : 1;
+    }
   }
 
   function exportStreetLedger(payload) {
@@ -27,14 +43,67 @@
     var title = '聊城经济技术开发区高标准农田建设项目' + short + '街道台账';
     var aoa = [];
     aoa.push([title]);
-    aoa.push(['序号', '建设项目', '涉及村庄', '村具体建设项目情况', '', '', '', '', '', '', '', '', '', '']);
-    aoa.push(['', '', '', '机井', '', '桥、涵、闸', '', '路/千米', '林网', '', '变压器', '', '负责人签字及村委盖章', '电话']);
-    aoa.push(['', '', '', '移交数量', '现有数', '移交数量', '现有数', '', '移交数量', '现有数', '移交数量', '现有数', '', '']);
+    aoa.push([
+      '序号',
+      '建设年份',
+      '街道',
+      '新村/社区',
+      '自然村',
+      '村具体建设项目情况',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ]);
+    aoa.push([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '机井',
+      '',
+      '桥、涵、闸',
+      '',
+      '路/千米',
+      '林网',
+      '',
+      '变压器',
+      '',
+      '负责人签字及村委盖章',
+      '电话',
+    ]);
+    aoa.push([
+      '',
+      '',
+      '',
+      '',
+      '',
+      '移交数量',
+      '现有数',
+      '移交数量',
+      '现有数',
+      '',
+      '移交数量',
+      '现有数',
+      '移交数量',
+      '现有数',
+      '',
+      '',
+    ]);
     rows.forEach(function (r) {
-      aoa.push([
+      var line = [
         r.seq,
-        cell(r.projectName),
-        cell(r.village),
+        r._yearRowSpan ? cell(r.projectYear) : '',
+        r._streetRowSpan ? cell(r.street) : '',
+        r._villageRowSpan ? cell(r.village) : '',
+        cell(r.naturalVillage),
         cell(r.wellHandover),
         cell(r.wellExisting),
         cell(r.bridgeHandover),
@@ -46,26 +115,34 @@
         cell(r.transformerExisting),
         cell(r.signer),
         cell(r.phone),
-      ]);
+      ];
+      aoa.push(line);
     });
-    aoa.push(['上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    aoa.push(['上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。']);
 
     var ws = global.XLSX.utils.aoa_to_sheet(aoa);
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 13 } },
-      { s: { r: 1, c: 3 }, e: { r: 1, c: 13 } },
-      { s: { r: 2, c: 3 }, e: { r: 2, c: 4 } },
+    var dataStart = 4;
+    var merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: COL_COUNT - 1 } },
+      { s: { r: 1, c: 5 }, e: { r: 1, c: COL_COUNT - 1 } },
       { s: { r: 2, c: 5 }, e: { r: 2, c: 6 } },
-      { s: { r: 2, c: 8 }, e: { r: 2, c: 9 } },
+      { s: { r: 2, c: 7 }, e: { r: 2, c: 8 } },
       { s: { r: 2, c: 10 }, e: { r: 2, c: 11 } },
+      { s: { r: 2, c: 12 }, e: { r: 2, c: 13 } },
       { s: { r: 1, c: 0 }, e: { r: 3, c: 0 } },
       { s: { r: 1, c: 1 }, e: { r: 3, c: 1 } },
       { s: { r: 1, c: 2 }, e: { r: 3, c: 2 } },
-      { s: { r: 2, c: 7 }, e: { r: 3, c: 7 } },
-      { s: { r: 2, c: 12 }, e: { r: 3, c: 12 } },
-      { s: { r: 2, c: 13 }, e: { r: 3, c: 13 } },
-      { s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: 13 } },
+      { s: { r: 1, c: 3 }, e: { r: 3, c: 3 } },
+      { s: { r: 1, c: 4 }, e: { r: 3, c: 4 } },
+      { s: { r: 2, c: 9 }, e: { r: 3, c: 9 } },
+      { s: { r: 2, c: 14 }, e: { r: 3, c: 14 } },
+      { s: { r: 2, c: 15 }, e: { r: 3, c: 15 } },
+      { s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: COL_COUNT - 1 } },
     ];
+    pushRowSpanMerges(merges, rows, 1, '_yearRowSpan', dataStart);
+    pushRowSpanMerges(merges, rows, 2, '_streetRowSpan', dataStart);
+    pushRowSpanMerges(merges, rows, 3, '_villageRowSpan', dataStart);
+    ws['!merges'] = merges;
     var wb = global.XLSX.utils.book_new();
     global.XLSX.utils.book_append_sheet(wb, ws, '街道台账');
     global.XLSX.writeFile(wb, '街道台账.xlsx');
@@ -79,13 +156,15 @@
       ? global.HSFLedgerData.streetTitleShort(street)
       : street;
     var rows = payload.rows || [];
+    var COL_COUNT = 22;
     var title =
       '聊城经济技术开发区高标准农田建设项目' + short + '街道机井（泵站）、桥涵、道路排查汇总台账';
     var aoa = [];
     aoa.push([title]);
     aoa.push([
       '街道',
-      '村',
+      '新村/社区',
+      '自然村',
       '是否全面完成排查（是/否）',
       '机井、桥涵、道路',
       '',
@@ -110,6 +189,7 @@
       '',
       '',
       '',
+      '',
       '已排查机井（泵站）总数（眼）',
       '其中运行正常机井（泵站）',
       '发现问题总数（个）',
@@ -129,8 +209,9 @@
       '',
       '',
     ]);
-    aoa.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    aoa.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
     aoa.push([
+      '',
       '',
       '',
       '',
@@ -157,6 +238,7 @@
       aoa.push([
         cell(r.street),
         cell(r.village),
+        cell(r.naturalVillage),
         cell(r.surveyDone),
         cell(r.wellInspected),
         cell(r.wellNormal),
@@ -200,32 +282,34 @@
       '',
       '',
       '',
+      '',
     ]);
 
     var ws = global.XLSX.utils.aoa_to_sheet(aoa);
     var last = aoa.length - 1;
     ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 20 } },
-      { s: { r: 1, c: 3 }, e: { r: 1, c: 9 } },
-      { s: { r: 1, c: 10 }, e: { r: 1, c: 15 } },
-      { s: { r: 1, c: 16 }, e: { r: 1, c: 19 } },
-      { s: { r: 1, c: 20 }, e: { r: 4, c: 20 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: COL_COUNT - 1 } },
+      { s: { r: 1, c: 4 }, e: { r: 1, c: 10 } },
+      { s: { r: 1, c: 11 }, e: { r: 1, c: 16 } },
+      { s: { r: 1, c: 17 }, e: { r: 1, c: 20 } },
+      { s: { r: 1, c: 21 }, e: { r: 4, c: 21 } },
       { s: { r: 1, c: 0 }, e: { r: 4, c: 0 } },
       { s: { r: 1, c: 1 }, e: { r: 4, c: 1 } },
       { s: { r: 1, c: 2 }, e: { r: 4, c: 2 } },
-      { s: { r: 2, c: 3 }, e: { r: 4, c: 3 } },
+      { s: { r: 1, c: 3 }, e: { r: 4, c: 3 } },
       { s: { r: 2, c: 4 }, e: { r: 4, c: 4 } },
       { s: { r: 2, c: 5 }, e: { r: 4, c: 5 } },
       { s: { r: 2, c: 6 }, e: { r: 4, c: 6 } },
       { s: { r: 2, c: 7 }, e: { r: 4, c: 7 } },
       { s: { r: 2, c: 8 }, e: { r: 4, c: 8 } },
       { s: { r: 2, c: 9 }, e: { r: 4, c: 9 } },
-      { s: { r: 2, c: 10 }, e: { r: 2, c: 11 } },
-      { s: { r: 2, c: 12 }, e: { r: 2, c: 13 } },
-      { s: { r: 2, c: 14 }, e: { r: 2, c: 15 } },
-      { s: { r: 2, c: 16 }, e: { r: 3, c: 19 } },
-      { s: { r: 4, c: 16 }, e: { r: 4, c: 19 } },
-      { s: { r: last, c: 0 }, e: { r: last, c: 20 } },
+      { s: { r: 2, c: 10 }, e: { r: 4, c: 10 } },
+      { s: { r: 2, c: 11 }, e: { r: 2, c: 12 } },
+      { s: { r: 2, c: 13 }, e: { r: 2, c: 14 } },
+      { s: { r: 2, c: 15 }, e: { r: 2, c: 16 } },
+      { s: { r: 2, c: 17 }, e: { r: 3, c: 20 } },
+      { s: { r: 4, c: 17 }, e: { r: 4, c: 20 } },
+      { s: { r: last, c: 0 }, e: { r: last, c: COL_COUNT - 1 } },
     ];
     var wb = global.XLSX.utils.book_new();
     global.XLSX.utils.book_append_sheet(wb, ws, '街道排查汇总');

@@ -131,7 +131,7 @@
         updateScrollState();
         var table = document.getElementById('ld-main-table');
         if (table && table.classList.contains('ledger-sheet-table--survey')) {
-          applyStickyColumns(table, 3);
+          applyStickyColumns(table, 4);
         }
       });
       updateScrollState();
@@ -179,9 +179,9 @@
     return html;
   }
 
-  var STREET_COL_WIDTHS = [4, 12, 9, 6, 6, 8, 8, 6, 6, 6, 6, 6, 13, 10];
+  var STREET_COL_WIDTHS = [3, 5, 6, 7, 6, 5, 5, 7, 6, 6, 5, 5, 5, 5, 12, 11];
   var SURVEY_COL_WIDTHS = [
-    5, 4, 6, 6, 6, 5, 6, 6, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 6,
+    7, 7, 5, 5, 6, 5, 5, 6, 5, 5, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 5,
   ];
 
   global.HSFLedgerCommon = {

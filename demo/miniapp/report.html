@@ -35,12 +35,12 @@
               </div>
             </div>
             <label class="m-report__row m-report__row--input" for="rCode">
-              <span class="m-report__row-label">项目编号</span>
+              <span class="m-report__row-label">设施编号</span>
               <input
                 id="rCode"
                 class="m-report__row-input"
-                placeholder="如：机井01号"
-                aria-label="项目编号"
+                placeholder="如：01号"
+                aria-label="设施编号"
                 autocomplete="off"
               />
             </label>
@@ -48,7 +48,7 @@
               <span class="m-report__yn-label">设施类型</span>
               <div class="m-yn-group" data-field="buildKind">
                 <label class="m-yn-item">
-                  <input type="radio" name="rWellBuild" value="new" />
+                  <input type="radio" name="rWellBuild" value="new" checked />
                   <span class="m-yn-box m-yn-box--yes" aria-hidden="true"></span>
                   <span class="m-yn-text">新建</span>
                 </label>
@@ -113,6 +113,10 @@
                 />
                 <span class="m-report__row-unit">个</span>
               </label>
+              <div class="m-report__fill-photos">
+                <span class="m-report__row-label m-report__fill-photos-label">全景照片</span>
+                <div class="m-report__photos" id="rWellFillPhotos" aria-label="全景照片"></div>
+              </div>
             </div>
             <div id="rRoadFillExtra" class="m-report__well-fill-extra" hidden>
               <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadLength">
@@ -156,19 +160,6 @@
                   aria-label="道路厚度"
                 />
                 <span class="m-report__row-unit">米</span>
-              </label>
-              <label class="m-report__row m-report__row--input m-report__row--unit" for="rRoadTreeSurvive">
-                <span class="m-report__row-label">林网存活率</span>
-                <input
-                  id="rRoadTreeSurvive"
-                  class="m-report__row-input"
-                  type="number"
-                  min="0"
-                  inputmode="numeric"
-                  placeholder="请输入"
-                  aria-label="护林林网树木存活率"
-                />
-                <span class="m-report__row-unit">棵</span>
               </label>
             </div>
             <div id="rBridgeFillExtra" class="m-report__well-fill-extra" hidden>

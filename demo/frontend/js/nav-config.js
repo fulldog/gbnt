@@ -22,7 +22,7 @@
         { label: '组织架构', icon: 'org', path: 'web/sys-org.html' },
         { label: '工作人员', icon: 'users', path: 'web/sys-staff.html' },
         { label: '角色权限', icon: 'shield', path: 'web/sys-roles.html' },
-        { label: '数据字典', icon: 'dict', path: 'web/sys-dict.html' },
+        // { label: '数据字典', icon: 'dict', path: 'web/sys-dict.html' },
         { label: '操作日志', icon: 'log', path: 'web/sys-logs.html' },
       ],
     },

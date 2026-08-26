@@ -5,7 +5,7 @@
   var A = global.TzttAdmin;
   var TABLE_ID = "tblDictItems";
   var COLS = ["序号", "选项名称", "选项值", "排序号", "创建时间", "操作"];
-  var DICT_VERSION = 2;
+  var DICT_VERSION = 4;
   var SEED_CREATED = "2026/01/08 09:00:00";
   var YES_NO_OPTS = [
     { label: "是", value: "yes" },
@@ -39,9 +39,9 @@
       { typeId: "dt_well", key: "wiringOk", label: "走线是否规范", sort: 4, options: YES_NO_OPTS },
       { typeId: "dt_well", key: "boxOk", label: "配电箱及电表等设施是否完好", sort: 5, options: YES_NO_OPTS },
       { typeId: "dt_well", key: "coverOk", label: "井台、井盖是否完整", sort: 6, options: YES_NO_OPTS },
-      { typeId: "dt_well", key: "transformerOk", label: "变压器是否正常使用", sort: 7, options: YES_NO_OPTS },
       { typeId: "dt_road", key: "hasShoulder", label: "路肩", sort: 1, options: YES_NO_OPTS },
       { typeId: "dt_road", key: "hasAsh", label: "灰土层", sort: 2, options: YES_NO_OPTS },
+      { typeId: "dt_road", key: "hasRoadDamage", label: "是否有道路损坏", sort: 3, options: YES_NO_OPTS },
       { typeId: "dt_bridge", key: "kind", label: "设施类型", sort: 1, options: [{ label: "桥", value: "bridge" }, { label: "涵", value: "culvert" }, { label: "闸", value: "gate" }] },
       { typeId: "dt_forest", key: "brokenBelt", label: "林带是否断带", sort: 1, options: YES_NO_OPTS },
       { typeId: "dt_forest", key: "deadTrees", label: "是否有枯死木", sort: 2, options: YES_NO_OPTS },

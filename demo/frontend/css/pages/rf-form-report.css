@@ -69,12 +69,12 @@
   grid-column: 3;
 }
 
-/* 拍平嵌套，子项直接落入各栏两列栅格 */
-#rf-form-overlay .rf-form-col .rf-form-field,
+/* 拍平嵌套，子项直接落入各栏两列栅格（全景照片 / 电子签名 / 整改计划日期除外） */
+#rf-form-overlay .rf-form-col .rf-form-field:not(.rf-form-field--sign):not(.rf-form-field--plan-date),
 #rf-form-overlay .rf-form-col #rf-type-fields,
 #rf-form-overlay .rf-form-col #rf-quiz-fields,
 #rf-form-overlay .rf-form-col .m-report__type-block.is-active,
-#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row,
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row:not(.m-report__row--fill-photos),
 #rf-form-overlay .rf-form-col .rf-quiz-item .m-report__row {
   display: contents;
 }
@@ -118,6 +118,54 @@
   grid-column: 2;
   min-width: 0;
   align-self: center;
+}
+
+/* 机井全景照片：独占一行，避免拍平后与「地址与计划」抢格 */
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row--fill-photos {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: var(--rf-label-w) 1fr;
+  column-gap: 12px;
+  align-items: start;
+  margin: 0 0 8px;
+}
+
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row--fill-photos > .m-report__row-label {
+  grid-column: 1;
+  justify-self: end;
+  align-self: start;
+  padding-top: 4px;
+}
+
+#rf-form-overlay .rf-form-col .m-report__type-block.is-active .m-report__row--fill-photos > .m-report__photos {
+  grid-column: 2;
+  min-width: 0;
+  align-self: start;
+  min-height: 88px;
+}
+
+/* 右栏：排查末题下方整改计划日期（仅待整改时出现） */
+#rf-form-overlay .rf-form-col .rf-form-field--plan-date {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: var(--rf-label-w) 1fr;
+  column-gap: 12px;
+  align-items: center;
+  margin: 4px 0 12px;
+}
+
+#rf-form-overlay .rf-form-field--plan-date[hidden] {
+  display: none !important;
+}
+
+#rf-form-overlay .rf-form-field--plan-date > .rf-form-field__label {
+  grid-column: 1;
+  justify-self: end;
+}
+
+#rf-form-overlay .rf-form-field--plan-date > .rf-form-field__ctrl {
+  grid-column: 2;
+  min-width: 0;
 }
 
 /* 排查清单：描述+照片始终展示（是/否只改必填/选填） */
@@ -431,28 +479,42 @@
 }
 
 /* ---------- 电子签名（仅保留大标题，画布拉满右栏） ---------- */
-#rf-form-overlay .rf-form-field--sign > .rf-form-field__ctrl {
+#rf-form-overlay .rf-form-col .rf-form-field--sign {
+  display: block;
   grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+#rf-form-overlay .rf-form-field--sign > .rf-form-field__ctrl {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 #rf-form-overlay .m-report__sign-board {
   position: relative;
+  display: block;
   width: 100%;
+  max-width: 100%;
   min-height: 220px;
   border: 1px solid #e5d4a8;
   border-radius: 8px;
   overflow: hidden;
-  background: #fffef8;
+  background: #faf3dc;
   box-sizing: border-box;
 }
 
 #rf-form-overlay .m-report__sign-canvas {
   display: block;
   width: 100%;
+  max-width: 100%;
   height: 220px;
   touch-action: none;
   cursor: crosshair;
   background: transparent;
+  box-sizing: border-box;
 }
 
 #rf-form-overlay .m-report__sign-clear {

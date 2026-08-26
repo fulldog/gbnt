@@ -52,30 +52,30 @@
   var QUIZ_META = {
     well: {
       blockKey: 'well',
-      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'],
+      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk'],
       names: {
         waterOut: '机井是否出水',
         pipeOk: '管道是否按要求连接',
         wiringOk: '走线是否规范',
         boxOk: '配电箱及电表等设施是否完好',
         coverOk: '井台、井盖是否完整',
-        transformerOk: '变压器是否正常使用',
       },
-      hints: { waterOut: '(≥5分钟)' },
+      hints: { waterOut: '(≥1分钟)' },
     },
     road: {
       blockKey: 'road',
-      fields: ['hasShoulder', 'hasAsh'],
+      fields: ['hasShoulder', 'hasAsh', 'hasRoadDamage'],
       names: {
         hasShoulder: '是否有路肩',
         hasAsh: '是否有灰土层',
+        hasRoadDamage: '是否有道路损坏',
       },
       hints: {},
     },
     bridge: {
       blockKey: 'bridge',
       fields: ['needsRectify'],
-      names: { needsRectify: '是否需要整改' },
+      names: { needsRectify: '是否有淤堵与损坏' },
       hints: {},
     },
     forest: {
@@ -177,6 +177,46 @@
     return i[meta.blockKey] || null;
   }
 
+  function collectQuizPhotoSet(i, meta, block) {
+    var set = {};
+    if (!meta) return set;
+    meta.fields.forEach(function (field) {
+      var slot = getQuizSlot(i, field, block);
+      if (slot && slot.photos && slot.photos.length) {
+        slot.photos.forEach(function (p) {
+          if (p) set[p] = true;
+        });
+      }
+    });
+    return set;
+  }
+
+  /** 机井填写页全景照片：优先 well.fillPhotos，否则从总图减去排查题照片 */
+  function getWellFillPhotos(i) {
+    var w = i.well || {};
+    if (w.fillPhotos && w.fillPhotos.length) {
+      return w.fillPhotos.filter(Boolean);
+    }
+    var quizSet = collectQuizPhotoSet(i, QUIZ_META.well, w);
+    var fill = [];
+    (i.photos || []).forEach(function (p) {
+      if (p && !quizSet[p]) fill.push(p);
+    });
+    return fill;
+  }
+
+  function buildFillPhotosBlock(label, photos, dataAttr) {
+    if (!photos || !photos.length) return '';
+    return (
+      '<div class="m-issue-detail__fill-photos">' +
+      '<span class="m-issue-detail__fill-photos-label">' +
+      esc(label) +
+      '</span>' +
+      thumbHtml(photos, dataAttr) +
+      '</div>'
+    );
+  }
+
   function getQuizSlot(i, field, block) {
     if (block && block.quizSteps && block.quizSteps[field]) {
       return block.quizSteps[field];
@@ -194,7 +234,7 @@
     var html = '';
     html += row('行政区划', regionLine(i) || '—');
     html += row('项目年度', formatProjectYear(i));
-    html += row('编号', i.code || '—');
+    html += row('设施编号', i.code || '—');
     html += row(
       '排查日期',
       window.AppData && typeof AppData.formatInspectionDate === 'function'
@@ -209,16 +249,15 @@
       html += row('出水口损坏', w.outletDamaged != null ? w.outletDamaged + ' 个' : '—');
       html += row('护筒总数', w.casingTotal != null ? w.casingTotal + ' 个' : '—');
       html += row('护筒损坏', w.casingDamaged != null ? w.casingDamaged + ' 个' : '—');
+      html += buildFillPhotosBlock('全景照片', getWellFillPhotos(i), 'fill-preview');
     } else if (i.type === 'road') {
       var r = i.road || {};
       var len = r.length != null ? r.length : i.length;
       var wid = r.width != null ? r.width : i.width;
       var thk = r.thickness != null ? r.thickness : i.thickness;
-      var trees = r.treeSurvive != null ? r.treeSurvive : i.treeSurvive;
       html += row('长度', len != null && len !== '' ? len + ' 千米' : '—');
       html += row('宽度', wid != null && wid !== '' ? wid + ' 米' : '—');
       html += row('厚度', thk != null && thk !== '' ? thk + ' 米' : '—');
-      html += row('林网存活率', trees != null && trees !== '' ? trees + ' 棵' : '—');
     } else if (i.type === 'bridge') {
       var b = i.bridge || {};
       var bl = b.length != null ? b.length : i.length;
@@ -230,7 +269,6 @@
       var f = i.forest || {};
       html += row('移交株数', f.handoverCount != null ? f.handoverCount + ' 株' : '—');
       html += row('现有株数', f.existingCount != null ? f.existingCount + ' 株' : '—');
-      html += row('存活率', f.surviveRate != null ? f.surviveRate + '%' : '—');
     } else if (i.type === 'transformer') {
       var t = i.transformer || {};
       html += row('容量', t.capacity != null ? t.capacity + ' kVA' : '—');
@@ -567,6 +605,12 @@
   setupDistanceButton(mapHref);
 
   root.querySelectorAll('[data-quiz-preview]').forEach(function (img) {
+    img.addEventListener('click', function () {
+      openPreview(img.getAttribute('src') || img.src);
+    });
+  });
+
+  root.querySelectorAll('[data-fill-preview]').forEach(function (img) {
     img.addEventListener('click', function () {
       openPreview(img.getAttribute('src') || img.src);
     });

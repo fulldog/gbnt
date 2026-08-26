@@ -18,30 +18,30 @@
   var QUIZ_META = {
     well: {
       blockKey: 'well',
-      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'],
+      fields: ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk'],
       names: {
         waterOut: '机井是否出水',
         pipeOk: '管道是否按要求连接',
         wiringOk: '走线是否规范',
         boxOk: '配电箱及电表等设施是否完好',
         coverOk: '井台、井盖是否完整',
-        transformerOk: '变压器是否正常使用',
       },
-      hints: { waterOut: '(≥5分钟)' },
+      hints: { waterOut: '(≥1分钟)' },
     },
     road: {
       blockKey: 'road',
-      fields: ['hasShoulder', 'hasAsh'],
+      fields: ['hasShoulder', 'hasAsh', 'hasRoadDamage'],
       names: {
         hasShoulder: '是否有路肩',
         hasAsh: '是否有灰土层',
+        hasRoadDamage: '是否有道路损坏',
       },
       hints: {},
     },
     bridge: {
       blockKey: 'bridge',
       fields: ['needsRectify'],
-      names: { needsRectify: '是否需要整改' },
+      names: { needsRectify: '是否有淤堵与损坏' },
       hints: {},
     },
     forest: {
@@ -222,6 +222,45 @@
     return item[meta.blockKey] || null;
   }
 
+  function collectQuizPhotoSet(item, meta, block) {
+    var set = {};
+    if (!meta) return set;
+    meta.fields.forEach(function (field) {
+      var slot = getQuizSlot(item, field, block);
+      if (slot && slot.photos && slot.photos.length) {
+        slot.photos.forEach(function (p) {
+          if (p) set[p] = true;
+        });
+      }
+    });
+    return set;
+  }
+
+  function getWellFillPhotos(item) {
+    var w = item.well || {};
+    if (w.fillPhotos && w.fillPhotos.length) {
+      return w.fillPhotos.filter(Boolean);
+    }
+    var quizSet = collectQuizPhotoSet(item, QUIZ_META.well, w);
+    var fill = [];
+    (item.photos || []).forEach(function (p) {
+      if (p && !quizSet[p]) fill.push(p);
+    });
+    return fill;
+  }
+
+  function buildWellFillPhotosBlock(item, photoLoading) {
+    var photos = getWellFillPhotos(item);
+    if (!photos.length) return '';
+    return (
+      '<div class="rf-detail-row rf-detail-row--fill-photos">' +
+      '<span class="rf-detail-label">全景照片</span>' +
+      '<div class="rf-detail-value rf-detail-value--photos">' +
+      renderPhotos(photos, 'quiz', photoLoading) +
+      '</div></div>'
+    );
+  }
+
   function getQuizSlot(item, field, block) {
     if (item.quizSteps && item.quizSteps[field]) {
       return item.quizSteps[field];
@@ -253,7 +292,7 @@
     return out;
   }
 
-  function buildFillFields(item) {
+  function buildFillFields(item, photoLoading) {
     var html = '';
     if (item.type === 'well') {
       var w = item.well || {};
@@ -262,16 +301,15 @@
       html += renderRow('出水口损坏', w.outletDamaged != null ? w.outletDamaged + ' 个' : '');
       html += renderRow('护筒总数', w.casingTotal != null ? w.casingTotal + ' 个' : '');
       html += renderRow('护筒损坏', w.casingDamaged != null ? w.casingDamaged + ' 个' : '');
+      html += buildWellFillPhotosBlock(item, photoLoading);
     } else if (item.type === 'road') {
       var r = item.road || {};
       var len = r.length != null ? r.length : item.length;
       var wid = r.width != null ? r.width : item.width;
       var thk = r.thickness != null ? r.thickness : item.thickness;
-      var trees = r.treeSurvive != null ? r.treeSurvive : item.treeSurvive;
       html += renderRow('长度', len != null && len !== '' ? len + ' 千米' : '');
       html += renderRow('宽度', wid != null && wid !== '' ? wid + ' 米' : '');
       html += renderRow('厚度', thk != null && thk !== '' ? thk + ' 米' : '');
-      html += renderRow('林网存活率', trees != null && trees !== '' ? trees + ' 棵' : '');
     } else if (item.type === 'bridge') {
       var b = item.bridge || {};
       var bl = b.length != null ? b.length : item.length;
@@ -283,7 +321,6 @@
       var f = item.forest || {};
       html += renderRow('移交株数', f.handoverCount != null ? f.handoverCount + ' 株' : '');
       html += renderRow('现有株数', f.existingCount != null ? f.existingCount + ' 株' : '');
-      html += renderRow('存活率', f.surviveRate != null ? f.surviveRate + '%' : '');
     } else if (item.type === 'transformer') {
       var t = item.transformer || {};
       html += renderRow('容量', t.capacity != null ? t.capacity + ' kVA' : '');
@@ -353,15 +390,15 @@
     );
   }
 
-  function buildBasicBlock(item) {
+  function buildBasicBlock(item, photoLoading) {
     var typeLabel = (global.AppData && AppData.TYPE_LABEL[item.type]) || item.type;
     var rows =
       renderRow('问题类型', typeLabel) +
       renderRow('行政区划', regionLine(item)) +
       renderRow('项目年度', formatProjectYear(item)) +
-      renderRow('项目编号', item.code) +
+      renderRow('设施编号', item.code) +
       renderRow('排查日期', formatInspectionDate(item)) +
-      buildFillFields(item) +
+      buildFillFields(item, photoLoading) +
       renderRow('现场地址', item.address || item.locationText);
     return renderBlock('基本信息', '<div class="rf-detail-rows">' + rows + '</div>');
   }
@@ -387,7 +424,7 @@
     var legacySrc = quizPhotos.length ? [] : photoSources(item, 'before');
     var body = '';
 
-    body += buildBasicBlock(item);
+    body += buildBasicBlock(item, photoLoading);
 
     if (quizHtml) {
       body += quizHtml;

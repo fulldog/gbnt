@@ -806,6 +806,18 @@
   word-break: break-word;
 }
 
+#rf-detail-overlay .rf-detail-row--fill-photos {
+  align-items: flex-start;
+}
+
+#rf-detail-overlay .rf-detail-value--photos {
+  padding-top: 2px;
+}
+
+#rf-detail-overlay .rf-detail-value--photos .rf-detail-photos--quiz {
+  margin: 0;
+}
+
 .rf-detail-col {
   min-width: 0;
 }

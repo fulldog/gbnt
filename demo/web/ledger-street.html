@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="../frontend/css/vben-shell.css" />
     <link rel="stylesheet" href="../frontend/css/pages/rectify-hub.css" />
     <link rel="stylesheet" href="../frontend/css/atomic-select.css" />
-    <link rel="stylesheet" href="../frontend/css/pages/ledger-hub.css" />
+    <link rel="stylesheet" href="../frontend/css/pages/ledger-hub.css?v=20260826c" />
     <link rel="stylesheet" href="../frontend/css/range-picker.css" />
   </head>
   <body>
@@ -64,6 +64,10 @@
                       <span class="tools-left-title">街道台账</span>
                     </div>
                     <div class="tools-right-ops">
+                      <div class="ld-edit-actions" id="ld-edit-actions" hidden>
+                        <button type="button" class="btn-ghost" id="ld-btn-restore-default">恢复默认</button>
+                        <button type="button" class="btn-primary" id="ld-btn-save-edit">保 存</button>
+                      </div>
                       <button type="button" class="btn-ghost" id="ld-btn-export">导 出</button>
                       <div class="tool-icon-btn" id="ld-btn-toggle-query" title="隐藏/显示查询">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -111,11 +115,13 @@
     <script src="../frontend/js/vben/layout.js"></script>
     <script src="../frontend/js/layout.js"></script>
     <script src="../frontend/libs/xlsx/xlsx.full.min.js"></script>
+    <script src="../frontend/js/system-admin/hsf-sys-seed.js"></script>
+    <script src="../frontend/js/system-admin/tztt-sys-storage.js"></script>
     <script src="../frontend/js/atomic-select.js"></script>
     <script src="../frontend/js/range-picker.js"></script>
-    <script src="../frontend/js/ledger-data.js"></script>
-    <script src="../frontend/js/ledger-xlsx.js"></script>
-    <script src="../frontend/js/pages/ledger-common.js"></script>
-    <script src="../frontend/js/pages/ledger-street.js"></script>
+    <script src="../frontend/js/pages/ledger-common.js?v=20260826b"></script>
+    <script src="../frontend/js/ledger-data.js?v=20260826b"></script>
+    <script src="../frontend/js/ledger-xlsx.js?v=20260826b"></script>
+    <script src="../frontend/js/pages/ledger-street.js?v=20260826b"></script>
   </body>
 </html>

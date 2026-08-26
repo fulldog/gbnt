@@ -69,17 +69,38 @@
       ctx.restore();
     }
 
+    function readHostSize() {
+      var host = canvas.parentElement;
+      var cs = global.getComputedStyle(canvas);
+      var cssHeight = parseFloat(cs.height);
+      if (isNaN(cssHeight) || cssHeight < 1) {
+        cssHeight = host ? parseFloat(global.getComputedStyle(host).minHeight) : 0;
+      }
+      if (isNaN(cssHeight) || cssHeight < 1) cssHeight = 220;
+
+      var width = 0;
+      if (host) width = host.getBoundingClientRect().width;
+      if (width < 1) width = canvas.getBoundingClientRect().width;
+      return {
+        width: Math.max(0, Math.floor(width)),
+        height: Math.floor(cssHeight),
+      };
+    }
+
     function resize() {
-      var rect = canvas.getBoundingClientRect();
-      cssW = rect.width;
-      cssH = rect.height;
+      var size = readHostSize();
+      cssW = size.width;
+      cssH = size.height;
       if (cssW < 1 || cssH < 1) return;
       dpr = global.devicePixelRatio || 1;
       var snapshot = hasStroke ? canvas.toDataURL('image/png') : '';
+      /* 勿写死像素宽，否则容器变宽后宣纸仍停在初次宽度 */
+      canvas.style.display = 'block';
+      canvas.style.width = '100%';
+      canvas.style.maxWidth = '100%';
+      canvas.style.height = cssH + 'px';
       canvas.width = Math.floor(cssW * dpr);
       canvas.height = Math.floor(cssH * dpr);
-      canvas.style.width = cssW + 'px';
-      canvas.style.height = cssH + 'px';
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
       drawPaperBg();
@@ -151,9 +172,15 @@
             resize();
           })
         : null;
-    if (ro) ro.observe(canvas);
-    else global.addEventListener('resize', resize);
-    requestAnimationFrame(resize);
+    var resizeTarget = canvas.parentElement || canvas;
+    var onWindowResize = function () {
+      resize();
+    };
+    if (ro) ro.observe(resizeTarget);
+    global.addEventListener('resize', onWindowResize);
+    requestAnimationFrame(function () {
+      requestAnimationFrame(resize);
+    });
 
     function clear() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -192,7 +219,7 @@
         canvas.removeEventListener('pointercancel', endStroke);
         canvas.removeEventListener('pointerleave', endStroke);
         if (ro) ro.disconnect();
-        else global.removeEventListener('resize', resize);
+        global.removeEventListener('resize', onWindowResize);
       },
     };
   }

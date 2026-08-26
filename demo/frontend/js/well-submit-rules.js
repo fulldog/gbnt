@@ -18,18 +18,49 @@
 (function (global) {
   'use strict';
 
-  var QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'];
-  var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh'];
+  var QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk'];
+  /** 道路选项页全部题目（含不参与状态判定的路肩/灰土层） */
+  var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh', 'hasRoadDamage'];
+  /** 道路状态仅看「是否有道路损坏」：是→待整改，否→已排查 */
+  var ROAD_STATUS_FIELDS = ['hasRoadDamage'];
+  var ROAD_STATUS_NEGATIVE = ['hasRoadDamage'];
   var FOREST_QUIZ_FIELDS = ['brokenBelt', 'deadTrees', 'pest'];
   var TRANSFORMER_QUIZ_FIELDS = ['powered', 'deviceOk', 'cabinetOk', 'illegalWire'];
 
   var TYPE_QUIZ_CONFIG = {
     well: { fields: QUIZ_FIELDS, negative: [] },
-    road: { fields: ROAD_QUIZ_FIELDS, negative: [] },
+    road: { fields: ROAD_STATUS_FIELDS, negative: ROAD_STATUS_NEGATIVE },
     bridge: { fields: ['needsRectify'], negative: ['needsRectify'] },
     forest: { fields: FOREST_QUIZ_FIELDS, negative: FOREST_QUIZ_FIELDS.slice() },
     transformer: { fields: TRANSFORMER_QUIZ_FIELDS, negative: ['illegalWire'] },
   };
+
+  /** 选项页选定是/否后仍可不传照片的字段 */
+  var QUIZ_PHOTO_OPTIONAL_FIELDS = ['wiringOk', 'hasShoulder', 'hasAsh'];
+
+  /**
+   * 选项页是否须至少 1 张照片（出水=是走 AppWellWaterPhotos，不在此列）
+   * @param {string} field
+   * @param {string} ans yes|no
+   */
+  function quizStepRequiresPhoto(field, ans) {
+    if (!field || !ans) return false;
+    if (QUIZ_PHOTO_OPTIONAL_FIELDS.indexOf(field) !== -1) return false;
+    if (field === 'waterOut' && ans === 'yes') return false;
+    return true;
+  }
+
+  /** 路肩/灰土层：是/否均不强制描述（不视为「存在问题」） */
+  function quizAnswerIndicatesIssue(ans, field, type) {
+    if (!ans || !field) return false;
+    if (field === 'hasShoulder' || field === 'hasAsh') return false;
+    var cfg = TYPE_QUIZ_CONFIG[type] || { negative: [] };
+    var neg = cfg.negative || [];
+    /* 道路 UI 含 hasRoadDamage，须按反向题判断（即使 status fields 单独配置） */
+    if (field === 'hasRoadDamage') return ans === 'yes';
+    if (neg.indexOf(field) !== -1) return ans === 'yes';
+    return ans === 'no';
+  }
 
   var STATUS = {
     pending: 'pending',
@@ -75,7 +106,7 @@
   }
 
   function evaluateRoadQuiz(quizData) {
-    return evaluateQuiz(quizData, ROAD_QUIZ_FIELDS, []);
+    return evaluateQuiz(quizData, ROAD_STATUS_FIELDS, ROAD_STATUS_NEGATIVE);
   }
 
   function evaluateWizardQuiz(quizData, type) {
@@ -241,7 +272,7 @@
    * 道路向导提交：写入 status / assignee，并模拟推送
    */
   function applyRoadSubmit(payload, quizData, region) {
-    return applyTypeSubmit(payload, quizData, region, ROAD_QUIZ_FIELDS, []);
+    return applyTypeSubmit(payload, quizData, region, ROAD_STATUS_FIELDS, ROAD_STATUS_NEGATIVE);
   }
 
   /**
@@ -255,9 +286,14 @@
   global.AppWellSubmitRules = {
     QUIZ_FIELDS: QUIZ_FIELDS,
     ROAD_QUIZ_FIELDS: ROAD_QUIZ_FIELDS,
+    ROAD_STATUS_FIELDS: ROAD_STATUS_FIELDS,
+    ROAD_STATUS_NEGATIVE: ROAD_STATUS_NEGATIVE,
     FOREST_QUIZ_FIELDS: FOREST_QUIZ_FIELDS,
+    quizAnswerIndicatesIssue: quizAnswerIndicatesIssue,
     TRANSFORMER_QUIZ_FIELDS: TRANSFORMER_QUIZ_FIELDS,
     TYPE_QUIZ_CONFIG: TYPE_QUIZ_CONFIG,
+    QUIZ_PHOTO_OPTIONAL_FIELDS: QUIZ_PHOTO_OPTIONAL_FIELDS,
+    quizStepRequiresPhoto: quizStepRequiresPhoto,
     STATUS: STATUS,
     STATUS_LABEL: STATUS_LABEL,
     evaluateQuiz: evaluateQuiz,

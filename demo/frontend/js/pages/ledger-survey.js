@@ -4,6 +4,8 @@
 
   var filtersApi = null;
   var lastPayload = null;
+  var COL_COUNT = 22;
+  var STICKY_COUNT = 4;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -28,10 +30,12 @@
     var rows = payload.rows || [];
     var html = HSFLedgerCommon.renderColgroup(HSFLedgerCommon.SURVEY_COL_WIDTHS);
     html += '<thead>';
-    html += '<tr class="ledger-title-row"><th colspan="21">' + esc(titleText(payload.street)) + '</th></tr>';
+    html += '<tr class="ledger-title-row"><th colspan="' + COL_COUNT + '">' + esc(titleText(payload.street)) + '</th></tr>';
     html +=
-      '<tr><th rowspan="4" class="ld-sticky-col ld-sticky-col-0">街道</th><th rowspan="4" class="ld-sticky-col ld-sticky-col-1">村</th>' +
-      '<th rowspan="4" class="ld-sticky-col ld-sticky-col-2 ld-sticky-last">是否全面完成排查（是/否）</th>' +
+      '<tr><th rowspan="4" class="ld-sticky-col ld-sticky-col-0">街道</th>' +
+      '<th rowspan="4" class="ld-sticky-col ld-sticky-col-1">新村/社区</th>' +
+      '<th rowspan="4" class="ld-sticky-col ld-sticky-col-2">自然村</th>' +
+      '<th rowspan="4" class="ld-sticky-col ld-sticky-col-3 ld-sticky-last">是否全面完成排查（是/否）</th>' +
       '<th colspan="7">机井、桥涵、道路</th><th colspan="6">排查整改情况（个）</th>' +
       '<th colspan="4">运行管护排查联系人</th><th rowspan="4">负责人签字：<br>（盖章）</th></tr>';
     html +=
@@ -46,7 +50,7 @@
       '<th colspan="4">联系电话：</th></tr>';
     html += '</thead><tbody>';
     if (!rows.length) {
-      html += '<tr class="ledger-empty"><td colspan="21">暂无数据</td></tr>';
+      html += '<tr class="ledger-empty"><td colspan="' + COL_COUNT + '">暂无数据</td></tr>';
     } else {
       rows.forEach(function (r) {
         html +=
@@ -54,7 +58,9 @@
           esc(r.street) +
           '</td><td class="ld-sticky-col ld-sticky-col-1">' +
           esc(r.village) +
-          '</td><td class="ld-sticky-col ld-sticky-col-2 ld-sticky-last">' +
+          '</td><td class="ld-sticky-col ld-sticky-col-2">' +
+          esc(r.naturalVillage) +
+          '</td><td class="ld-sticky-col ld-sticky-col-3 ld-sticky-last">' +
           esc(r.surveyDone) +
           '</td><td>' +
           esc(r.wellInspected) +
@@ -93,10 +99,12 @@
     }
     html += '</tbody><tfoot>';
     html +=
-      '<tr class="ledger-foot-row"><td colspan="21">注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字</td></tr>';
+      '<tr class="ledger-foot-row"><td colspan="' +
+      COL_COUNT +
+      '">注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字</td></tr>';
     html += '</tfoot>';
     table.innerHTML = html;
-    HSFLedgerCommon.afterTableRender(table, 3);
+    HSFLedgerCommon.afterTableRender(table, STICKY_COUNT);
   }
 
   function refresh() {
@@ -114,7 +122,7 @@
     onRefresh: function () {
       refresh();
       var table = document.getElementById('ld-main-table');
-      HSFLedgerCommon.afterTableRender(table, 3);
+      HSFLedgerCommon.afterTableRender(table, STICKY_COUNT);
     },
     onExport: function () {
       if (!lastPayload) refresh();

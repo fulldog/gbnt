@@ -33,19 +33,19 @@
     };
     var BRIDGE_KIND_LABEL = { bridge: '桥', culvert: '涵', gate: '闸' };
 
-    var WELL_QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk', 'transformerOk'];
+    var WELL_QUIZ_FIELDS = ['waterOut', 'pipeOk', 'wiringOk', 'boxOk', 'coverOk'];
     var WELL_QUIZ_NAMES = {
       waterOut: '机井是否出水',
       pipeOk: '管道是否按要求连接',
       wiringOk: '走线是否规范',
       boxOk: '配电箱及电表等设施是否完好',
       coverOk: '井台、井盖是否完整',
-      transformerOk: '变压器是否正常使用',
     };
-    var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh'];
+    var ROAD_QUIZ_FIELDS = ['hasShoulder', 'hasAsh', 'hasRoadDamage'];
     var ROAD_QUIZ_NAMES = {
       hasShoulder: '是否有路肩',
       hasAsh: '是否有灰土层',
+      hasRoadDamage: '是否有道路损坏',
     };
     var FOREST_QUIZ_FIELDS = ['brokenBelt', 'deadTrees', 'pest'];
     var FOREST_QUIZ_NAMES = {
@@ -61,8 +61,9 @@
       illegalWire: '是否私拉乱接',
     };
     var BRIDGE_QUIZ_FIELDS = ['needsRectify'];
-    var BRIDGE_QUIZ_NAMES = { needsRectify: '是否需要整改' };
+    var BRIDGE_QUIZ_NAMES = { needsRectify: '是否有淤堵与损坏' };
     var NEGATIVE_QUIZ_FIELDS = {
+      road: ['hasRoadDamage'],
       bridge: ['needsRectify'],
       forest: ['brokenBelt', 'deadTrees', 'pest'],
       transformer: ['illegalWire'],
@@ -95,6 +96,8 @@
     var editingId = null;
     var quizData = {};
     var quizStrips = {};
+    var wellFillPhotos = [];
+    var wellFillPhotoStrip = null;
     var signaturePad = null;
     var signatureData = '';
 
@@ -158,10 +161,54 @@
       return list.indexOf(field) !== -1;
     }
 
+    function quizStepRequiresPhoto(field, ans) {
+      if (global.AppWellSubmitRules && typeof AppWellSubmitRules.quizStepRequiresPhoto === 'function') {
+        return AppWellSubmitRules.quizStepRequiresPhoto(field, ans);
+      }
+      if (!field || !ans) return false;
+      if (field === 'wiringOk') return false;
+      if (field === 'waterOut' && ans === 'yes') return false;
+      return true;
+    }
+
     function quizAnswerIndicatesIssue(ans, field) {
+      if (global.AppWellSubmitRules && typeof AppWellSubmitRules.quizAnswerIndicatesIssue === 'function') {
+        return AppWellSubmitRules.quizAnswerIndicatesIssue(ans, field, form.type);
+      }
       if (!ans || !field) return false;
+      if (field === 'hasShoulder' || field === 'hasAsh') return false;
       if (isNegativeQuizField(field)) return ans === 'yes';
       return ans === 'no';
+    }
+
+    /** 任一项表明有问题 → 须在末题下展示并填写整改计划日期（对齐 miniapp/report） */
+    function wizardNeedsRectify() {
+      var block = quizBlocks[form.type];
+      if (!block) return false;
+      var fields = activeQuizFields();
+      var i;
+      for (i = 0; i < fields.length; i++) {
+        var field = fields[i];
+        var ans = readRadioIn(block, field);
+        if (quizAnswerIndicatesIssue(ans, field)) return true;
+      }
+      return false;
+    }
+
+    function syncQuizPlanDateRow() {
+      var row = document.getElementById('rf-quiz-plan-date-row');
+      if (!row) return;
+      var show = wizardNeedsRectify();
+      if (show) {
+        row.removeAttribute('hidden');
+      } else {
+        row.setAttribute('hidden', '');
+        form.planDate = '';
+        if (datePicker && typeof datePicker.setValue === 'function') {
+          datePicker.setValue('');
+        }
+        syncMeta();
+      }
     }
 
     function quizItemEl(field) {
@@ -276,6 +323,7 @@
         });
       });
       syncAllQuizExtras();
+      attachWellFillPhotos();
     }
 
     function previewMeta() {
@@ -297,6 +345,46 @@
         quizData[field].photoProof = { firstCapturedAt: null };
       }
       return quizData[field];
+    }
+
+    function destroyWellFillPhotos() {
+      if (wellFillPhotoStrip) {
+        wellFillPhotoStrip.destroy();
+        wellFillPhotoStrip = null;
+      }
+    }
+
+    function attachWellFillPhotos() {
+      destroyWellFillPhotos();
+      if (form.type !== 'well') return;
+      var photosEl = $g('rWellFillPhotos');
+      if (!photosEl || !global.AppMpPhotos) return;
+      wellFillPhotoStrip = global.AppMpPhotos.attach({
+        el: photosEl,
+        photos: wellFillPhotos,
+        max: MAX_PHOTOS,
+        logScope: logScope + '.fill',
+        previewMeta: previewMeta,
+      });
+    }
+
+    function resolveWellFillPhotos(item) {
+      var w = (item && item.well) || {};
+      if (w.fillPhotos && w.fillPhotos.length) return w.fillPhotos.slice();
+      var quizSet = {};
+      WELL_QUIZ_FIELDS.forEach(function (field) {
+        var slot = (w.quizSteps && w.quizSteps[field]) || null;
+        if (slot && slot.photos && slot.photos.length) {
+          slot.photos.forEach(function (p) {
+            if (p) quizSet[p] = true;
+          });
+        }
+      });
+      var fill = [];
+      (item.photos || []).forEach(function (p) {
+        if (p && !quizSet[p]) fill.push(p);
+      });
+      return fill;
     }
 
     function destroyQuizStrip(field) {
@@ -377,6 +465,7 @@
       } else {
         destroyQuizStrip(field);
       }
+      syncQuizPlanDateRow();
     }
 
     function photosElClear(item) {
@@ -387,6 +476,7 @@
 
     function syncAllQuizExtras() {
       activeQuizFields().forEach(syncQuizExtra);
+      syncQuizPlanDateRow();
     }
 
     function harvestQuizDesc(field) {
@@ -443,6 +533,14 @@
       return all;
     }
 
+    function mergeAllPhotos() {
+      var all = [];
+      if (form.type === 'well' && wellFillPhotos.length) {
+        all = wellFillPhotos.slice();
+      }
+      return all.concat(mergeQuizPhotos());
+    }
+
     function mergeQuizDescription() {
       var parts = [];
       var names = activeQuizNames();
@@ -489,6 +587,10 @@
           AppUI.toast('护筒损坏数量不能大于总数', 'warn');
           return false;
         }
+        if (!wellFillPhotos.length) {
+          AppUI.toast('请上传全景照片', 'warn');
+          return false;
+        }
         return true;
       }
       if (form.type === 'road') {
@@ -502,10 +604,6 @@
         }
         if (parseNum(gid('rRoadThickness')) == null) {
           AppUI.toast('请填写道路厚度', 'warn');
-          return false;
-        }
-        if (parseNum(gid('rRoadTreeSurvive')) == null) {
-          AppUI.toast('请填写林网树木存活数量', 'warn');
           return false;
         }
         return true;
@@ -532,15 +630,6 @@
         }
         if (parseNum(gid('rForestExisting')) == null) {
           AppUI.toast('请填写现有株数', 'warn');
-          return false;
-        }
-        var rate = parseNum(gid('rForestSurviveRate'));
-        if (rate == null) {
-          AppUI.toast('请填写存活率', 'warn');
-          return false;
-        }
-        if (rate < 0 || rate > 100) {
-          AppUI.toast('存活率应在 0–100 之间', 'warn');
           return false;
         }
         return true;
@@ -602,6 +691,11 @@
             AppUI.toast('请上传现场照片', 'warn');
             return false;
           }
+        } else if (quizStepRequiresPhoto(field, ans)) {
+          if (!slot.photos || !slot.photos.length) {
+            AppUI.toast('请上传现场照片', 'warn');
+            return false;
+          }
         }
       }
       return true;
@@ -618,6 +712,7 @@
         outletDamaged: isNaN(outletDamaged) ? null : outletDamaged,
         casingTotal: isNaN(casing) ? null : casing,
         casingDamaged: isNaN(casingDamaged) ? null : casingDamaged,
+        fillPhotos: wellFillPhotos.slice(),
         wellPlanDate: form.planDate || '',
         quizSteps: quizData,
       };
@@ -632,7 +727,6 @@
         length: parseNum(gid('rRoadLength')),
         width: parseNum(gid('rRoadWidth')),
         thickness: parseNum(gid('rRoadThickness')),
-        treeSurvive: parseNum(gid('rRoadTreeSurvive')),
         planDate: form.planDate || '',
         quizSteps: quizData,
       };
@@ -657,7 +751,6 @@
       var data = {
         handoverCount: parseNum(gid('rForestHandover')),
         existingCount: parseNum(gid('rForestExisting')),
-        surviveRate: parseNum(gid('rForestSurviveRate')),
         planDate: form.planDate || '',
         quizSteps: quizData,
       };
@@ -1003,7 +1096,7 @@
       }
       var code = ($g('rCode') && $g('rCode').value || '').trim();
       if (!code) {
-        global.AppUI.toast('请填写项目编号', 'error');
+        global.AppUI.toast('请填写设施编号', 'error');
         return null;
       }
       if (
@@ -1011,11 +1104,13 @@
         typeof AppProjectCode.isTaken === 'function' &&
         AppProjectCode.isTaken(code, editingId)
       ) {
-        global.AppUI.toast('项目编号已存在，请更换', 'error');
+        global.AppUI.toast('设施编号已存在，请更换', 'error');
         return null;
       }
-      if (!form.planDate) {
-        global.AppUI.toast('请选择计划整改完成时间', 'error');
+      if (!wizardNeedsRectify()) {
+        form.planDate = '';
+      } else if (!form.planDate) {
+        global.AppUI.toast('请选择整改计划日期', 'error');
         return null;
       }
       var address = ($g('rAddress') && $g('rAddress').value || '').trim();
@@ -1034,7 +1129,7 @@
         return null;
       }
 
-      var mergedPhotos = mergeQuizPhotos();
+      var mergedPhotos = mergeAllPhotos();
       var projectName = form.projectYear + ' 高标农田建设项目';
       var photoAt = new Date().toISOString();
       var reporterName = ($g('rReporterName') && $g('rReporterName').value || '').trim();
@@ -1087,7 +1182,7 @@
         payload.thickness = String(roadExtra.thickness);
         payload.hasShoulder = roadExtra.hasShoulder === 'yes' ? '是' : '否';
         payload.hasAsh = roadExtra.hasAsh === 'yes' ? '是' : '否';
-        payload.treeSurvive = String(roadExtra.treeSurvive);
+        payload.hasRoadDamage = roadExtra.hasRoadDamage === 'yes' ? '是' : '否';
       } else if (form.type === 'bridge') {
         var bridgeExtra = collectBridgeFields();
         payload.bridge = bridgeExtra;
@@ -1120,6 +1215,8 @@
       form.planDate = '';
       form.projectYear = '';
       signatureData = '';
+      wellFillPhotos = [];
+      destroyWellFillPhotos();
       resetQuizState();
       var f = $g('form');
       if (f) f.reset();
@@ -1174,6 +1271,7 @@
           $g('rWellCasingDamaged').value =
             w.casingDamaged != null ? w.casingDamaged : w.casingTotal != null ? 0 : '';
         }
+        wellFillPhotos = resolveWellFillPhotos(item);
       }
       var rd = item.road;
       if (rd && fillBlocks.road) {
@@ -1181,9 +1279,6 @@
         if ($g('rRoadWidth')) $g('rRoadWidth').value = rd.width != null ? rd.width : item.width || '';
         if ($g('rRoadThickness')) {
           $g('rRoadThickness').value = rd.thickness != null ? rd.thickness : item.thickness || '';
-        }
-        if ($g('rRoadTreeSurvive')) {
-          $g('rRoadTreeSurvive').value = rd.treeSurvive != null ? rd.treeSurvive : item.treeSurvive || '';
         }
       }
       var br = item.bridge;
@@ -1196,7 +1291,6 @@
       if (fo && fillBlocks.forest) {
         if ($g('rForestHandover')) $g('rForestHandover').value = fo.handoverCount != null ? fo.handoverCount : '';
         if ($g('rForestExisting')) $g('rForestExisting').value = fo.existingCount != null ? fo.existingCount : '';
-        if ($g('rForestSurviveRate')) $g('rForestSurviveRate').value = fo.surviveRate != null ? fo.surviveRate : '';
       }
       var tf = item.transformer;
       if (tf && fillBlocks.transformer) {
@@ -1220,12 +1314,16 @@
         steps = reconstructQuizFromFlat(bag, activeQuizFields());
       }
       applyQuizStepsToUi(steps || {});
+      attachWellFillPhotos();
+      syncQuizPlanDateRow();
+      syncMeta();
       initSignaturePad();
     }
 
     function destroy() {
       closePicker(false);
       destroyAllQuizStrips();
+      destroyWellFillPhotos();
       destroySignaturePad();
       if (datePicker && typeof datePicker.destroy === 'function') {
         datePicker.destroy();
@@ -1257,6 +1355,8 @@
           var next = item.getAttribute('data-type');
           if (!next || next === form.type) return;
           form.type = next;
+          wellFillPhotos = [];
+          destroyWellFillPhotos();
           resetQuizState();
           renderTypeSeg();
           syncTypeBlocks();
@@ -1272,13 +1372,6 @@
           if (!y || y === form.projectYear) return;
           form.projectYear = y;
           syncYearButtons();
-        });
-      }
-
-      var planDateRow = $g('rWellPlanDateRow');
-      if (planDateRow && !datePicker) {
-        planDateRow.addEventListener('click', function () {
-          openPicker('planDate');
         });
       }
 

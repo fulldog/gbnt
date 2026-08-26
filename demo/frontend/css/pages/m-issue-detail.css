@@ -1,6 +1,6 @@
 /**
  * 巡查详情页
- * 基本信息 → 排查清单 → 电子签名 → 上报人；待整改时底栏提交整改
+ * 基本信息 → 排查清单 → 电子签名；待整改时底栏提交整改
  */
 
 .m-issue-detail {
@@ -25,6 +25,7 @@
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-top: 4px;
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
 }
 
 .m-issue-detail__scroll::-webkit-scrollbar {
@@ -34,7 +35,7 @@
 }
 
 .m-issue-detail.is-action .m-issue-detail__scroll {
-  padding-bottom: 112px;
+  padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
 }
 
 .m-issue-detail__section {
@@ -190,6 +191,22 @@
   color: #6b7a90;
 }
 
+.m-issue-detail__fill-photos {
+  padding: 6px 0 0;
+}
+
+.m-issue-detail__fill-photos-label {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #6b7a90;
+}
+
+.m-issue-detail__fill-photos .m-issue-detail__thumbs {
+  margin: 0;
+}
+
 /* —— 排查清单 —— */
 .m-issue-detail__quiz-list {
   padding: 8px 16px 12px;
@@ -274,7 +291,7 @@
 
 /* —— 电子签名（无卡片壳，直接展示宣纸底签名图） —— */
 .m-issue-detail__sign-board {
-  margin: 8px 16px 16px;
+  margin: 8px 16px 8px;
   padding: 0;
   box-sizing: border-box;
 }
