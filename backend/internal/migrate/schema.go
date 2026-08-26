@@ -14,6 +14,9 @@ func ensureSchema(db *gorm.DB) error {
 	if err := dropLegacyDictTables(db); err != nil {
 		return err
 	}
+	if err := dropLegacyAttachRef(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(
 		&model.SysOrg{},
 		&model.SysUser{},
@@ -24,7 +27,6 @@ func ensureSchema(db *gorm.DB) error {
 		&model.IssueRectifyRecord{},
 		&model.OpLog{},
 		&model.Attachment{},
-		&model.AttachmentRefItem{},
 	); err != nil {
 		return err
 	}
@@ -67,6 +69,30 @@ func dropLegacyDictTables(db *gorm.DB) error {
 		}
 		if err := m.DropTable(table); err != nil {
 			return fmt.Errorf("drop legacy %s: %w", table, err)
+		}
+	}
+	return nil
+}
+
+func dropLegacyAttachRef(db *gorm.DB) error {
+	m := db.Migrator()
+	if m.HasTable("attachment_ref_items") {
+		if err := m.DropTable("attachment_ref_items"); err != nil {
+			return fmt.Errorf("drop attachment_ref_items: %w", err)
+		}
+	}
+	if m.HasTable("issue_rectify_records") {
+		var n int64
+		if err := db.Raw(
+			"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+			"issue_rectify_records", "photo_ref_uuid",
+		).Scan(&n).Error; err != nil {
+			return fmt.Errorf("check photo_ref_uuid: %w", err)
+		}
+		if n > 0 {
+			if err := db.Exec("ALTER TABLE `issue_rectify_records` DROP COLUMN `photo_ref_uuid`").Error; err != nil {
+				return fmt.Errorf("drop issue_rectify_records.photo_ref_uuid: %w", err)
+			}
 		}
 	}
 	return nil

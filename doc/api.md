@@ -68,9 +68,9 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/issues` | 列表，query: type/status/`*_org_id`/project_year/street/village/keyword/page/size；status=`new`\|`pending`\|`done` |
-| GET | `/api/issues/:id` | 详情（含 `photos` / `rectify_photos` / `rectify_records`） |
-| POST | `/api/issues` | 新增；四级区划 ID + QuizBool；无问题 → `done`，有问题 → `new` |
-| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按 type 校验 QuizBool） |
+| GET | `/api/issues/:id` | 详情（`type_ext` 内 `photos`、`rectify_records[].photos`） |
+| POST | `/api/issues` | 新增；四级区划 ID + `type_ext.checklist`；无问题 → `done`，有问题 → `new` |
+| PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按问题类型校验 checklist） |
 | DELETE | `/api/issues/:id` | 删除（软删） |
 | POST | `/api/issues/:id/rectify` | 整改：仅 `needs_rectify` 且 status∈{`new`,`pending`}；写入 `issue_rectify_records` 后 → `done` |
 | POST | `/api/issues/:id/re-rectify` | 重新整改：仅 `done` 且 `needs_rectify=true` → `pending` |
@@ -156,16 +156,14 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 ### 业务附件字段
 
 1. 先调 **`POST /api/attachments/images`**，收集返回的 **`file_id`**
-2. 业务 JSON 仍用字段名 **`file_uuids`**，值为上述 **`file_id` 列表**（历史命名，非分片 uuid）
-3. 新建 Issue：`file_uuids` 必填 → 后台内部建关联组，落库 **`photo_ref_uuid`**（实为 `att_id`）
-4. 修改 Issue：`photo_ref_uuid` 非空 = 附件不变；为空则须重新传 `file_uuids`
-5. 整改：`file_uuids` / `rectify_photo_ref_uuid` 规则同上
-6. 查询：返回 `photo_ref_uuid` + **`photos:[{file_id,url}]`**（整改同理 `rectify_photos`）；详情另含 **`rectify_records[]`**
-7. QuizBool 题内 `files`（file_id 列表）在规范化 `type_ext` 时内部 Bind，回填 `att_id`
+2. 排查现场图：写入 `type_ext.checklist[].files`（`file_id` 数组），服务端校验存在后原样存进 **`type_ext` JSON**
+3. 整改图：body **`file_uuids`**（历史字段名），落库 **`photo_file_ids` JSON 数组**
+4. 查询：解码 JSON，按 `file_id` 查 `attachments`，`checklist` 各项增加 **`photos:[{file_id,url}]`**；`rectify_records[]` 每条带 **`photos`**；签名可选 **`reporter_signature`**
+5. 不再使用 `att_id` / `photo_ref_uuid` / `attachment_ref_items`
 
 ### 上报 `IssueInput` / `type_ext`
 
-新建核心：`type`、`project_year`（2020–2023）、四级区划 ID（至少一级）、`address`、`file_uuids`（≥1）、`reporter_signature_file_id`、`type_ext`。`code` 选填。
+新建核心：`type`、`project_year`（2020–2023）、四级区划 ID（至少一级）、`address`、`reporter_signature_file_id`、`type_ext`（`checklist[].files` 存现场图）。`code` 选填。
 
 | 字段 | 说明 |
 | --- | --- |
@@ -177,9 +175,7 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | `lat` / `lng` | 经纬度 |
 | `plan_date` | YYYY-MM-DD；需整改时必填 |
 | `reporter_signature_file_id` | 排查电子签名 file_id |
-| `file_uuids` | 现场照片 file_id 列表 |
-| `photo_ref_uuid` | 仅更新：有值=附件不变 |
-| `type_ext` | 类型扩展（见下表 QuizBool） |
+| `type_ext` | 类型扩展（`checklist` 为 QuizBool 数组） |
 | `status` | 仅更新用 |
 
 **已从入参移除**（对齐 miniapp 上报向导）：`project_name`、`location_text`、`description`、`measures`、`reporter_name` / `reporter_phone`、`assignee_name` / `assignee_phone`。其中责任人列仍保留在 `issues` 表（接口不传，可空，后续由服务端填充）；其余字段已从表结构删除。
@@ -188,11 +184,11 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 **状态推导**：按 quiz 算 `needs_rectify`——无任何问题 → `needs_rectify=false`、`status=done`；有问题 → `true`、`status=new`。有问题时 `plan_date` 必填。
 
-**QuizBool**（是/否题）：`{value, desc, files}`；缺键视为未答。导致需整改的答题须 `desc` + `files` 非空。正向题（出水/路肩等）`value=false` 为异常；负向题（断带/私拉乱接/桥涵需整改）`value=true` 为异常。
+**QuizBool**（是/否题）：入参 `{type, value, desc, mustImg, files}`，放在 `type_ext.checklist` 数组中；回显另含 `photos`。缺项视为未答。导致需整改的答题须 `desc` 非空。`mustImg=true` 时 `files` 长度须 >0（与是否异常无关）。正向题（出水/路肩等）`value=false` 为异常；负向题（断带/私拉乱接/桥涵需整改）`value=true` 为异常。`type` 不得重复，且须属于当前问题类型允许的枚举。
 
-| type | 扩展对象 | QuizBool 字段 | 其它要点 |
+| 问题 type | 扩展对象 | checklist[].type | 其它要点 |
 | --- | --- | --- | --- |
-| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` `transformer_ok`（正向） | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数；损坏>0 亦需整改 |
+| `well` | `WellExt` | `water_out` `pipe_ok` `wiring_ok` `box_ok` `cover_ok` `transformer_ok`（正向，均须出现） | `build_kind`=`new`\|`match`；出水口/护筒损坏 ≤ 总数；损坏>0 亦需整改 |
 | `road` | `RoadExt` | `has_shoulder` `has_ash`（正向） | 长宽厚、林网存活数量 |
 | `bridge` | `BridgeExt` | `needs_rectify`（负向） | `kind`=`bridge`\|`culvert`\|`gate` |
 | `forest` | `ForestExt` | `broken_belt` `dead_trees` `pest`（负向） | 存活率 0–100 |
@@ -202,7 +198,7 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 ### 整改 / 重新整改
 
-- **Rectify**：`needs_rectify==true` 且 `status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。成功：插入 `issue_rectify_records`，issue → `done`，并更新最近一次 `rectify_note` / `rectify_at` / `rectify_photo_ref_uuid`。
+- **Rectify**：`status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。成功：插入 `issue_rectify_records`（`photo_file_ids` JSON），issue → `done`。
 - **Re-rectify**：仅 `status==done` 且 `needs_rectify==true` → `pending`；不删历史记录。无问题上报（`needs_rectify=false`）不可调用。
 
 ### 图片水印
@@ -229,7 +225,7 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 
 ## 小程序 app API（`/api/app`）
 
-面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，再在业务 body 传 `file_uuids`。
+面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，排查写入 `type_ext.checklist[].files`，整改 body 传 `file_uuids`。
 
 白名单额外包含：`POST /api/app/auth/slider/start`、`POST /api/app/auth/slider/finish`、`POST /api/app/auth/login`。
 
@@ -245,7 +241,7 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 | GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
 | GET | `/api/app/issues/:id` | 问题详情（含 lat/lng、`rectify_records`） |
 | POST | `/api/app/issues` | 上报（规则同管理端；按 quiz 推导 `new`/`done`） |
-| POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` / `rectify_photo_ref_uuid` |
+| POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` |
 | POST | `/api/app/issues/:id/re-rectify` | 重新整改（`done` → `pending`） |
 | GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}`（pending 对齐 status=`new`） |
 | GET | `/api/app/mine/issues` | 清单；query: `scope=reported\|pending\|done` + page/size |

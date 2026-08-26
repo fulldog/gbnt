@@ -48,20 +48,28 @@ type IssueInput struct {
 	Lng                     float64         `json:"lng"`                        // 经度
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
-	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（QuizBool 等，新建必填）
+	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 仅更新用 new|pending|done；新建由 quiz 推导
 }
 
 // IssueVO 业务明细/列表项。
 type IssueVO struct {
 	model.Issue
-	RectifyRecords []model.IssueRectifyRecord `json:"rectify_records"` // 历史整改记录（新→旧）
+	TypeExtVO         json.RawMessage   `json:"type_ext"`                     // 解码并展开 photos 后的 type_ext
+	ReporterSignature *FileItem         `json:"reporter_signature,omitempty"` // 排查签名 file_id + url
+	RectifyRecords    []RectifyRecordVO `json:"rectify_records"`              // 历史整改记录（新→旧）
+}
+
+// RectifyRecordVO 单条整改记录（含照片 URL）。
+type RectifyRecordVO struct {
+	model.IssueRectifyRecord
+	Photos []FileItem `json:"photos"` // 整改照片 file_id + 相对路径
 }
 
 // RectifyInput 整改入参。
 type RectifyInput struct {
 	Note      string   `json:"note"`       // 整改说明（必填）
-	FileUUIDs []string `json:"file_uuids"` // 整改照片 file_id；rectify_photo_ref_uuid 为空时必填
+	FileUUIDs []string `json:"file_uuids"` // 整改照片 file_id 列表（必填）
 }
 
 // ImportIssuesReq 管理端批量导入。
@@ -77,16 +85,73 @@ func (s *IssueService) db(ctx context.Context) *gorm.DB {
 }
 
 func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
-	vo := &IssueVO{Issue: *item, RectifyRecords: []model.IssueRectifyRecord{}}
+	ctx := context.Background()
+	ext, err := s.hydrateTypeExt(ctx, item.Type, item.TypeExt)
+	if err != nil {
+		return nil, err
+	}
+	vo := &IssueVO{
+		Issue:          *item,
+		TypeExtVO:      ext,
+		RectifyRecords: []RectifyRecordVO{},
+	}
+	if s.Attach != nil && strings.TrimSpace(item.ReporterSignatureFileID) != "" {
+		if list, lookErr := s.Attach.lookupExisting(ctx, []string{item.ReporterSignatureFileID}); lookErr == nil && len(list) == 1 {
+			sig := list[0]
+			vo.ReporterSignature = &sig
+		}
+	}
 	var records []model.IssueRectifyRecord
 	if err := s.DB.Where("issue_id = ?", item.ID).Order("id DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
-	if records == nil {
-		records = []model.IssueRectifyRecord{}
+	out := make([]RectifyRecordVO, 0, len(records))
+	for i := range records {
+		ids := parseFileIDJSON(records[i].PhotoFileIDs)
+		photos := []FileItem{}
+		if s.Attach != nil && len(ids) > 0 {
+			photos, _ = s.Attach.lookupExisting(ctx, ids)
+		}
+		out = append(out, RectifyRecordVO{IssueRectifyRecord: records[i], Photos: photos})
 	}
-	vo.RectifyRecords = records
+	vo.RectifyRecords = out
 	return vo, nil
+}
+
+func parseFileIDJSON(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "null" {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return nil
+	}
+	return ids
+}
+
+func (v IssueVO) MarshalJSON() ([]byte, error) {
+	b, err := json.Marshal(v.Issue)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	var ext any
+	if len(v.TypeExtVO) > 0 && string(v.TypeExtVO) != "null" {
+		if err := json.Unmarshal(v.TypeExtVO, &ext); err != nil {
+			m["type_ext"] = json.RawMessage(v.TypeExtVO)
+		} else {
+			m["type_ext"] = ext
+		}
+	}
+	m["rectify_records"] = v.RectifyRecords
+	if v.ReporterSignature != nil {
+		m["reporter_signature"] = v.ReporterSignature
+	}
+	return json.Marshal(m)
 }
 
 func (s *IssueService) List(q IssueQuery) ([]IssueVO, int64, error) {
@@ -306,6 +371,11 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if strings.TrimSpace(in.ReporterSignatureFileID) == "" {
 		return nil, errors.New("请提交电子签名")
 	}
+	if s.Attach != nil {
+		if _, err := s.Attach.EnsureFiles(ctx, []string{in.ReporterSignatureFileID}); err != nil {
+			return nil, fmt.Errorf("电子签名: %w", err)
+		}
+	}
 
 	ext, needsRectify, err := s.normalizeTypeExt(ctx, typ, in.TypeExt)
 	if err != nil {
@@ -459,16 +529,20 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput) 
 		return nil, errors.New("请填写整改说明")
 	}
 
-	if len(in.FileUUIDs) == 0 {
-		return nil, errors.New("请至少上传 1 张整改照片")
+	if s.Attach == nil {
+		return nil, errors.New("附件服务未初始化")
 	}
-	r, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
+	clean, err := s.Attach.EnsureFiles(ctx, in.FileUUIDs)
+	if err != nil {
+		return nil, err
+	}
+	photoJSON, err := json.Marshal(clean)
 	if err != nil {
 		return nil, err
 	}
 
 	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
-		rec := model.IssueRectifyRecord{IssueID: id, Note: note, PhotoRefUUID: r}
+		rec := model.IssueRectifyRecord{IssueID: id, Note: note, PhotoFileIDs: string(photoJSON)}
 		if err := tx.Create(&rec).Error; err != nil {
 			return err
 		}

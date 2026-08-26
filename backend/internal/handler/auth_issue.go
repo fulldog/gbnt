@@ -189,7 +189,7 @@ func (d *Deps) ListIssues(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size})
 }
 
-// GetIssue GET /api/issues/:id — 问题详情（含 photos / rectify_photos）。
+// GetIssue GET /api/issues/:id — 问题详情（type_ext.photos、整改 records.photos）。
 func (d *Deps) GetIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {

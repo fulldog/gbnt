@@ -282,11 +282,7 @@ func (s *AttachService) saveOneImage(ctx context.Context, fh *multipart.FileHead
 	return FileItem{FileID: fileID, URL: urlPath}, nil
 }
 
-// Bind 用 file_id 列表创建关联组，返回 att_id。
-func (s *AttachService) Bind(ctx context.Context, fileIDs []string) (attID string, list []FileItem, err error) {
-	if len(fileIDs) == 0 {
-		return "", nil, errors.New("文件 file_id 列表不能为空")
-	}
+func cleanFileIDs(fileIDs []string) []string {
 	seen := map[string]struct{}{}
 	clean := make([]string, 0, len(fileIDs))
 	for _, id := range fileIDs {
@@ -300,55 +296,55 @@ func (s *AttachService) Bind(ctx context.Context, fileIDs []string) (attID strin
 		seen[id] = struct{}{}
 		clean = append(clean, id)
 	}
-	if len(clean) == 0 {
-		return "", nil, errors.New("文件 file_id 列表不能为空")
-	}
+	return clean
+}
 
-	list = make([]FileItem, 0, len(clean))
+// EnsureFiles 校验 file_id 均存在且已成功，返回去重后的列表。
+func (s *AttachService) EnsureFiles(ctx context.Context, fileIDs []string) ([]string, error) {
+	clean := cleanFileIDs(fileIDs)
+	if len(clean) == 0 {
+		return nil, errors.New("文件 file_id 列表不能为空")
+	}
+	if _, err := s.ListByFileIDs(ctx, clean); err != nil {
+		return nil, err
+	}
+	return clean, nil
+}
+
+// ListByFileIDs 按 file_id 顺序查附件，返回 file_id + 相对路径。
+func (s *AttachService) ListByFileIDs(ctx context.Context, fileIDs []string) ([]FileItem, error) {
+	clean := cleanFileIDs(fileIDs)
+	if len(clean) == 0 {
+		return []FileItem{}, nil
+	}
+	list := make([]FileItem, 0, len(clean))
 	for _, id := range clean {
 		var att model.Attachment
 		if err := s.db(ctx).Where("file_id = ?", id).First(&att).Error; err != nil {
-			return "", nil, fmt.Errorf("文件不存在: %s", id)
+			return nil, fmt.Errorf("文件不存在: %s", id)
 		}
 		if att.Status != "success" {
-			return "", nil, fmt.Errorf("文件未就绪: %s", id)
+			return nil, fmt.Errorf("文件未就绪: %s", id)
 		}
 		list = append(list, FileItem{FileID: att.FileID, URL: att.StoragePath})
 	}
-
-	attID = uuid.NewString()
-	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, id := range clean {
-			item := model.AttachmentRefItem{AttID: attID, FileID: id}
-			if err := tx.Create(&item).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	return attID, list, nil
+	return list, nil
 }
 
-// Resolve 按 att_id 反查文件 list。
-func (s *AttachService) Resolve(attID string) ([]FileItem, error) {
-	if attID == "" {
+// lookupExisting 回显用：跳过缺失或未成功的 file_id。
+func (s *AttachService) lookupExisting(ctx context.Context, fileIDs []string) ([]FileItem, error) {
+	clean := cleanFileIDs(fileIDs)
+	if len(clean) == 0 {
 		return []FileItem{}, nil
 	}
-	var items []model.AttachmentRefItem
-	if err := s.DB.Where("att_id = ?", attID).Order("id ASC").Find(&items).Error; err != nil {
-		return nil, err
-	}
-	if len(items) == 0 {
-		return nil, errors.New("关联记录不存在或无文件")
-	}
-	list := make([]FileItem, 0, len(items))
-	for _, it := range items {
+	list := make([]FileItem, 0, len(clean))
+	for _, id := range clean {
 		var att model.Attachment
-		if err := s.DB.Where("file_id = ?", it.FileID).First(&att).Error; err != nil {
-			return nil, fmt.Errorf("关联文件缺失: %s", it.FileID)
+		if err := s.db(ctx).Where("file_id = ?", id).First(&att).Error; err != nil {
+			continue
+		}
+		if att.Status != "success" {
+			continue
 		}
 		list = append(list, FileItem{FileID: att.FileID, URL: att.StoragePath})
 	}

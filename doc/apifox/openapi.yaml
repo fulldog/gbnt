@@ -67,7 +67,7 @@ components:
       type: object
       description: |
         上报/新增/更新问题。新建核心：type、project_year、四级区划 ID（至少一级）、
-        address、file_uuids、reporter_signature_file_id、type_ext。
+        address、reporter_signature_file_id、type_ext（checklist 为 QuizBool 数组）。
         QuizBool 按答题推导 needs_rectify：无问题 status=done，有问题 status=new。
         有问题时 plan_date 必填。assignee_name/phone 接口不传，库内可空由服务端后续填充。
       properties:
@@ -83,15 +83,8 @@ components:
         lng: { type: number, description: 经度 }
         plan_date: { type: string, example: "2026-09-01", description: 计划整改完成日；需整改时必填 }
         reporter_signature_file_id: { type: string, format: uuid, description: 排查电子签名 file_id }
-        file_uuids:
-          type: array
-          description: 现场照片 file_id 列表（新建必填）
-          items: { type: string, format: uuid }
-        photo_ref_uuid:
-          type: string
-          description: 修改时有值=附件不变；为空则用 file_uuids 重新关联
         type_ext:
-          description: 类型专有字段；是/否题为 QuizBool
+          description: 类型专有字段；是/否题在 checklist
           oneOf:
             - $ref: "#/components/schemas/WellExt"
             - $ref: "#/components/schemas/RoadExt"
@@ -101,27 +94,49 @@ components:
         status: { type: string, enum: [new, pending, done], description: 仅更新用；新建由 quiz 推导 }
     QuizBool:
       type: object
-      required: [value]
-      description: 是/否排查项；导致需整改时 desc+files 必填；服务端 Bind 后回填 att_id
+      required: [type, value]
+      description: 是/否排查项；放在 type_ext.checklist；导致需整改时 desc 必填；mustImg=true 时 files 长度须 >0；回显含 photos
       properties:
+        type:
+          type: string
+          description: 排查项类型；须属于当前问题类型允许的枚举且不重复
+          enum:
+            - water_out
+            - pipe_ok
+            - wiring_ok
+            - box_ok
+            - cover_ok
+            - transformer_ok
+            - has_shoulder
+            - has_ash
+            - needs_rectify
+            - broken_belt
+            - dead_trees
+            - pest
+            - powered
+            - device_ok
+            - cabinet_ok
+            - illegal_wire
         value: { type: boolean, description: 是=true / 否=false }
         desc: { type: string, description: 说明（异常时必填） }
+        mustImg: { type: boolean, description: 是否必填现场照片；true 时 files 长度须 >0 }
         files:
           type: array
-          description: 现场照片 file_id 列表（异常时必填）
+          description: 现场照片 file_id 列表；mustImg=true 时必填
           items: { type: string, format: uuid }
-        att_id: { type: string, description: 服务端 Bind 回填，入参不要求 }
+        photos:
+          type: array
+          description: 回显；入参忽略
+          items: { $ref: "#/components/schemas/FileItem" }
     WellExt:
       type: object
-      required: [build_kind, water_out, pipe_ok, wiring_ok, box_ok, cover_ok, transformer_ok, outlet_total, outlet_damaged, casing_total, casing_damaged]
+      required: [build_kind, checklist, outlet_total, outlet_damaged, casing_total, casing_damaged]
       properties:
         build_kind: { type: string, enum: [new, match], description: 新建/配套 }
-        water_out: { $ref: "#/components/schemas/QuizBool" }
-        pipe_ok: { $ref: "#/components/schemas/QuizBool" }
-        wiring_ok: { $ref: "#/components/schemas/QuizBool" }
-        box_ok: { $ref: "#/components/schemas/QuizBool" }
-        cover_ok: { $ref: "#/components/schemas/QuizBool" }
-        transformer_ok: { $ref: "#/components/schemas/QuizBool" }
+        checklist:
+          type: array
+          description: 须含 water_out/pipe_ok/wiring_ok/box_ok/cover_ok/transformer_ok 各一条
+          items: { $ref: "#/components/schemas/QuizBool" }
         outlet_total: { type: integer, minimum: 0, description: 出水口总数 }
         outlet_damaged: { type: integer, minimum: 0, description: 出水口损坏数量 }
         casing_total: { type: integer, minimum: 0, description: 护筒总数 }
@@ -130,49 +145,55 @@ components:
         keeper_phone: { type: string, description: 联系电话（选填） }
     RoadExt:
       type: object
-      required: [length, width, thickness, has_shoulder, has_ash, tree_survive]
+      required: [length, width, thickness, checklist, tree_survive]
       properties:
         length: { type: number, minimum: 0, description: 长度（千米） }
         width: { type: number, minimum: 0, description: 宽度（米） }
         thickness: { type: number, minimum: 0, description: 厚度（米） }
-        has_shoulder: { $ref: "#/components/schemas/QuizBool" }
-        has_ash: { $ref: "#/components/schemas/QuizBool" }
+        checklist:
+          type: array
+          description: 须含 has_shoulder、has_ash 各一条
+          items: { $ref: "#/components/schemas/QuizBool" }
         tree_survive: { type: number, minimum: 0, description: 林网存活数量（棵） }
         keeper_name: { type: string, description: 负责人（选填） }
         keeper_phone: { type: string, description: 电话（选填） }
     BridgeExt:
       type: object
-      required: [kind, length, width, needs_rectify]
+      required: [kind, length, width, checklist]
       properties:
         kind: { type: string, enum: [bridge, culvert, gate], description: 设施类型 桥/涵/闸 }
         length: { type: number, minimum: 0, description: 长度（米） }
         width: { type: number, minimum: 0, description: 宽度（米） }
-        needs_rectify: { $ref: "#/components/schemas/QuizBool" }
+        checklist:
+          type: array
+          description: 须含 needs_rectify 一条
+          items: { $ref: "#/components/schemas/QuizBool" }
         keeper_name: { type: string, description: 负责人（选填） }
         keeper_phone: { type: string, description: 电话（选填） }
     ForestExt:
       type: object
-      required: [handover_count, existing_count, survive_rate, broken_belt, dead_trees, pest]
+      required: [handover_count, existing_count, survive_rate, checklist]
       properties:
         handover_count: { type: number, minimum: 0, description: 移交株数 }
         existing_count: { type: number, minimum: 0, description: 现有株数 }
         survive_rate: { type: number, minimum: 0, maximum: 100, description: 存活率 % }
-        broken_belt: { $ref: "#/components/schemas/QuizBool" }
-        dead_trees: { $ref: "#/components/schemas/QuizBool" }
-        pest: { $ref: "#/components/schemas/QuizBool" }
+        checklist:
+          type: array
+          description: 须含 broken_belt、dead_trees、pest 各一条
+          items: { $ref: "#/components/schemas/QuizBool" }
         keeper_name: { type: string, description: 负责人（选填） }
         keeper_phone: { type: string, description: 电话（选填） }
     TransformerExt:
       type: object
-      required: [capacity, voltage, powered, device_ok, cabinet_ok, illegal_wire]
+      required: [capacity, voltage, checklist]
       properties:
         capacity: { type: number, minimum: 0, description: 容量（kVA） }
         model: { type: string, description: 型号（选填） }
         voltage: { type: string, enum: [10kv, 0.4kv], description: 电压等级 }
-        powered: { $ref: "#/components/schemas/QuizBool" }
-        device_ok: { $ref: "#/components/schemas/QuizBool" }
-        cabinet_ok: { $ref: "#/components/schemas/QuizBool" }
-        illegal_wire: { $ref: "#/components/schemas/QuizBool" }
+        checklist:
+          type: array
+          description: 须含 powered、device_ok、cabinet_ok、illegal_wire 各一条
+          items: { $ref: "#/components/schemas/QuizBool" }
         keeper_name: { type: string, description: 负责人（选填） }
         keeper_phone: { type: string, description: 电话（选填） }
     RectifyInput:
@@ -181,11 +202,8 @@ components:
         note: { type: string, description: 整改说明 }
         file_uuids:
           type: array
-          description: 整改照片 file_id；rectify_photo_ref_uuid 为空时必填
+          description: 整改照片 file_id 列表（必填）
           items: { type: string, format: uuid }
-        rectify_photo_ref_uuid:
-          type: string
-          description: 有值=整改附件不变；为空则用 file_uuids 重新关联
     FileItem:
       type: object
       properties:
@@ -418,7 +436,7 @@ paths:
         - $ref: "#/components/parameters/IdPath"
       responses:
         "200":
-          description: 含 photos / rectify_photos / rectify_records
+          description: type_ext 含 photos；rectify_records[].photos
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -950,7 +968,7 @@ paths:
     post:
       tags: [小程序]
       summary: 上报问题
-      description: 按 quiz 推导 needs_rectify 与 status（new/done）；先上传附件再传 file_uuids。
+      description: 按 quiz 推导 needs_rectify 与 status（new/done）；先上传附件再写入 type_ext.checklist[].files。
       requestBody:
         required: true
         content:
@@ -958,7 +976,7 @@ paths:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
         "200":
-          description: 新建问题（含 photos）
+          description: 新建问题（type_ext 含 photos）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -966,7 +984,7 @@ paths:
     get:
       tags: [小程序]
       summary: 问题详情
-      description: 含 lat/lng、rectify_records；issue-map 可复用定位字段。
+      description: 含 lat/lng、rectify_records（含 photos）；issue-map 可复用定位字段。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:
@@ -989,7 +1007,7 @@ paths:
             schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
         "200":
-          description: 整改后问题（含 rectify_photos / rectify_records）
+          description: 整改后问题（rectify_records 含 photos）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }

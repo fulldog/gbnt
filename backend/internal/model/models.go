@@ -140,7 +140,7 @@ func (Issue) TableName() string { return "issues" }
 type IssueRectifyRecord struct {
 	IssueID      uint64 `gorm:"index;not null;comment:问题主键ID" json:"issue_id"`
 	Note         string `gorm:"type:text;comment:整改说明" json:"note"`
-	PhotoRefUUID string `gorm:"size:36;index;comment:整改照片关联组att_id" json:"photo_ref_uuid"`
+	PhotoFileIDs string `gorm:"type:json;comment:整改照片file_id数组JSON" json:"-"`
 	Base
 }
 
@@ -177,15 +177,6 @@ type Attachment struct {
 
 func (Attachment) TableName() string { return "attachments" }
 
-// AttachmentRefItem 附件关联明细：一组 att_id 对应多个 file_id。
-type AttachmentRefItem struct {
-	AttID  string `gorm:"column:att_id;size:36;index;uniqueIndex:uk_att_file;not null;comment:关联组ID 业务落库用" json:"att_id"`
-	FileID string `gorm:"column:file_id;size:36;uniqueIndex:uk_att_file;index;not null;comment:文件UUID" json:"file_id"`
-	Base
-}
-
-func (AttachmentRefItem) TableName() string { return "attachment_ref_items" }
-
 // TableComments 表名 → 表注释（迁移时 ALTER TABLE COMMENT）。
 func TableComments() map[string]string {
 	return map[string]string{
@@ -198,6 +189,5 @@ func TableComments() map[string]string {
 		"issue_rectify_records": "问题整改记录",
 		"op_logs":               "操作日志",
 		"attachments":           "附件文件主表",
-		"attachment_ref_items":  "附件一对多关联明细",
 	}
 }

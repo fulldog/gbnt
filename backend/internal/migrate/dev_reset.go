@@ -7,7 +7,6 @@ import (
 )
 
 var devTables = []string{
-	"attachment_ref_items",
 	"attachments",
 	"op_logs",
 	"issue_rectify_records",

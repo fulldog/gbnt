@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -38,9 +39,23 @@ func TestBindQuizBoolRequiresDescAndFiles(t *testing.T) {
 		t.Fatalf("want desc error, got %v", err)
 	}
 	q.Desc = "不出水"
+	if _, err = s.bindQuizBool(context.Background(), q, "机井是否出水", false); err != nil {
+		t.Fatalf("mustImg=false should skip files: %v", err)
+	}
+	q.MustImg = true
 	_, err = s.bindQuizBool(context.Background(), q, "机井是否出水", false)
 	if err == nil || !strings.Contains(err.Error(), "照片") {
 		t.Fatalf("want files error, got %v", err)
+	}
+}
+
+func TestBindQuizBoolMustImgWithoutIssue(t *testing.T) {
+	t.Parallel()
+	s := &IssueService{}
+	q := &QuizBool{Value: true, MustImg: true}
+	_, err := s.bindQuizBool(context.Background(), q, "机井是否出水", false)
+	if err == nil || !strings.Contains(err.Error(), "照片") {
+		t.Fatalf("mustImg should require files even when no issue, got %v", err)
 	}
 }
 
@@ -116,6 +131,40 @@ func TestReRectifyGate(t *testing.T) {
 	}
 }
 
+func TestParseFileIDJSON(t *testing.T) {
+	t.Parallel()
+	if parseFileIDJSON("") != nil {
+		t.Fatal("empty")
+	}
+	got := parseFileIDJSON(`["a","b"]`)
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestIssueVOMarshalTypeExtObject(t *testing.T) {
+	t.Parallel()
+	vo := IssueVO{
+		Issue:     model.Issue{TypeExt: `{"keep":1}`, Type: "road"},
+		TypeExtVO: json.RawMessage(`{"checklist":[{"type":"has_ash","value":true,"files":[],"photos":[]}]}`),
+	}
+	b, err := json.Marshal(vo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	ext, ok := m["type_ext"].(map[string]any)
+	if !ok {
+		t.Fatalf("type_ext should be object, got %T %s", m["type_ext"], b)
+	}
+	if _, ok := ext["checklist"]; !ok {
+		t.Fatalf("hydrated ext missing checklist: %v", ext)
+	}
+}
+
 func TestIssueEnumsValid(t *testing.T) {
 	t.Parallel()
 	if !model.IssueTypeWell.Valid() || model.IssueType("other").Valid() {
@@ -126,5 +175,41 @@ func TestIssueEnumsValid(t *testing.T) {
 	}
 	if !model.IssueStatusNew.Valid() || model.IssueStatus("inspected").Valid() {
 		t.Fatal("IssueStatus")
+	}
+	if !model.QuizWaterOut.Valid() || model.QuizType("other").Valid() {
+		t.Fatal("QuizType")
+	}
+}
+
+func TestBindChecklistRejectsWrongAndDuplicate(t *testing.T) {
+	t.Parallel()
+	s := &IssueService{}
+	_, _, err := s.bindChecklist(context.Background(), []QuizBool{{Type: model.QuizHasAsh, Value: true}}, wellChecklistSpecs)
+	if err == nil || !strings.Contains(err.Error(), "不适用于") {
+		t.Fatalf("want type mismatch, got %v", err)
+	}
+	dup := []QuizBool{
+		{Type: model.QuizHasShoulder, Value: true},
+		{Type: model.QuizHasShoulder, Value: false},
+	}
+	_, _, err = s.bindChecklist(context.Background(), dup, roadChecklistSpecs)
+	if err == nil || !strings.Contains(err.Error(), "重复") {
+		t.Fatalf("want duplicate, got %v", err)
+	}
+}
+
+func TestBindChecklistOK(t *testing.T) {
+	t.Parallel()
+	s := &IssueService{}
+	list := []QuizBool{
+		{Type: model.QuizHasAsh, Value: true},
+		{Type: model.QuizHasShoulder, Value: true},
+	}
+	out, needs, err := s.bindChecklist(context.Background(), list, roadChecklistSpecs)
+	if err != nil || needs {
+		t.Fatalf("needs=%v err=%v", needs, err)
+	}
+	if len(out) != 2 || out[0].Type != model.QuizHasShoulder || out[1].Type != model.QuizHasAsh {
+		t.Fatalf("canonical order: %+v", out)
 	}
 }

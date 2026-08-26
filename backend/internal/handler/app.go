@@ -9,7 +9,7 @@ import (
 )
 
 // RegisterApp 注册小程序端独立 API（前缀 /api/app，与管理端 /api 分离）。
-// 附件仍复用现有 /api/attachments/*，小程序上传后业务侧传 file_uuids。
+// 附件仍复用现有 /api/attachments/*；排查图走 type_ext.files，整改走 file_uuids。
 func RegisterApp(r *gin.Engine, d *Deps) {
 	app := r.Group("/api/app")
 	{

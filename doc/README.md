@@ -9,7 +9,7 @@
 
 - 管理端：`/api/...`（鉴权、工作台、专项整改、台账、系统配置）
 - 小程序：`/api/app/...`（登录、待办、上报、整改、我的）
-- **附件直传** `POST /api/attachments/images`（两端共用 multipart 批量上传；业务只传 `file_uuids`，值为上传返回的 `file_id`）
+- **附件直传** `POST /api/attachments/images`（两端共用 multipart 批量上传；排查多图走 `type_ext` 内 `files`，整改走 `file_uuids`，值为上传返回的 `file_id`）
 
 ## 2. 运行环境
 
@@ -130,13 +130,13 @@ JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 
 
 1. **上传**：`POST /api/attachments/images`（multipart 字段 `files` / `file` + 可选 `watermark`/`lat`/`lng`/`address`）→ `data.list = [{file_id, url}]`；`watermark` 省略或为真时逐张烧录水印（上报人取登录用户姓名），`watermark=0` 则原图入库
 2. **访问**：文件 URL 为 **`/uploads/y/m/d/...`**（静态目录，非 API download 路由）
-3. **业务提交**：JSON 字段 **`file_uuids`** = 上传返回的 **`file_id` 列表**；后台校验后内部建关联，业务表只落 **`photo_ref_uuid` / `rectify_photo_ref_uuid`**（值为 `att_id`）
-4. **修改**：`photo_ref_uuid` 非空 → 附件不变；为空 → 须重新传 `file_uuids`
-5. **查询**：详情/列表反查关联，额外返回 `photos` / `rectify_photos`：`[{file_id, url}]`
+3. **排查多图**：`type_ext.checklist[].files` = `file_id` 数组，校验后原样写入 JSON（无关联表）
+4. **整改多图**：body **`file_uuids`** = `file_id` 列表，落库 `photo_file_ids` JSON
+5. **查询**：`toVO` 反查 `attachments`，checklist 各项带 **`photos:[{file_id,url}]`**；整改记录带 **`photos`**；可选 **`reporter_signature`**
 
 本地落盘：`backend/storage/uploads/`（配置 `upload.root`）。单张大小受 `upload.max_file_size` 限制；一次最多 20 张。
 
-> 分片 init/chunk/complete、bind、refs 反查等接口**当前未实现**；关联在 Issue 创建/更新/整改时由服务层自动完成。
+> 分片 init/chunk/complete 等接口**当前未实现**。
 
 ## 5. 模块与路径一览
 
@@ -153,7 +153,7 @@ JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 
 | 附件（两端共用） | `/api/attachments` |
 | **小程序 app API** | `/api/app` |
 
-小程序能力对齐 `demo/miniapp`（登录 / 待办 / 上报 / 整改 / 我的）。附件上传走 `/api/attachments`，业务接口只收 `file_uuids`。详见 [api.md · 小程序 app API](./api.md)。
+小程序能力对齐 `demo/miniapp`（登录 / 待办 / 上报 / 整改 / 我的）。附件上传走 `/api/attachments`，排查图走 `type_ext.checklist[].files`，整改走 `file_uuids`。详见 [api.md · 小程序 app API](./api.md)。
 
 ## 6. 配置要点
 

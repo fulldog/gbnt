@@ -55,13 +55,14 @@ backend/
 
 - Direct batch images: `POST /api/attachments/images` (multipart `files` + optional `watermark`/`lat`/`lng`/`address`); `watermark` omit/true burns watermark (name from JWT `UserInfo`), `watermark=0` keeps original; return `data.list=[{file_id,url}]`
 - `upload.chunk_size` is reserved (chunk upload not implemented); only `root`, `max_file_size`, `font` are used
-- Business submits `file_uuids` (file_id 列表); backend Bind → `att_id` stored as `photo_ref_uuid`
-- Table: `attachment_ref_items` (`att_id` + `file_id`)
+- Quiz 多图：入参 `type_ext.checklist[].files`（file_id 列表），校验存在后原样写入 `issues.type_ext` JSON；无关联表
+- 整改多图：入参 `file_uuids`，落库 `issue_rectify_records.photo_file_ids`（JSON 数组）
+- 回显：`toVO` 按 file_id 查 `attachments`，checklist 各项填 `photos:[{file_id,url}]`，整改记录同理；签名可返回 `reporter_signature`
 
 ## Issues (report / rectify)
 
 - Status: `new` / `pending` / `done`; Create derives from QuizBool → `needs_rectify` (`false`→`done`, `true`→`new`)
-- Region: four org IDs (at least one; ancestors required); QuizBool = `{value,desc,files}`
+- Region: four org IDs (at least one; ancestors required); QuizBool = `{type,value,desc,mustImg,files}` in `type_ext.checklist[]`; `mustImg=true` 时 `files` 长度须 >0
 - Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; assignee columns kept on `issues` (server-fill later)
 - Rectify only `new|pending`; `POST .../re-rectify` for `done`→`pending`; history in `issue_rectify_records`
 
@@ -81,7 +82,7 @@ backend/
 - Column order: business fields first; embed `Base` (`id/created_at/updated_at/created_id/update_id/is_delete`) at struct end
 - `created_id` / `update_id` filled from JWT `UserInfo` in request context via GORM callback
 - OpLog stores `request` / `response` (masked) for POST/PUT/PATCH/DELETE `/api/*`
-- Attachments: `POST /api/attachments/images` (optional `watermark`); disk `y/m/d/{orig}_{user_id}_{unix_ms}{ext}`; table `attachments` has `file_id`/`orig_name`/`file_name`; group table `attachment_ref_items` (`att_id` + `file_id`)
+- Attachments: `POST /api/attachments/images` (optional `watermark`); disk `y/m/d/{orig}_{user_id}_{unix_ms}{ext}`; table `attachments` has `file_id`/`orig_name`/`file_name`; multi-image IDs stored as JSON on the business row, VO hydrates via `ListByFileIDs` / lookup
 
 ## Do not
 

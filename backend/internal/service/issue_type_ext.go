@@ -10,23 +10,55 @@ import (
 	"gbnt/backend/internal/model"
 )
 
-// QuizBool 是/否排查项（入参仅 value/desc/files；att_id 由服务端 Bind 后回填）。
+// QuizBool 是/否排查项（checklist 元素；files 为 file_id 列表，入库 JSON；回显另填 photos）。
 type QuizBool struct {
-	Value bool     `json:"value"`            // 是=true / 否=false
-	Desc  string   `json:"desc"`             // 说明；判定为需整改时必填
-	Files []string `json:"files"`            // 现场照片 file_id 列表；判定为需整改时必填
-	AttID string   `json:"att_id,omitempty"` // 服务端 Bind 回填的关联组 ID；入参不要求
+	Type    model.QuizType `json:"type"`             // 排查项类型枚举，见 model.QuizType
+	Value   bool           `json:"value"`            // 是=true / 否=false
+	Desc    string         `json:"desc"`             // 说明；判定为需整改时必填
+	MustImg bool           `json:"mustImg"`          // 是否必填现场照片；true 时 files 长度须 >0
+	Files   []string       `json:"files"`            // 现场照片 file_id 列表；mustImg=true 时必填
+	Photos  []FileItem     `json:"photos,omitempty"` // 回显：file_id + 相对路径；入参忽略
 }
+
+type quizSpec struct {
+	Type     model.QuizType
+	Label    string
+	Negative bool
+}
+
+var (
+	wellChecklistSpecs = []quizSpec{
+		{model.QuizWaterOut, "机井是否出水", false},
+		{model.QuizPipeOk, "管道是否按要求连接", false},
+		{model.QuizWiringOk, "走线是否规范", false},
+		{model.QuizBoxOk, "配电箱是否完好", false},
+		{model.QuizCoverOk, "井台、井盖是否完整", false},
+		{model.QuizTransformerOk, "变压器是否完好", false},
+	}
+	roadChecklistSpecs = []quizSpec{
+		{model.QuizHasShoulder, "是否有路肩", false},
+		{model.QuizHasAsh, "是否有灰土层", false},
+	}
+	bridgeChecklistSpecs = []quizSpec{
+		{model.QuizNeedsRectify, "是否需要整改", true},
+	}
+	forestChecklistSpecs = []quizSpec{
+		{model.QuizBrokenBelt, "林带是否断带", true},
+		{model.QuizDeadTrees, "是否有枯死木", true},
+		{model.QuizPest, "是否发现病虫害", true},
+	}
+	transformerChecklistSpecs = []quizSpec{
+		{model.QuizPowered, "是否通电", false},
+		{model.QuizDeviceOk, "设备是否完好", false},
+		{model.QuizCabinetOk, "配电设施是否完好", false},
+		{model.QuizIllegalWire, "是否私拉乱接", true},
+	}
+)
 
 // WellExt 机井扩展。
 type WellExt struct {
 	BuildKind     model.FacilityBuildKind `json:"build_kind"`     // 新建/配套 new|match
-	WaterOut      *QuizBool               `json:"water_out"`      // 机井是否出水（正向：否=需整改）
-	PipeOk        *QuizBool               `json:"pipe_ok"`        // 管道是否按要求连接
-	WiringOk      *QuizBool               `json:"wiring_ok"`      // 走线是否规范
-	BoxOk         *QuizBool               `json:"box_ok"`         // 配电箱是否完好
-	CoverOk       *QuizBool               `json:"cover_ok"`       // 井台、井盖是否完整
-	TransformerOk *QuizBool               `json:"transformer_ok"` // 变压器是否完好
+	Checklist     []QuizBool              `json:"checklist"`      // 是/否排查清单，type 见 well 子集
 	OutletTotal   *int                    `json:"outlet_total"`   // 出水口总数 ≥0
 	OutletDamaged *int                    `json:"outlet_damaged"` // 出水口损坏数量；≤总数，>0 则需整改
 	CasingTotal   *int                    `json:"casing_total"`   // 护筒总数 ≥0
@@ -37,36 +69,33 @@ type WellExt struct {
 
 // RoadExt 道路扩展。
 type RoadExt struct {
-	Length      *float64  `json:"length"`       // 长度（千米）≥0
-	Width       *float64  `json:"width"`        // 宽度（米）≥0
-	Thickness   *float64  `json:"thickness"`    // 厚度（米）≥0
-	HasShoulder *QuizBool `json:"has_shoulder"` // 是否有路肩（正向）
-	HasAsh      *QuizBool `json:"has_ash"`      // 是否有灰土层（正向）
-	TreeSurvive *float64  `json:"tree_survive"` // 林网存活数量（棵）≥0
-	KeeperName  string    `json:"keeper_name"`  // 负责人（选填）
-	KeeperPhone string    `json:"keeper_phone"` // 电话（选填）
+	Length      *float64   `json:"length"`       // 长度（千米）≥0
+	Width       *float64   `json:"width"`        // 宽度（米）≥0
+	Thickness   *float64   `json:"thickness"`    // 厚度（米）≥0
+	Checklist   []QuizBool `json:"checklist"`    // 是/否排查清单，type=has_shoulder|has_ash
+	TreeSurvive *float64   `json:"tree_survive"` // 林网存活数量（棵）≥0
+	KeeperName  string     `json:"keeper_name"`  // 负责人（选填）
+	KeeperPhone string     `json:"keeper_phone"` // 电话（选填）
 }
 
 // BridgeExt 桥涵闸扩展。
 type BridgeExt struct {
-	Kind         model.BridgeKind `json:"kind"`          // 设施类型 bridge|culvert|gate
-	Length       *float64         `json:"length"`        // 长度（米）≥0
-	Width        *float64         `json:"width"`         // 宽度（米）≥0
-	NeedsRectify *QuizBool        `json:"needs_rectify"` // 是否需要整改（负向：是=需整改）
-	KeeperName   string           `json:"keeper_name"`   // 负责人（选填）
-	KeeperPhone  string           `json:"keeper_phone"`  // 电话（选填）
+	Kind        model.BridgeKind `json:"kind"`         // 设施类型 bridge|culvert|gate
+	Length      *float64         `json:"length"`       // 长度（米）≥0
+	Width       *float64         `json:"width"`        // 宽度（米）≥0
+	Checklist   []QuizBool       `json:"checklist"`    // 是/否排查清单，type=needs_rectify
+	KeeperName  string           `json:"keeper_name"`  // 负责人（选填）
+	KeeperPhone string           `json:"keeper_phone"` // 电话（选填）
 }
 
 // ForestExt 林网扩展。
 type ForestExt struct {
-	HandoverCount *float64  `json:"handover_count"` // 移交株数 ≥0
-	ExistingCount *float64  `json:"existing_count"` // 现有株数 ≥0
-	SurviveRate   *float64  `json:"survive_rate"`   // 存活率 0–100
-	BrokenBelt    *QuizBool `json:"broken_belt"`    // 林带是否断带（负向）
-	DeadTrees     *QuizBool `json:"dead_trees"`     // 是否有枯死木（负向）
-	Pest          *QuizBool `json:"pest"`           // 是否发现病虫害（负向）
-	KeeperName    string    `json:"keeper_name"`    // 负责人（选填）
-	KeeperPhone   string    `json:"keeper_phone"`   // 电话（选填）
+	HandoverCount *float64   `json:"handover_count"` // 移交株数 ≥0
+	ExistingCount *float64   `json:"existing_count"` // 现有株数 ≥0
+	SurviveRate   *float64   `json:"survive_rate"`   // 存活率 0–100
+	Checklist     []QuizBool `json:"checklist"`      // 是/否排查清单，type=broken_belt|dead_trees|pest
+	KeeperName    string     `json:"keeper_name"`    // 负责人（选填）
+	KeeperPhone   string     `json:"keeper_phone"`   // 电话（选填）
 }
 
 // TransformerExt 变压器扩展。
@@ -74,10 +103,7 @@ type TransformerExt struct {
 	Capacity    *float64                 `json:"capacity"`     // 容量（kVA）≥0
 	Model       string                   `json:"model"`        // 型号（选填）
 	Voltage     model.TransformerVoltage `json:"voltage"`      // 电压等级 10kv|0.4kv
-	Powered     *QuizBool                `json:"powered"`      // 是否通电（正向）
-	DeviceOk    *QuizBool                `json:"device_ok"`    // 设备是否完好（正向）
-	CabinetOk   *QuizBool                `json:"cabinet_ok"`   // 配电设施是否完好（正向）
-	IllegalWire *QuizBool                `json:"illegal_wire"` // 是否私拉乱接（负向）
+	Checklist   []QuizBool               `json:"checklist"`    // 是/否排查清单，type=powered|device_ok|cabinet_ok|illegal_wire
 	KeeperName  string                   `json:"keeper_name"`  // 负责人（选填）
 	KeeperPhone string                   `json:"keeper_phone"` // 电话（选填）
 }
@@ -141,21 +167,58 @@ func (s *IssueService) bindQuizBool(ctx context.Context, q *QuizBool, label stri
 		if strings.TrimSpace(q.Desc) == "" {
 			return true, fmt.Errorf("请填写%s的说明", label)
 		}
-		if len(q.Files) == 0 {
-			return true, fmt.Errorf("请上传%s的现场照片", label)
-		}
+	}
+	if q.MustImg && len(q.Files) == 0 {
+		return indicatesIssue, fmt.Errorf("请上传%s的现场照片", label)
 	}
 	if len(q.Files) > 0 {
-		if s.Attach == nil {
-			return indicatesIssue, errors.New("附件服务未初始化")
+		if s.Attach != nil {
+			clean, ensErr := s.Attach.EnsureFiles(ctx, q.Files)
+			if ensErr != nil {
+				return indicatesIssue, fmt.Errorf("%s照片: %w", label, ensErr)
+			}
+			q.Files = clean
 		}
-		attID, _, bindErr := s.Attach.Bind(ctx, q.Files)
-		if bindErr != nil {
-			return indicatesIssue, fmt.Errorf("%s照片: %w", label, bindErr)
-		}
-		q.AttID = attID
+		q.Photos = nil
 	}
 	return indicatesIssue, nil
+}
+
+func (s *IssueService) bindChecklist(ctx context.Context, list []QuizBool, specs []quizSpec) ([]QuizBool, bool, error) {
+	allowed := make(map[model.QuizType]quizSpec, len(specs))
+	for _, sp := range specs {
+		allowed[sp.Type] = sp
+	}
+	byType := make(map[model.QuizType]*QuizBool, len(list))
+	for i := range list {
+		q := &list[i]
+		if !q.Type.Valid() {
+			return nil, false, errors.New("排查项类型无效")
+		}
+		if _, ok := allowed[q.Type]; !ok {
+			return nil, false, fmt.Errorf("排查项 %s 不适用于当前问题类型", q.Type)
+		}
+		if _, ok := byType[q.Type]; ok {
+			return nil, false, fmt.Errorf("排查项 %s 重复", q.Type)
+		}
+		byType[q.Type] = q
+	}
+	out := make([]QuizBool, 0, len(specs))
+	needs := false
+	for _, sp := range specs {
+		q := byType[sp.Type]
+		issue, err := s.bindQuizBool(ctx, q, sp.Label, sp.Negative)
+		if err != nil {
+			return nil, false, err
+		}
+		if issue {
+			needs = true
+		}
+		q.Type = sp.Type
+		q.Photos = nil
+		out = append(out, *q)
+	}
+	return out, needs, nil
 }
 
 func (s *IssueService) normalizeWellExt(ctx context.Context, raw json.RawMessage) (string, bool, error) {
@@ -166,26 +229,11 @@ func (s *IssueService) normalizeWellExt(ctx context.Context, raw json.RawMessage
 	if !ext.BuildKind.Valid() {
 		return "", false, errors.New("请选择新建/配套")
 	}
-	needs := false
-	for _, item := range []struct {
-		q     *QuizBool
-		label string
-	}{
-		{ext.WaterOut, "机井是否出水"},
-		{ext.PipeOk, "管道是否按要求连接"},
-		{ext.WiringOk, "走线是否规范"},
-		{ext.BoxOk, "配电箱是否完好"},
-		{ext.CoverOk, "井台、井盖是否完整"},
-		{ext.TransformerOk, "变压器是否完好"},
-	} {
-		issue, e := s.bindQuizBool(ctx, item.q, item.label, false)
-		if e != nil {
-			return "", false, e
-		}
-		if issue {
-			needs = true
-		}
+	list, needs, err := s.bindChecklist(ctx, ext.Checklist, wellChecklistSpecs)
+	if err != nil {
+		return "", false, err
 	}
+	ext.Checklist = list
 	if err := requireIntGE0(ext.OutletTotal, "出水口总数"); err != nil {
 		return "", false, err
 	}
@@ -228,22 +276,11 @@ func (s *IssueService) normalizeRoadExt(ctx context.Context, raw json.RawMessage
 	if err := requireFloatGE0(ext.TreeSurvive, "林网树木存活数量"); err != nil {
 		return "", false, err
 	}
-	needs := false
-	for _, item := range []struct {
-		q     *QuizBool
-		label string
-	}{
-		{ext.HasShoulder, "是否有路肩"},
-		{ext.HasAsh, "是否有灰土层"},
-	} {
-		issue, e := s.bindQuizBool(ctx, item.q, item.label, false)
-		if e != nil {
-			return "", false, e
-		}
-		if issue {
-			needs = true
-		}
+	list, needs, err := s.bindChecklist(ctx, ext.Checklist, roadChecklistSpecs)
+	if err != nil {
+		return "", false, err
 	}
+	ext.Checklist = list
 	canon, err := marshalExt(ext)
 	return canon, needs, err
 }
@@ -262,12 +299,13 @@ func (s *IssueService) normalizeBridgeExt(ctx context.Context, raw json.RawMessa
 	if err := requireFloatGE0(ext.Width, "宽度"); err != nil {
 		return "", false, err
 	}
-	issue, e := s.bindQuizBool(ctx, ext.NeedsRectify, "是否需要整改", true)
-	if e != nil {
-		return "", false, e
+	list, needs, err := s.bindChecklist(ctx, ext.Checklist, bridgeChecklistSpecs)
+	if err != nil {
+		return "", false, err
 	}
+	ext.Checklist = list
 	canon, err := marshalExt(ext)
-	return canon, issue, err
+	return canon, needs, err
 }
 
 func (s *IssueService) normalizeForestExt(ctx context.Context, raw json.RawMessage) (string, bool, error) {
@@ -287,23 +325,11 @@ func (s *IssueService) normalizeForestExt(ctx context.Context, raw json.RawMessa
 	if *ext.SurviveRate > 100 {
 		return "", false, errors.New("存活率应在 0–100 之间")
 	}
-	needs := false
-	for _, item := range []struct {
-		q     *QuizBool
-		label string
-	}{
-		{ext.BrokenBelt, "林带是否断带"},
-		{ext.DeadTrees, "是否有枯死木"},
-		{ext.Pest, "是否发现病虫害"},
-	} {
-		issue, e := s.bindQuizBool(ctx, item.q, item.label, true)
-		if e != nil {
-			return "", false, e
-		}
-		if issue {
-			needs = true
-		}
+	list, needs, err := s.bindChecklist(ctx, ext.Checklist, forestChecklistSpecs)
+	if err != nil {
+		return "", false, err
 	}
+	ext.Checklist = list
 	canon, err := marshalExt(ext)
 	return canon, needs, err
 }
@@ -319,25 +345,11 @@ func (s *IssueService) normalizeTransformerExt(ctx context.Context, raw json.Raw
 	if !ext.Voltage.Valid() {
 		return "", false, errors.New("请选择电压等级")
 	}
-	needs := false
-	for _, item := range []struct {
-		q        *QuizBool
-		label    string
-		negative bool
-	}{
-		{ext.Powered, "是否通电", false},
-		{ext.DeviceOk, "设备是否完好", false},
-		{ext.CabinetOk, "配电设施是否完好", false},
-		{ext.IllegalWire, "是否私拉乱接", true},
-	} {
-		issue, e := s.bindQuizBool(ctx, item.q, item.label, item.negative)
-		if e != nil {
-			return "", false, e
-		}
-		if issue {
-			needs = true
-		}
+	list, needs, err := s.bindChecklist(ctx, ext.Checklist, transformerChecklistSpecs)
+	if err != nil {
+		return "", false, err
 	}
+	ext.Checklist = list
 	canon, err := marshalExt(ext)
 	return canon, needs, err
 }
@@ -359,7 +371,83 @@ func (s *IssueService) normalizeTypeExt(ctx context.Context, typ string, raw jso
 	}
 }
 
-// validateTypeExt 仅结构校验（更新用，不重新 Bind 时可先规范化）。
+func (s *IssueService) hydrateQuiz(ctx context.Context, q *QuizBool) {
+	if q == nil {
+		return
+	}
+	q.Photos = []FileItem{}
+	if s.Attach == nil || len(q.Files) == 0 {
+		return
+	}
+	list, err := s.Attach.lookupExisting(ctx, q.Files)
+	if err != nil {
+		return
+	}
+	q.Photos = list
+}
+
+func (s *IssueService) hydrateChecklist(ctx context.Context, list []QuizBool) {
+	for i := range list {
+		s.hydrateQuiz(ctx, &list[i])
+	}
+}
+
+func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (json.RawMessage, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "null" {
+		return json.RawMessage("{}"), nil
+	}
+	msg := json.RawMessage(raw)
+	var (
+		canon string
+		err   error
+	)
+	switch model.IssueType(typ) {
+	case model.IssueTypeWell:
+		var ext WellExt
+		if err = json.Unmarshal(msg, &ext); err != nil {
+			return msg, nil
+		}
+		s.hydrateChecklist(ctx, ext.Checklist)
+		canon, err = marshalExt(ext)
+	case model.IssueTypeRoad:
+		var ext RoadExt
+		if err = json.Unmarshal(msg, &ext); err != nil {
+			return msg, nil
+		}
+		s.hydrateChecklist(ctx, ext.Checklist)
+		canon, err = marshalExt(ext)
+	case model.IssueTypeBridge:
+		var ext BridgeExt
+		if err = json.Unmarshal(msg, &ext); err != nil {
+			return msg, nil
+		}
+		s.hydrateChecklist(ctx, ext.Checklist)
+		canon, err = marshalExt(ext)
+	case model.IssueTypeForest:
+		var ext ForestExt
+		if err = json.Unmarshal(msg, &ext); err != nil {
+			return msg, nil
+		}
+		s.hydrateChecklist(ctx, ext.Checklist)
+		canon, err = marshalExt(ext)
+	case model.IssueTypeTransformer:
+		var ext TransformerExt
+		if err = json.Unmarshal(msg, &ext); err != nil {
+			return msg, nil
+		}
+		s.hydrateChecklist(ctx, ext.Checklist)
+		canon, err = marshalExt(ext)
+	default:
+		return msg, nil
+	}
+	if err != nil {
+		return msg, nil
+	}
+	return json.RawMessage(canon), nil
+}
+
+// validateTypeExt 仅结构校验（更新用，不重新 EnsureFiles）。
 func validateTypeExt(typ string, raw json.RawMessage) (string, error) {
 	s := &IssueService{}
 	canon, _, err := s.normalizeTypeExt(context.Background(), typ, raw)
