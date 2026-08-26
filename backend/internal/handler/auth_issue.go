@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/model"
@@ -165,13 +167,11 @@ func (d *Deps) WorkbenchStats(c *gin.Context) {
 	response.OK(c, stats)
 }
 
-// ListIssues GET /api/issues — 专项整改列表；query: type/status/street/village/*_org_id/project_year/keyword/page/size。
+// ListIssues GET /api/issues — 专项整改列表；query: type/status/*_org_id/project_year/keyword/page/size。
 func (d *Deps) ListIssues(c *gin.Context) {
 	q := service.IssueQuery{
 		Type:          c.Query("type"),
 		Status:        c.Query("status"),
-		Street:        c.Query("street"),
-		Village:       c.Query("village"),
 		RootOrgID:     parseUint64Query(c.Query("root_org_id")),
 		DistrictOrgID: parseUint64Query(c.Query("district_org_id")),
 		StreetOrgID:   parseUint64Query(c.Query("street_org_id")),
@@ -262,8 +262,12 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Rectify(c.Request.Context(), id, req)
+	item, err := d.Issue.Rectify(c.Request.Context(), id, req, false)
 	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -276,12 +280,36 @@ func (d *Deps) ReRectifyIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	item, err := d.Issue.ReRectify(c.Request.Context(), id)
+	item, err := d.Issue.ReRectify(c.Request.Context(), id, false)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	d.OpLog.Mark(c, "重新整改", item.Type+" · "+item.Code)
+	response.OK(c, item)
+}
+
+// ReassignIssue POST /api/issues/:id/reassign — 重新指派整改人；body: {assignee_user}。
+func (d *Deps) ReassignIssue(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var req service.ReassignInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	item, err := d.Issue.Reassign(c.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+			return
+		}
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	d.OpLog.Mark(c, "重新指派整改人", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
@@ -302,9 +330,9 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 	response.OK(c, gin.H{"imported": n})
 }
 
-// LedgerStreet GET /api/ledger/street — 街道台账聚合；query: street/date_from/date_to。
+// LedgerStreet GET /api/ledger/street — 按村组织聚合；query: street_org_id/date_from/date_to。
 func (d *Deps) LedgerStreet(c *gin.Context) {
-	data, err := d.Issue.LedgerStreet(c.Query("street"), c.Query("date_from"), c.Query("date_to"))
+	data, err := d.Issue.LedgerStreet(parseUint64Query(c.Query("street_org_id")), c.Query("date_from"), c.Query("date_to"))
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -312,9 +340,9 @@ func (d *Deps) LedgerStreet(c *gin.Context) {
 	response.OK(c, data)
 }
 
-// LedgerSurvey GET /api/ledger/survey — 街道排查汇总；query: street/date_from/date_to。
+// LedgerSurvey GET /api/ledger/survey — 按类型汇总；query: street_org_id/date_from/date_to。
 func (d *Deps) LedgerSurvey(c *gin.Context) {
-	data, err := d.Issue.LedgerSurvey(c.Query("street"), c.Query("date_from"), c.Query("date_to"))
+	data, err := d.Issue.LedgerSurvey(parseUint64Query(c.Query("street_org_id")), c.Query("date_from"), c.Query("date_to"))
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return

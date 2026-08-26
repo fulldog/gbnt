@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"strings"
 
+	"gbnt/backend/internal/database"
 	"gbnt/backend/internal/model"
 )
 
@@ -21,9 +22,7 @@ type IssueService struct {
 // IssueQuery 列表筛选。
 type IssueQuery struct {
 	Type          string // 问题类型 well/road/bridge/forest/transformer；空或 all 不限
-	Status        string // new|pending|done|all；空由调用方设默认
-	Street        string // 街道名称（冗余字段筛选）
-	Village       string // 村/社区名称（冗余字段筛选）
+	Status        string // new|pending|done；空或 all 不限状态
 	RootOrgID     uint64 // 区划根组织 ID；0 不限
 	DistrictOrgID uint64 // 区划区级组织 ID；0 不限
 	StreetOrgID   uint64 // 区划街道组织 ID；0 不限
@@ -66,10 +65,21 @@ type RectifyRecordVO struct {
 	Photos []FileItem `json:"photos"` // 整改照片 file_id + 相对路径
 }
 
+// RectifyItem 单条分项整改。
+type RectifyItem struct {
+	Type      model.QuizType `json:"type"`       // 排查项类型枚举，见 model.QuizType
+	Note      string         `json:"note"`       // 整改说明（必填）
+	FileUUIDs []string       `json:"file_uuids"` // 整改照片 file_id 列表（必填）
+}
+
 // RectifyInput 整改入参。
 type RectifyInput struct {
-	Note      string   `json:"note"`       // 整改说明（必填）
-	FileUUIDs []string `json:"file_uuids"` // 整改照片 file_id 列表（必填）
+	RectifyList []RectifyItem `json:"rectify_list"` // 分项整改列表；可含重复 type；不能为空
+}
+
+// ReassignInput 管理端重新指派整改人。
+type ReassignInput struct {
+	AssigneeUser uint64 `json:"assignee_user"` // 整改责任人用户 ID（必填，须为启用账号）
 }
 
 // ImportIssuesReq 管理端批量导入。
@@ -186,12 +196,6 @@ func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
 	if q.Status != "" && q.Status != "all" {
 		db = db.Where("status = ?", q.Status)
 	}
-	if q.Street != "" && q.Street != "all" {
-		db = db.Where("street = ?", q.Street)
-	}
-	if q.Village != "" && q.Village != "all" {
-		db = db.Where("village = ?", q.Village)
-	}
 	if q.RootOrgID > 0 {
 		db = db.Where("root_org_id = ?", q.RootOrgID)
 	}
@@ -214,37 +218,123 @@ func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
 	return db
 }
 
-// ListTodos 小程序待办：未传 status 默认 new。
-func (s *IssueService) ListTodos(q IssueQuery) ([]IssueVO, int64, error) {
-	if q.Status == "" {
-		q.Status = string(model.IssueStatusNew)
+// issueLeafOrgID 问题落点组织：最细非 0 的区划 ID。
+func issueLeafOrgID(it model.Issue) uint64 {
+	if it.VillageOrgID > 0 {
+		return it.VillageOrgID
 	}
+	if it.StreetOrgID > 0 {
+		return it.StreetOrgID
+	}
+	if it.DistrictOrgID > 0 {
+		return it.DistrictOrgID
+	}
+	return it.RootOrgID
+}
+
+// orgSubtreeIDs 从扁平组织列表计算 rootID 及其全部下属（含自身）。
+func orgSubtreeIDs(orgs []model.SysOrg, rootID uint64) []uint64 {
+	children := map[uint64][]uint64{}
+	for _, o := range orgs {
+		children[o.ParentID] = append(children[o.ParentID], o.ID)
+	}
+	seen := map[uint64]struct{}{rootID: {}}
+	queue := []uint64{rootID}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		for _, c := range children[id] {
+			if _, ok := seen[c]; ok {
+				continue
+			}
+			seen[c] = struct{}{}
+			queue = append(queue, c)
+		}
+	}
+	ids := make([]uint64, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// issueTodoOrderSQL 待办排序：new > pending > done，同状态按 id 降序。
+func issueTodoOrderSQL() string {
+	return "FIELD(status,'new','pending','done') ASC, id DESC"
+}
+
+func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, orgID uint64) (*gorm.DB, error) {
+	if orgID == 0 {
+		return db, nil
+	}
+	var orgs []model.SysOrg
+	if err := s.db(ctx).Find(&orgs).Error; err != nil {
+		return nil, err
+	}
+	ids := orgSubtreeIDs(orgs, orgID)
+	leaf := `(CASE WHEN village_org_id > 0 THEN village_org_id WHEN street_org_id > 0 THEN street_org_id WHEN district_org_id > 0 THEN district_org_id ELSE root_org_id END)`
+	return db.Where(leaf+" IN ?", ids), nil
+}
+
+// ListTodos 小程序待办：status 空或 all 查全部；排序 new > pending > done，同状态 id 降序。
+// 仅当前用户组织及下属的整改单（OrgID=0 不限）。
+func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Status == "all" {
 		q.Status = ""
 	}
-	return s.List(q)
+	if q.Page <= 0 {
+		q.Page = 1
+	}
+	if q.Size <= 0 {
+		q.Size = 20
+	}
+	user, err := database.UserFromContext(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
+	db, err = s.applyOrgSubtreeFilter(ctx, db, user.OrgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []model.Issue
+	if err := db.Order(issueTodoOrderSQL()).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
+		return nil, 0, err
+	}
+	out := make([]IssueVO, 0, len(list))
+	for i := range list {
+		vo, err := s.toVO(&list[i])
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, *vo)
+	}
+	return out, total, nil
 }
 
-func (s *IssueService) MineStats(userID uint64, userName string) (map[string]int64, error) {
+func (s *IssueService) MineStats(userID uint64) (map[string]int64, error) {
 	var reported, pending, done int64
-	if err := s.DB.Model(&model.Issue{}).Where("reporter_id = ?", userID).Count(&reported).Error; err != nil {
+	if err := s.DB.Model(&model.Issue{}).Where("created_id = ?", userID).Count(&reported).Error; err != nil {
 		return nil, err
 	}
-	// 待整改对齐 status=new
 	if err := s.DB.Model(&model.Issue{}).Where(
-		"(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, model.IssueStatusNew,
+		"(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusNew,
 	).Count(&pending).Error; err != nil {
 		return nil, err
 	}
 	if err := s.DB.Model(&model.Issue{}).Where(
-		"(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, model.IssueStatusDone,
+		"(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusDone,
 	).Count(&done).Error; err != nil {
 		return nil, err
 	}
 	return map[string]int64{"reported": reported, "pending": pending, "done": done}, nil
 }
 
-func (s *IssueService) ListMine(scope string, userID uint64, userName string, page, size int) ([]IssueVO, int64, error) {
+func (s *IssueService) ListMine(scope string, userID uint64, page, size int) ([]IssueVO, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -254,11 +344,11 @@ func (s *IssueService) ListMine(scope string, userID uint64, userName string, pa
 	db := s.DB.Model(&model.Issue{})
 	switch scope {
 	case "reported":
-		db = db.Where("reporter_id = ?", userID)
+		db = db.Where("created_id = ?", userID)
 	case "pending":
-		db = db.Where("(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, model.IssueStatusNew)
+		db = db.Where("(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusNew)
 	case "done":
-		db = db.Where("(reporter_id = ? OR assignee_name = ?) AND status = ?", userID, userName, model.IssueStatusDone)
+		db = db.Where("(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusDone)
 	default:
 		return nil, 0, errors.New("scope 须为 reported|pending|done")
 	}
@@ -365,6 +455,9 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if !model.ProjectYear(in.ProjectYear).Valid() {
 		return nil, errors.New("请选择项目年度")
 	}
+	if _, _, err := s.validateRegionOrgs(in.RootOrgID, in.DistrictOrgID, in.StreetOrgID, in.VillageOrgID); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(in.Address) == "" {
 		return nil, errors.New("请填写定位地址")
 	}
@@ -404,8 +497,7 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		PlanDate:                in.PlanDate,
 		Status:                  string(status),
 		ReporterSignatureFileID: in.ReporterSignatureFileID,
-		// AssigneeName/Phone：接口不传，留空由后续业务填充
-		TypeExt: ext,
+		TypeExt:                 ext,
 	}
 	if err := s.db(ctx).Create(item).Error; err != nil {
 		return nil, err
@@ -437,8 +529,7 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 	if rootID == 0 && districtID == 0 && streetID == 0 && villageID == 0 {
 		rootID, districtID, streetID, villageID = item.RootOrgID, item.DistrictOrgID, item.StreetOrgID, item.VillageOrgID
 	}
-	streetName, villageName, err := s.validateRegionOrgs(rootID, districtID, streetID, villageID)
-	if err != nil {
+	if _, _, err := s.validateRegionOrgs(rootID, districtID, streetID, villageID); err != nil {
 		return nil, err
 	}
 
@@ -465,7 +556,6 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 		"type": typ, "project_year": year,
 		"root_org_id": rootID, "district_org_id": districtID,
 		"street_org_id": streetID, "village_org_id": villageID,
-		"street": streetName, "village": villageName,
 		"code": in.Code, "address": addr,
 		"lat": in.Lat, "lng": in.Lng,
 		"plan_date": in.PlanDate, "type_ext": ext,
@@ -517,37 +607,96 @@ func reRectifyGate(status string, needsRectify bool) error {
 	return nil
 }
 
-// Rectify 提交整改：仅 new/pending；写入记录表后 status=done。
-func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput) (*IssueVO, error) {
-	var item model.Issue
-	if err := s.DB.First(&item, id).Error; err != nil {
+func assertAppAssignee(item *model.Issue, userID uint64) error {
+	if item.AssigneeUser != 0 && item.AssigneeUser != userID {
+		return errors.New("该问题已由他人认领整改")
+	}
+	return nil
+}
+
+// Rectify 提交分项整改：写入 rectify_list 各条记录；覆盖全部需整改 type 则 done，否则 pending。
+// lockAssignee 为 true 时（App）校验已认领人。
+func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, lockAssignee bool) (*IssueVO, error) {
+	user, err := database.UserFromContext(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	note := strings.TrimSpace(in.Note)
-	if note == "" {
-		return nil, errors.New("请填写整改说明")
+	var item model.Issue
+	if err := s.db(ctx).First(&item, id).Error; err != nil {
+		return nil, err
 	}
-
+	if lockAssignee {
+		if err := assertAppAssignee(&item, user.ID); err != nil {
+			return nil, err
+		}
+	}
+	if err := rectifyGate(item.Status, true); err != nil {
+		return nil, err
+	}
+	if len(in.RectifyList) == 0 {
+		return nil, errors.New("请至少提交一项整改")
+	}
 	if s.Attach == nil {
 		return nil, errors.New("附件服务未初始化")
 	}
-	clean, err := s.Attach.EnsureFiles(ctx, in.FileUUIDs)
-	if err != nil {
+
+	type prepared struct {
+		typ   model.QuizType
+		note  string
+		photo string
+	}
+	prep := make([]prepared, 0, len(in.RectifyList))
+	for i, it := range in.RectifyList {
+		if !it.Type.Valid() {
+			return nil, fmt.Errorf("第 %d 项整改类型无效", i+1)
+		}
+		note := strings.TrimSpace(it.Note)
+		if note == "" {
+			return nil, fmt.Errorf("请填写%s的整改说明", it.Type)
+		}
+		clean, ensErr := s.Attach.EnsureFiles(ctx, it.FileUUIDs)
+		if ensErr != nil {
+			return nil, fmt.Errorf("%s照片: %w", it.Type, ensErr)
+		}
+		b, mErr := json.Marshal(clean)
+		if mErr != nil {
+			return nil, mErr
+		}
+		prep = append(prep, prepared{typ: it.Type, note: note, photo: string(b)})
+	}
+
+	need := neededQuizTypes(item.Type, item.TypeExt)
+	covered := map[model.QuizType]struct{}{}
+	var hist []model.IssueRectifyRecord
+	if err := s.db(ctx).Where("issue_id = ?", id).Find(&hist).Error; err != nil {
 		return nil, err
 	}
-	photoJSON, err := json.Marshal(clean)
-	if err != nil {
-		return nil, err
+	for _, r := range hist {
+		t := model.QuizType(r.QuizType)
+		if t.Valid() {
+			covered[t] = struct{}{}
+		}
+	}
+	for _, p := range prep {
+		covered[p.typ] = struct{}{}
+	}
+	st := model.IssueStatusPending
+	if rectifyTypesCovered(need, covered) {
+		st = model.IssueStatusDone
 	}
 
 	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
-		rec := model.IssueRectifyRecord{IssueID: id, Note: note, PhotoFileIDs: string(photoJSON)}
-		if err := tx.Create(&rec).Error; err != nil {
-			return err
+		for _, p := range prep {
+			rec := model.IssueRectifyRecord{
+				IssueID: id, QuizType: string(p.typ), Note: p.note, PhotoFileIDs: p.photo,
+			}
+			if err := tx.Create(&rec).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
-			"status": model.IssueStatusDone,
+			"status":        st,
+			"assignee_user": user.ID,
 		}).Error
 	})
 	if err != nil {
@@ -556,16 +705,51 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput) 
 	return s.Get(id)
 }
 
-// ReRectify 重新整改：done → pending。
-func (s *IssueService) ReRectify(ctx context.Context, id uint64) (*IssueVO, error) {
+// ReRectify 重新整改：done → pending；不删历史记录、不改 assignee_user。
+func (s *IssueService) ReRectify(ctx context.Context, id uint64, lockAssignee bool) (*IssueVO, error) {
 	var item model.Issue
 	if err := s.db(ctx).First(&item, id).Error; err != nil {
 		return nil, err
 	}
-	if err := reRectifyGate(item.Status, false); err != nil {
+	if lockAssignee {
+		user, err := database.UserFromContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := assertAppAssignee(&item, user.ID); err != nil {
+			return nil, err
+		}
+	}
+	need := neededQuizTypes(item.Type, item.TypeExt)
+	if err := reRectifyGate(item.Status, len(need) > 0); err != nil {
 		return nil, err
 	}
 	if err := s.db(ctx).Model(&item).Update("status", model.IssueStatusPending).Error; err != nil {
+		return nil, err
+	}
+	return s.Get(id)
+}
+
+// Reassign 管理端重新指派整改人：只改 assignee_user，不改 status、不删整改记录。
+func (s *IssueService) Reassign(ctx context.Context, id uint64, in ReassignInput) (*IssueVO, error) {
+	if in.AssigneeUser == 0 {
+		return nil, errors.New("请指定整改人")
+	}
+	var user model.SysUser
+	if err := s.db(ctx).First(&user, in.AssigneeUser).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("整改人不存在")
+		}
+		return nil, err
+	}
+	if user.Status != 1 {
+		return nil, errors.New("整改人已停用")
+	}
+	var item model.Issue
+	if err := s.db(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db(ctx).Model(&item).Update("assignee_user", in.AssigneeUser).Error; err != nil {
 		return nil, err
 	}
 	return s.Get(id)
@@ -604,51 +788,50 @@ func (s *IssueService) Stats() (map[string]interface{}, error) {
 	}, nil
 }
 
-func (s *IssueService) LedgerStreet(street, from, to string) (interface{}, error) {
-	q := s.DB.Model(&model.Issue{})
-	if street != "" {
-		q = q.Where("street = ?", street)
-	}
+func (s *IssueService) applyLedgerDate(q *gorm.DB, from, to string) *gorm.DB {
 	if from != "" {
 		q = q.Where("DATE(created_at) >= ?", from)
 	}
 	if to != "" {
 		q = q.Where("DATE(created_at) <= ?", to)
 	}
-	type row struct {
-		Village string `json:"village"`
-		Type    string `json:"type"`
-		Total   int64  `json:"total"`
-		Pending int64  `json:"pending"`
-		Done    int64  `json:"done"`
-	}
-	var list []row
-	err := q.Select("village, type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
-		Group("village, type").Scan(&list).Error
-	return ginH{"rows": list, "street": street}, err
+	return q
 }
 
-func (s *IssueService) LedgerSurvey(street, from, to string) (interface{}, error) {
-	q := s.DB.Model(&model.Issue{})
-	if street != "" {
-		q = q.Where("street = ?", street)
+func (s *IssueService) filterStreetOrg(q *gorm.DB, streetOrgID uint64) *gorm.DB {
+	if streetOrgID > 0 {
+		return q.Where("street_org_id = ?", streetOrgID)
 	}
-	if from != "" {
-		q = q.Where("DATE(created_at) >= ?", from)
-	}
-	if to != "" {
-		q = q.Where("DATE(created_at) <= ?", to)
-	}
+	return q
+}
+
+func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interface{}, error) {
+	q := s.filterStreetOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
 	type row struct {
-		Type    string `json:"type"`
-		Total   int64  `json:"total"`
-		Pending int64  `json:"pending"`
-		Done    int64  `json:"done"`
+		VillageOrgID uint64 `json:"village_org_id"` // 村级组织 ID
+		Type         string `json:"type"`           // 问题类型
+		Total        int64  `json:"total"`          // 条数
+		Pending      int64  `json:"pending"`        // new+pending
+		Done         int64  `json:"done"`           // done
+	}
+	var list []row
+	err := q.Select("village_org_id, type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
+		Group("village_org_id, type").Scan(&list).Error
+	return ginH{"rows": list, "street_org_id": streetOrgID}, err
+}
+
+func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interface{}, error) {
+	q := s.filterStreetOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+	type row struct {
+		Type    string `json:"type"`    // 问题类型
+		Total   int64  `json:"total"`   // 条数
+		Pending int64  `json:"pending"` // new+pending
+		Done    int64  `json:"done"`    // done
 	}
 	var list []row
 	err := q.Select("type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
 		Group("type").Scan(&list).Error
-	return ginH{"rows": list, "street": street}, err
+	return ginH{"rows": list, "street_org_id": streetOrgID}, err
 }
 
 type ginH map[string]interface{}

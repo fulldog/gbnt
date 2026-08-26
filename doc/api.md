@@ -67,21 +67,22 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/issues` | 列表，query: type/status/`*_org_id`/project_year/street/village/keyword/page/size；status=`new`\|`pending`\|`done` |
+| GET | `/api/issues` | 列表，query: type/status/`*_org_id`/project_year/keyword/page/size；status=`new`\|`pending`\|`done` |
 | GET | `/api/issues/:id` | 详情（`type_ext` 内 `photos`、`rectify_records[].photos`） |
 | POST | `/api/issues` | 新增；四级区划 ID + `type_ext.checklist`；无问题 → `done`，有问题 → `new` |
 | PUT | `/api/issues/:id` | 更新（传 `type_ext` 时按问题类型校验 checklist） |
 | DELETE | `/api/issues/:id` | 删除（软删） |
-| POST | `/api/issues/:id/rectify` | 整改：仅 `needs_rectify` 且 status∈{`new`,`pending`}；写入 `issue_rectify_records` 后 → `done` |
-| POST | `/api/issues/:id/re-rectify` | 重新整改：仅 `done` 且 `needs_rectify=true` → `pending` |
+| POST | `/api/issues/:id/rectify` | 整改：body `rectify_list[]`；覆盖全部需整改 type → `done`，否则 `pending`；写入 `assignee_user` |
+| POST | `/api/issues/:id/re-rectify` | 重新整改：仅 `done` 且仍有需整改 type → `pending`；不删历史记录 |
+| POST | `/api/issues/:id/reassign` | 重新指派整改人：`{assignee_user}` 须为启用用户；只改认领人，不改 status |
 | POST | `/api/issues/import` | 批量导入 `{rows:[]}` |
 
 ## 台账
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/ledger/street` | 街道台账聚合，query: street/date_from/date_to |
-| GET | `/api/ledger/survey` | 排查汇总 |
+| GET | `/api/ledger/street` | 街道台账聚合，query: street_org_id/date_from/date_to；按 village_org_id + type 分组 |
+| GET | `/api/ledger/survey` | 排查汇总，query: street_org_id/date_from/date_to |
 
 ## 系统 · 组织
 
@@ -178,9 +179,9 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 | `type_ext` | 类型扩展（`checklist` 为 QuizBool 数组） |
 | `status` | 仅更新用 |
 
-**已从入参移除**（对齐 miniapp 上报向导）：`project_name`、`location_text`、`description`、`measures`、`reporter_name` / `reporter_phone`、`assignee_name` / `assignee_phone`。其中责任人列仍保留在 `issues` 表（接口不传，可空，后续由服务端填充）；其余字段已从表结构删除。
+**已从入参移除**（对齐 miniapp 上报向导）：`project_name`、`location_text`、`description`、`measures`、`reporter_name` / `reporter_phone`、`assignee_name` / `assignee_phone`。排查人记在 `created_id`；整改责任人为 `assignee_user`（用户 ID，接口不传，可空，后续由服务端填充）。冗余街道/村名称列已删除，区划只存四级组织 ID。
 
-**区划**：`root_org_id` / `district_org_id` / `street_org_id` / `village_org_id`（可空，未填为 0）。至少填 1 个；填了子级则其全部上级必填；组织须存在且类型匹配，相邻级须父子关系。名称冗余写入 `street` / `village`。
+**区划**：`root_org_id` / `district_org_id` / `street_org_id` / `village_org_id`（可空，未填为 0）。至少填 1 个；填了子级则其全部上级必填；组织须存在且类型匹配，相邻级须父子关系。
 
 **状态推导**：按 quiz 算 `needs_rectify`——无任何问题 → `needs_rectify=false`、`status=done`；有问题 → `true`、`status=new`。有问题时 `plan_date` 必填。
 
@@ -198,8 +199,12 @@ JWT 通过后，受保护接口还需校验 `sys_apis` + `sys_role_apis`（`rbac
 
 ### 整改 / 重新整改
 
-- **Rectify**：`status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。成功：插入 `issue_rectify_records`（`photo_file_ids` JSON），issue → `done`。
-- **Re-rectify**：仅 `status==done` 且 `needs_rectify==true` → `pending`；不删历史记录。无问题上报（`needs_rectify=false`）不可调用。
+- **Rectify** body：`{ "rectify_list": [ { "type": QuizType, "note": "...", "file_uuids": [] } ] }`，列表不能为空。`type` 合法、`note` 非空、照片 `EnsureFiles`。同一 `type` **允许重复提交**（多行历史）。每条写入 `issue_rectify_records.quiz_type`。
+- 门禁：`status∈{new,pending}`；`done` → 400「已整改不可再提交，请先重新整改」。
+- **覆盖判定**：从上报 `type_ext.checklist` 取出「判定为需整改」的 QuizType 集合 `Need`（井口损坏等非 QuizBool 不进入）。`Covered` = 该 issue **全部**历史 `quiz_type` ∪ 本次 `rectify_list` 的 `type`。`Need ⊆ Covered` → `status=done`，否则 `pending`（允许部分整改）。`Need` 为空则提交成功后视为已覆盖 → `done`。
+- 同时将 `assignee_user` 写成当前登录用户 ID（管理端与 App 共用）。
+- **Re-rectify**：仅 `status==done` 且 `Need` 非空 → `pending`；**不删**历史记录、不改 `assignee_user`。再次整改时历史 type 仍计入 `Covered`（累计覆盖）。无问题排查（`Need` 空）不可调用。
+- **Reassign**（仅管理端）：`POST /api/issues/:id/reassign`，body `{assignee_user}`。目标用户须存在且启用；只更新 `assignee_user`。指派后 App 认领互斥对新人生效。
 
 ### 图片水印
 
@@ -225,7 +230,7 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 
 ## 小程序 app API（`/api/app`）
 
-面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，排查写入 `type_ext.checklist[].files`，整改 body 传 `file_uuids`。
+面向 `demo/miniapp`：登录、待办、上报、整改、我的。JWT 与管理端同一套；附件**不**在 `/api/app` 下重复挂载，小程序先调 **`POST /api/attachments/images`** 拿 `file_id`，排查写入 `type_ext.checklist[].files`，整改 body 传 `rectify_list[].file_uuids`。
 
 白名单额外包含：`POST /api/app/auth/slider/start`、`POST /api/app/auth/slider/finish`、`POST /api/app/auth/login`。
 
@@ -237,21 +242,25 @@ Linux 需配置 `upload.font` 指向中文 ttf/otf/ttc；Windows 默认可探测
 | GET | `/api/app/auth/me` | 当前用户（含 `role_id`、`apis`） |
 | PUT | `/api/app/auth/password` | 本人改密（同管理端） |
 | POST | `/api/app/auth/logout` | 退出登录（同管理端） |
-| GET | `/api/app/todos` | 待办；query: type/status/`*_org_id`/project_year/keyword/page/size；**未传 status 默认 `new`**；`status=all` 不限 |
+| GET | `/api/app/todos` | 待办；query 同管理端列表；**status 空或 `all` 查全部**，排序 **new > pending > done**（同状态 id 降序）。组织范围：登录用户 `OrgID` 及其下属；问题落点=最细非 0 区划 ID；`OrgID=0` 不限 |
 | GET | `/api/app/regions` | 组织树（`parent_id` 嵌套 `children`） |
-| GET | `/api/app/issues/:id` | 问题详情（含 lat/lng、`rectify_records`） |
+| GET | `/api/app/issues/:id` | 问题详情（含 lat/lng、`rectify_records`，含 `quiz_type`） |
 | POST | `/api/app/issues` | 上报（规则同管理端；按 quiz 推导 `new`/`done`） |
-| POST | `/api/app/issues/:id/rectify` | 页内整改 `{note, file_uuids}` |
-| POST | `/api/app/issues/:id/re-rectify` | 重新整改（`done` → `pending`） |
+| POST | `/api/app/issues/:id/rectify` | 页内整改 `{rectify_list:[{type,note,file_uuids}]}`；覆盖判定同管理端；认领互斥 |
+| POST | `/api/app/issues/:id/re-rectify` | 重新整改（`done` → `pending`）；认领互斥 |
 | GET | `/api/app/mine/stats` | 概览：`{reported, pending, done}`（pending 对齐 status=`new`） |
 | GET | `/api/app/mine/issues` | 清单；query: `scope=reported\|pending\|done` + page/size |
+
+### App 认领互斥
+
+App `rectify` / `re-rectify`：若 `assignee_user > 0` 且不等于当前用户 → 400「该问题已由他人认领整改」。管理端不校验。首次整改成功后写入当前用户为认领人。
 
 ### 我的 scope 规则
 
 | scope | 含义 |
 | --- | --- |
-| `reported` | `reporter_id` = 当前用户 |
-| `pending` | 状态 **`new`（待整改）**，且本人上报或 `assignee_name` = 当前用户姓名 |
-| `done` | 状态 done，且本人上报或整改责任人同名 |
+| `reported` | `created_id` = 当前用户 |
+| `pending` | 状态 **`new`（待整改）**，且本人上报或 `assignee_user` = 当前用户 ID |
+| `done` | 状态 done，且本人上报或 `assignee_user` = 当前用户 ID |
 
 Apifox：导入 [apifox/openapi.yaml](./apifox/openapi.yaml)（tag「小程序」）。

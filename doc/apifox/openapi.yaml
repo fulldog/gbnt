@@ -69,7 +69,7 @@ components:
         上报/新增/更新问题。新建核心：type、project_year、四级区划 ID（至少一级）、
         address、reporter_signature_file_id、type_ext（checklist 为 QuizBool 数组）。
         QuizBool 按答题推导 needs_rectify：无问题 status=done，有问题 status=new。
-        有问题时 plan_date 必填。assignee_name/phone 接口不传，库内可空由服务端后续填充。
+        有问题时 plan_date 必填。assignee_user 接口不传，库内可空由服务端后续填充。
       properties:
         type: { type: string, enum: [well, road, bridge, forest, transformer], description: 问题类型 }
         project_year: { type: integer, enum: [2020, 2021, 2022, 2023], description: 项目年度 }
@@ -198,12 +198,34 @@ components:
         keeper_phone: { type: string, description: 电话（选填） }
     RectifyInput:
       type: object
+      required: [rectify_list]
       properties:
-        note: { type: string, description: 整改说明 }
-        file_uuids:
+        rectify_list:
           type: array
-          description: 整改照片 file_id 列表（必填）
-          items: { type: string, format: uuid }
+          minItems: 1
+          description: 分项整改；同一 type 可重复；对照 checklist 需整改项覆盖齐全则 done 否则 pending
+          items:
+            type: object
+            required: [type, note, file_uuids]
+            properties:
+              type:
+                type: string
+                description: 整改项 QuizType（与 checklist 项 type 对应）
+              note:
+                type: string
+                description: 该项整改说明（必填）
+              file_uuids:
+                type: array
+                description: 该项整改照片 file_id 列表
+                items: { type: string, format: uuid }
+    ReassignInput:
+      type: object
+      required: [assignee_user]
+      properties:
+        assignee_user:
+          type: integer
+          format: int64
+          description: 整改责任人用户 ID（必填，须为启用账号）
     FileItem:
       type: object
       properties:
@@ -328,7 +350,7 @@ paths:
     put:
       tags: [鉴权]
       summary: 本人修改密码
-      description: JWT 即可，不做 RBAC。body: old_password / new_password / confirm_password。新密码 6–14 位、须同时含字母与数字（区分大小写）。成功后递增 token_ver，旧 token 全部失效。
+      description: JWT 即可，不做 RBAC。body old_password / new_password / confirm_password。新密码 6–14 位、须同时含字母与数字（区分大小写）。成功后递增 token_ver，旧 token 全部失效。
       requestBody:
         required: true
         content:
@@ -471,7 +493,10 @@ paths:
     post:
       tags: [专项整改]
       summary: 提交整改结果
-      description: 仅 needs_rectify 且 status∈{new,pending}；done 须先 re-rectify
+      description: |
+        仅 status∈{new,pending}；body 为 rectify_list[]（type/note/file_uuids，type 可重复）。
+        覆盖判定：Need=上报 checklist 中需整改的 QuizType；Covered=历史 quiz_type∪本次 type；Need⊆Covered → done，否则 pending。
+        写入 assignee_user=当前用户。Need 为空则提交后 done。管理端不校验认领互斥。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -489,9 +514,27 @@ paths:
     post:
       tags: [专项整改]
       summary: 重新整改
-      description: 仅 done 且 needs_rectify=true → pending；保留历史整改记录
+      description: 仅 done 且仍有需整改 QuizType → pending；保留历史整改记录（累计覆盖）；不改 assignee_user
       parameters:
         - $ref: "#/components/parameters/IdPath"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Envelope" }
+  /api/issues/{id}/reassign:
+    post:
+      tags: [专项整改]
+      summary: 重新指派整改人
+      description: 仅管理端。body assignee_user 须为启用用户；只更新认领人，不改 status、不删整改记录。
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReassignInput" }
       responses:
         "200":
           description: ok
@@ -519,8 +562,9 @@ paths:
       summary: 街道台账聚合
       parameters:
         - in: query
-          name: street
-          schema: { type: string }
+          name: street_org_id
+          schema: { type: integer, format: int64 }
+          description: 街道组织 ID；0 或不传则不限
         - in: query
           name: date_from
           schema: { type: string, example: "2026-01-01" }
@@ -529,7 +573,7 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: ok
+          description: rows 按 village_org_id + type 分组
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Envelope" }
@@ -539,8 +583,9 @@ paths:
       summary: 街道排查汇总
       parameters:
         - in: query
-          name: street
-          schema: { type: string }
+          name: street_org_id
+          schema: { type: integer, format: int64 }
+          description: 街道组织 ID；0 或不传则不限
         - in: query
           name: date_from
           schema: { type: string }
@@ -913,7 +958,8 @@ paths:
       tags: [小程序]
       summary: 待办列表
       description: |
-        未传 status 时默认 new；传 status=all 表示不限状态。
+        status 空或 all 表示不限状态；结果按 new > pending > done 排序（同状态 id 降序）。
+        组织范围：当前用户 OrgID 及其下属；问题落点为最细非 0 的区划 ID（村→街道→区→根）；OrgID=0 不加组织过滤。
         筛选：type / status / *_org_id / project_year / keyword / page / size。
       parameters:
         - in: query
@@ -921,7 +967,7 @@ paths:
           schema: { type: string }
         - in: query
           name: status
-          description: new|pending|done|all；省略则 new
+          description: new|pending|done|all；省略或空表示全部，按 new>pending>done 排序
           schema: { type: string }
         - in: query
           name: root_org_id
@@ -997,7 +1043,9 @@ paths:
     post:
       tags: [小程序]
       summary: 提交整改
-      description: 页内整改闭环；规则同管理端（仅 new/pending；done 须先 re-rectify）。
+      description: |
+        页内整改；规则同管理端覆盖判定。
+        认领互斥：assignee_user>0 且不等于当前用户 → 400「该问题已由他人认领整改」。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       requestBody:
@@ -1015,7 +1063,9 @@ paths:
     post:
       tags: [小程序]
       summary: 重新整改
-      description: done 且 needs_rectify=true → pending
+      description: |
+        done 且仍有需整改 QuizType → pending；保留历史记录。
+        认领互斥同 rectify；不改 assignee_user。
       parameters:
         - $ref: "#/components/parameters/IdPath"
       responses:

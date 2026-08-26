@@ -213,3 +213,104 @@ func TestBindChecklistOK(t *testing.T) {
 		t.Fatalf("canonical order: %+v", out)
 	}
 }
+
+func TestIssueLeafOrgID(t *testing.T) {
+	t.Parallel()
+	if issueLeafOrgID(model.Issue{VillageOrgID: 4, StreetOrgID: 3}) != 4 {
+		t.Fatal("village")
+	}
+	if issueLeafOrgID(model.Issue{StreetOrgID: 3, DistrictOrgID: 2}) != 3 {
+		t.Fatal("street")
+	}
+	if issueLeafOrgID(model.Issue{DistrictOrgID: 2, RootOrgID: 1}) != 2 {
+		t.Fatal("district")
+	}
+	if issueLeafOrgID(model.Issue{RootOrgID: 1}) != 1 {
+		t.Fatal("root")
+	}
+}
+
+func TestOrgSubtreeIDs(t *testing.T) {
+	t.Parallel()
+	orgs := []model.SysOrg{
+		{ParentID: 0},
+		{ParentID: 1},
+		{ParentID: 1},
+		{ParentID: 2},
+	}
+	orgs[0].ID = 1
+	orgs[1].ID = 2
+	orgs[2].ID = 3
+	orgs[3].ID = 4
+	got := orgSubtreeIDs(orgs, 2)
+	set := map[uint64]struct{}{}
+	for _, id := range got {
+		set[id] = struct{}{}
+	}
+	if _, ok := set[2]; !ok {
+		t.Fatal("self")
+	}
+	if _, ok := set[4]; !ok {
+		t.Fatal("child")
+	}
+	if _, ok := set[3]; ok {
+		t.Fatal("sibling should not be included")
+	}
+}
+
+func TestIssueTodoOrderSQL(t *testing.T) {
+	t.Parallel()
+	got := issueTodoOrderSQL()
+	if got != "FIELD(status,'new','pending','done') ASC, id DESC" {
+		t.Fatalf("order=%s", got)
+	}
+}
+
+func TestNeededQuizTypesAndCover(t *testing.T) {
+	t.Parallel()
+	ext := `{"checklist":[
+		{"type":"has_shoulder","value":false},
+		{"type":"has_ash","value":true}
+	]}`
+	need := neededQuizTypes("road", ext)
+	if len(need) != 1 || need[0] != model.QuizHasShoulder {
+		t.Fatalf("need=%v", need)
+	}
+	covered := map[model.QuizType]struct{}{model.QuizHasShoulder: {}}
+	if !rectifyTypesCovered(need, covered) {
+		t.Fatal("should cover")
+	}
+	if rectifyTypesCovered([]model.QuizType{model.QuizHasShoulder, model.QuizHasAsh}, covered) {
+		t.Fatal("missing has_ash")
+	}
+	if !rectifyTypesCovered(nil, covered) {
+		t.Fatal("empty need is covered")
+	}
+	covered[model.QuizHasShoulder] = struct{}{} // duplicate type still covers
+	if !rectifyTypesCovered(need, covered) {
+		t.Fatal("dup still covers")
+	}
+}
+
+func TestAssertAppAssignee(t *testing.T) {
+	t.Parallel()
+	if err := assertAppAssignee(&model.Issue{AssigneeUser: 0}, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := assertAppAssignee(&model.Issue{AssigneeUser: 2}, 2); err != nil {
+		t.Fatal(err)
+	}
+	err := assertAppAssignee(&model.Issue{AssigneeUser: 3}, 2)
+	if err == nil || !strings.Contains(err.Error(), "他人认领") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestReassignRequiresAssignee(t *testing.T) {
+	t.Parallel()
+	s := &IssueService{}
+	_, err := s.Reassign(context.Background(), 1, ReassignInput{})
+	if err == nil || !strings.Contains(err.Error(), "请指定整改人") {
+		t.Fatalf("got %v", err)
+	}
+}

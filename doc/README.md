@@ -123,7 +123,7 @@ JWT 通过后，受保护接口按 `sys_apis` 目录校验；`role_id=1` 超管 
 | --- | --- | --- |
 | `migrate.enabled` | `true` | 启动时是否执行 GORM AutoMigrate |
 | `migrate.seed` | `true` | release 模式下空库是否写种子 |
-| `server.mode` | `debug` | **`debug` 时每次启动 TRUNCATE 业务表并全量初始化**（忽略 `migrate.seed=false`） |
+| `server.mode` | `debug` | **`debug`/`dev` 时每次启动 DROP 当前库全部表再按模型重建并写种子**（忽略 `migrate.seed=false`） |
 
 环境变量：`GBNT_MIGRATE_ENABLED`、`GBNT_MIGRATE_SEED`。
 ## 4. 附件约定

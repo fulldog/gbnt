@@ -158,6 +158,64 @@ func quizIndicatesIssue(q *QuizBool, negative bool) bool {
 	return !q.Value
 }
 
+func checklistSpecsFor(typ string) []quizSpec {
+	switch model.IssueType(typ) {
+	case model.IssueTypeWell:
+		return wellChecklistSpecs
+	case model.IssueTypeRoad:
+		return roadChecklistSpecs
+	case model.IssueTypeBridge:
+		return bridgeChecklistSpecs
+	case model.IssueTypeForest:
+		return forestChecklistSpecs
+	case model.IssueTypeTransformer:
+		return transformerChecklistSpecs
+	default:
+		return nil
+	}
+}
+
+// neededQuizTypes 从 type_ext.checklist 取出判定为需整改的 QuizType（不含出水口/护筒损坏等非题项）。
+func neededQuizTypes(issueType, typeExt string) []model.QuizType {
+	specs := checklistSpecsFor(issueType)
+	neg := make(map[model.QuizType]bool, len(specs))
+	for _, sp := range specs {
+		neg[sp.Type] = sp.Negative
+	}
+	var ext struct {
+		Checklist []QuizBool `json:"checklist"`
+	}
+	_ = json.Unmarshal([]byte(typeExt), &ext)
+	out := make([]model.QuizType, 0)
+	seen := map[model.QuizType]struct{}{}
+	for i := range ext.Checklist {
+		q := &ext.Checklist[i]
+		n, ok := neg[q.Type]
+		if !ok {
+			continue
+		}
+		if !quizIndicatesIssue(q, n) {
+			continue
+		}
+		if _, dup := seen[q.Type]; dup {
+			continue
+		}
+		seen[q.Type] = struct{}{}
+		out = append(out, q.Type)
+	}
+	return out
+}
+
+// rectifyTypesCovered Need 是否都被 Covered 覆盖；Need 为空视为已覆盖。
+func rectifyTypesCovered(need []model.QuizType, covered map[model.QuizType]struct{}) bool {
+	for _, t := range need {
+		if _, ok := covered[t]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *IssueService) bindQuizBool(ctx context.Context, q *QuizBool, label string, negative bool) (indicatesIssue bool, err error) {
 	if q == nil {
 		return true, fmt.Errorf("请选择%s", label)

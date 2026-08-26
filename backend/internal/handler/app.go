@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 
 	"gbnt/backend/internal/database"
@@ -9,7 +11,7 @@ import (
 )
 
 // RegisterApp 注册小程序端独立 API（前缀 /api/app，与管理端 /api 分离）。
-// 附件仍复用现有 /api/attachments/*；排查图走 type_ext.files，整改走 file_uuids。
+// 附件仍复用现有 /api/attachments/*；排查图走 type_ext.files，整改走 rectify_list[].file_uuids。
 func RegisterApp(r *gin.Engine, d *Deps) {
 	app := r.Group("/api/app")
 	{
@@ -29,7 +31,7 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 			auth.POST("/logout", d.Logout)
 		}
 
-		// GET /api/app/todos — 待办列表（默认 status=new）
+		// GET /api/app/todos — 待办列表（status 空=全部，按 new>pending>done 排序）
 		app.GET("/todos", d.AppListTodos)
 		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
@@ -40,7 +42,7 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 			issues.POST("", d.AppCreateIssue)
 			// GET /api/app/issues/:id — 问题详情（含 lat/lng，地图页可复用）
 			issues.GET("/:id", d.AppGetIssue)
-			// POST /api/app/issues/:id/rectify — 页内提交整改（照片闭环）
+			// POST /api/app/issues/:id/rectify — 页内提交分项整改
 			issues.POST("/:id/rectify", d.AppRectifyIssue)
 			// POST /api/app/issues/:id/re-rectify — 重新整改（done → pending）
 			issues.POST("/:id/re-rectify", d.AppReRectifyIssue)
@@ -132,14 +134,11 @@ func (d *Deps) AppMe(c *gin.Context) {
 }
 
 // AppListTodos 小程序待办：筛选 type/status/*_org_id/project_year/keyword/page/size。
-// 未传 status 时默认 new；传 status=all 表示不限状态。
+// status 空或 all 表示不限状态；结果按 new > pending > done，同状态 id 降序。
 func (d *Deps) AppListTodos(c *gin.Context) {
-	rawStatus := c.Query("status")
 	q := service.IssueQuery{
 		Type:          c.Query("type"),
-		Status:        rawStatus,
-		Street:        c.Query("street"),
-		Village:       c.Query("village"),
+		Status:        c.Query("status"),
 		RootOrgID:     parseUint64Query(c.Query("root_org_id")),
 		DistrictOrgID: parseUint64Query(c.Query("district_org_id")),
 		StreetOrgID:   parseUint64Query(c.Query("street_org_id")),
@@ -149,16 +148,16 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 		Page:          atoiDefault(c.Query("page"), 1),
 		Size:          atoiDefault(c.Query("size"), 20),
 	}
-	list, total, err := d.Issue.ListTodos(q)
+	list, total, err := d.Issue.ListTodos(c.Request.Context(), q)
 	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+			return
+		}
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	status := rawStatus
-	if status == "" {
-		status = "new"
-	}
-	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size, "status": status})
+	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size})
 }
 
 // AppRegions 小程序组织树：按 sys_orgs.parent_id 返回嵌套 children。
@@ -203,8 +202,12 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	item, err := d.Issue.Rectify(c.Request.Context(), id, req)
+	item, err := d.Issue.Rectify(c.Request.Context(), id, req, true)
 	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -218,8 +221,12 @@ func (d *Deps) AppReRectifyIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	item, err := d.Issue.ReRectify(c.Request.Context(), id)
+	item, err := d.Issue.ReRectify(c.Request.Context(), id, true)
 	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -234,7 +241,7 @@ func (d *Deps) AppMineStats(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	stats, err := d.Issue.MineStats(user.ID, user.Name)
+	stats, err := d.Issue.MineStats(user.ID)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -252,7 +259,7 @@ func (d *Deps) AppMineIssues(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	list, total, err := d.Issue.ListMine(scope, user.ID, user.Name, page, size)
+	list, total, err := d.Issue.ListMine(scope, user.ID, page, size)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return

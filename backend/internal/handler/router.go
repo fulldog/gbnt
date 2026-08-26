@@ -74,6 +74,8 @@ func Register(r *gin.Engine, d *Deps) {
 			issues.POST("/:id/rectify", d.RectifyIssue)
 			// POST /api/issues/:id/re-rectify — 重新整改（done → pending）
 			issues.POST("/:id/re-rectify", d.ReRectifyIssue)
+			// POST /api/issues/:id/reassign — 重新指派整改人
+			issues.POST("/:id/reassign", d.ReassignIssue)
 		}
 
 		// GET /api/ledger/street — 街道台账聚合

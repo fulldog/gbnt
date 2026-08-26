@@ -56,15 +56,19 @@ backend/
 - Direct batch images: `POST /api/attachments/images` (multipart `files` + optional `watermark`/`lat`/`lng`/`address`); `watermark` omit/true burns watermark (name from JWT `UserInfo`), `watermark=0` keeps original; return `data.list=[{file_id,url}]`
 - `upload.chunk_size` is reserved (chunk upload not implemented); only `root`, `max_file_size`, `font` are used
 - Quiz 多图：入参 `type_ext.checklist[].files`（file_id 列表），校验存在后原样写入 `issues.type_ext` JSON；无关联表
-- 整改多图：入参 `file_uuids`，落库 `issue_rectify_records.photo_file_ids`（JSON 数组）
-- 回显：`toVO` 按 file_id 查 `attachments`，checklist 各项填 `photos:[{file_id,url}]`，整改记录同理；签名可返回 `reporter_signature`
+- 整改多图：入参 `rectify_list[].file_uuids`，落库 `issue_rectify_records.photo_file_ids`（JSON 数组）+ `quiz_type`
+- 回显：`toVO` 按 file_id 查 `attachments`，checklist 各项填 `photos:[{file_id,url}]`，整改记录同理（含 `quiz_type`）；签名可返回 `reporter_signature`
 
 ## Issues (report / rectify)
 
 - Status: `new` / `pending` / `done`; Create derives from QuizBool → `needs_rectify` (`false`→`done`, `true`→`new`)
 - Region: four org IDs (at least one; ancestors required); QuizBool = `{type,value,desc,mustImg,files}` in `type_ext.checklist[]`; `mustImg=true` 时 `files` 长度须 >0
-- Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; assignee columns kept on `issues` (server-fill later)
-- Rectify only `new|pending`; `POST .../re-rectify` for `done`→`pending`; history in `issue_rectify_records`
+- Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; reporter=`created_id`; assignee=`assignee_user`（Rectify 写成当前用户）
+- Rectify: body `rectify_list[]`（`type`/`note`/`file_uuids`，type 可重复）；`Need`=checklist 需整改 QuizType；`Covered`=历史∪本次；齐全 → `done` 否则 `pending`；`Need` 空 → `done`
+- App `GET /api/app/todos`：按登录用户 OrgID 子树过滤问题落点组织；`OrgID=0` 不限；`status` 空/`all` 查全部，排序 `new > pending > done`
+- App rectify/re-rectify：`assignee_user>0` 且 ≠ 当前用户 → 拒绝；管理端不校验
+- Admin `POST /api/issues/:id/reassign`：body `{assignee_user}`，须启用用户；只改认领人
+- `POST .../re-rectify`：`done`→`pending`，不删历史（累计覆盖）
 
 ## Docs
 
@@ -74,9 +78,9 @@ backend/
 ## Migration
 
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
-- **`server.mode=debug`**: every startup TRUNCATE business tables + full bootstrap (orgs, roles, APIs, super admin `admin/admin` with `is_super_admin=true`)
+- **`server.mode=debug` or `dev`**: every startup DROP all tables in the current database, AutoMigrate from models, then full seed (orgs, roles, APIs, super admin `admin/admin`). Do **not** write DROP COLUMN / legacy-table migrations for this mode.
 - User super-admin: `sys_users.is_super_admin` (exactly one); cannot edit/delete that user; change/reset password allowed; RBAC bypass via flag
-- **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs`; seed only on empty DB when `migrate.seed=true`
+- **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs` only (additive; no history DROP scripts); seed only on empty DB when `migrate.seed=true`
 - Package layout: `migrate.go` (entry), `schema.go`, `dev_reset.go`, `seed.go`, `rbac.go`, `org_seed.go`, `sync_apis.go`
 - Soft delete: every table has `is_delete` (0/1); `Delete()` only flags, queries exclude deleted
 - Column order: business fields first; embed `Base` (`id/created_at/updated_at/created_id/update_id/is_delete`) at struct end
