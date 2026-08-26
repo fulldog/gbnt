@@ -183,12 +183,7 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	user, err := userFromCtx(c)
-	if err != nil {
-		response.Fail(c, 401, response.CodeUnauth, err.Error())
-		return
-	}
-	item, err := d.Issue.Create(c.Request.Context(), req, user.ID, user.Name)
+	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return

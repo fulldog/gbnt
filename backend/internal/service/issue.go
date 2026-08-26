@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"strings"
 
 	"gbnt/backend/internal/model"
 )
@@ -57,16 +55,13 @@ type IssueInput struct {
 // IssueVO 业务明细/列表项。
 type IssueVO struct {
 	model.Issue
-	Photos         []FileItem                 `json:"photos"`          // 现场照片 [{file_id,url}]
-	RectifyPhotos  []FileItem                 `json:"rectify_photos"`  // 最近一次整改照片
 	RectifyRecords []model.IssueRectifyRecord `json:"rectify_records"` // 历史整改记录（新→旧）
 }
 
 // RectifyInput 整改入参。
 type RectifyInput struct {
-	Note                string   `json:"note"`                   // 整改说明（必填）
-	FileUUIDs           []string `json:"file_uuids"`             // 整改照片 file_id；rectify_photo_ref_uuid 为空时必填
-	RectifyPhotoRefUUID string   `json:"rectify_photo_ref_uuid"` // 有值=整改附件不变；空则用 file_uuids 重绑
+	Note      string   `json:"note"`       // 整改说明（必填）
+	FileUUIDs []string `json:"file_uuids"` // 整改照片 file_id；rectify_photo_ref_uuid 为空时必填
 }
 
 // ImportIssuesReq 管理端批量导入。
@@ -83,22 +78,6 @@ func (s *IssueService) db(ctx context.Context) *gorm.DB {
 
 func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
 	vo := &IssueVO{Issue: *item, RectifyRecords: []model.IssueRectifyRecord{}}
-	photos, err := s.Attach.Resolve(item.PhotoRefUUID)
-	if err != nil && item.PhotoRefUUID != "" {
-		return nil, err
-	}
-	if photos == nil {
-		photos = []FileItem{}
-	}
-	vo.Photos = photos
-	rectify, err := s.Attach.Resolve(item.RectifyPhotoRefUUID)
-	if err != nil && item.RectifyPhotoRefUUID != "" {
-		return nil, err
-	}
-	if rectify == nil {
-		rectify = []FileItem{}
-	}
-	vo.RectifyPhotos = rectify
 	var records []model.IssueRectifyRecord
 	if err := s.DB.Where("issue_id = ?", item.ID).Order("id DESC").Find(&records).Error; err != nil {
 		return nil, err
@@ -313,18 +292,13 @@ func (s *IssueService) validateRegionOrgs(rootID, districtID, streetID, villageI
 	return streetName, villageName, nil
 }
 
-func (s *IssueService) Create(ctx context.Context, in IssueInput, reporterID uint64, reporterName string) (*IssueVO, error) {
-	_ = reporterName // 上报人姓名不再落库；仅用 reporter_id
+func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, error) {
 	typ := strings.TrimSpace(in.Type)
 	if !model.IssueType(typ).Valid() {
 		return nil, errors.New("问题类型无效")
 	}
 	if !model.ProjectYear(in.ProjectYear).Valid() {
 		return nil, errors.New("请选择项目年度")
-	}
-	streetName, villageName, err := s.validateRegionOrgs(in.RootOrgID, in.DistrictOrgID, in.StreetOrgID, in.VillageOrgID)
-	if err != nil {
-		return nil, err
 	}
 	if strings.TrimSpace(in.Address) == "" {
 		return nil, errors.New("请填写定位地址")
@@ -343,14 +317,6 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput, reporterID uin
 		}
 	}
 
-	if len(in.FileUUIDs) == 0 {
-		return nil, errors.New("请至少上传 1 张现场照片")
-	}
-	photoRef, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
-	if err != nil {
-		return nil, err
-	}
-
 	status := deriveCreateStatus(needsRectify)
 
 	item := &model.Issue{
@@ -361,20 +327,15 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput, reporterID uin
 		DistrictOrgID:           in.DistrictOrgID,
 		StreetOrgID:             in.StreetOrgID,
 		VillageOrgID:            in.VillageOrgID,
-		Street:                  streetName,
-		Village:                 villageName,
 		Code:                    in.Code,
 		Address:                 in.Address,
 		Lat:                     in.Lat,
 		Lng:                     in.Lng,
 		PlanDate:                in.PlanDate,
 		Status:                  string(status),
-		NeedsRectify:            needsRectify,
-		ReporterID:              reporterID,
 		ReporterSignatureFileID: in.ReporterSignatureFileID,
 		// AssigneeName/Phone：接口不传，留空由后续业务填充
-		TypeExt:      ext,
-		PhotoRefUUID: photoRef,
+		TypeExt: ext,
 	}
 	if err := s.db(ctx).Create(item).Error; err != nil {
 		return nil, err
@@ -412,30 +373,18 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 	}
 
 	ext := item.TypeExt
-	needsRectify := item.NeedsRectify
-	if len(in.TypeExt) > 0 {
-		canon, needs, nerr := s.normalizeTypeExt(ctx, typ, in.TypeExt)
-		if nerr != nil {
-			return nil, nerr
-		}
-		ext, needsRectify = canon, needs
-	}
+	//if len(in.TypeExt) > 0 {
+	//	canon, needs, nerr := s.normalizeTypeExt(ctx, typ, in.TypeExt)
+	//	if nerr != nil {
+	//		return nil, nerr
+	//	}
+	//	ext, needsRectify = canon, needs
+	//}
 
-	photoRef := item.PhotoRefUUID
-	if in.PhotoRefUUID != "" {
-		photoRef = item.PhotoRefUUID
-	} else if len(in.FileUUIDs) > 0 {
-		ref, _, berr := s.Attach.Bind(ctx, in.FileUUIDs)
-		if berr != nil {
-			return nil, berr
-		}
-		photoRef = ref
-	}
-
-	sig := in.ReporterSignatureFileID
-	if sig == "" {
-		sig = item.ReporterSignatureFileID
-	}
+	//sig := in.ReporterSignatureFileID
+	//if sig == "" {
+	//	sig = item.ReporterSignatureFileID
+	//}
 
 	addr := strings.TrimSpace(in.Address)
 	if addr == "" {
@@ -450,8 +399,7 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 		"code": in.Code, "address": addr,
 		"lat": in.Lat, "lng": in.Lng,
 		"plan_date": in.PlanDate, "type_ext": ext,
-		"needs_rectify": needsRectify, "photo_ref_uuid": photoRef,
-		"reporter_signature_file_id": sig,
+		//"reporter_signature_file_id": sig,
 	}
 	if in.Status != "" {
 		if !model.IssueStatus(in.Status).Valid() {
@@ -505,39 +453,27 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput) 
 	if err := s.DB.First(&item, id).Error; err != nil {
 		return nil, err
 	}
-	if err := rectifyGate(item.Status, item.NeedsRectify); err != nil {
-		return nil, err
-	}
+
 	note := strings.TrimSpace(in.Note)
 	if note == "" {
 		return nil, errors.New("请填写整改说明")
 	}
 
-	ref := item.RectifyPhotoRefUUID
-	if in.RectifyPhotoRefUUID != "" {
-		ref = item.RectifyPhotoRefUUID
-	} else {
-		if len(in.FileUUIDs) == 0 {
-			return nil, errors.New("请至少上传 1 张整改照片")
-		}
-		r, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
-		if err != nil {
-			return nil, err
-		}
-		ref = r
+	if len(in.FileUUIDs) == 0 {
+		return nil, errors.New("请至少上传 1 张整改照片")
+	}
+	r, _, err := s.Attach.Bind(ctx, in.FileUUIDs)
+	if err != nil {
+		return nil, err
 	}
 
-	now := time.Now()
-	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
-		rec := model.IssueRectifyRecord{IssueID: id, Note: note, PhotoRefUUID: ref}
+	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
+		rec := model.IssueRectifyRecord{IssueID: id, Note: note, PhotoRefUUID: r}
 		if err := tx.Create(&rec).Error; err != nil {
 			return err
 		}
 		return tx.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
-			"status":                 model.IssueStatusDone,
-			"rectify_note":           note,
-			"rectify_at":             &now,
-			"rectify_photo_ref_uuid": ref,
+			"status": model.IssueStatusDone,
 		}).Error
 	})
 	if err != nil {
@@ -552,7 +488,7 @@ func (s *IssueService) ReRectify(ctx context.Context, id uint64) (*IssueVO, erro
 	if err := s.db(ctx).First(&item, id).Error; err != nil {
 		return nil, err
 	}
-	if err := reRectifyGate(item.Status, item.NeedsRectify); err != nil {
+	if err := reRectifyGate(item.Status, false); err != nil {
 		return nil, err
 	}
 	if err := s.db(ctx).Model(&item).Update("status", model.IssueStatusPending).Error; err != nil {
@@ -561,10 +497,10 @@ func (s *IssueService) ReRectify(ctx context.Context, id uint64) (*IssueVO, erro
 	return s.Get(id)
 }
 
-func (s *IssueService) Import(ctx context.Context, rows []IssueInput, reporterID uint64, reporterName string) (int, error) {
+func (s *IssueService) Import(ctx context.Context, rows []IssueInput) (int, error) {
 	n := 0
 	for _, row := range rows {
-		if _, err := s.Create(ctx, row, reporterID, reporterName); err != nil {
+		if _, err := s.Create(ctx, row); err != nil {
 			return n, err
 		}
 		n++
