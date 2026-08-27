@@ -62,6 +62,10 @@ sudo bash scripts/install-systemd.sh uninstall   # 禁用并删除单元文件
 
 生产请将 `configs/config.yaml` 中 `server.mode` 设为 `release`，并修改数据库密码与 JWT secret。
 
+## MySQL 8 安装与备份
+
+Linux 上安装 MySQL 8、每天凌晨 2 点全量（保留 5 天）、每小时 binlog 增量：见 [`../doc/linux-mysql.md`](../doc/linux-mysql.md)，脚本在 `scripts/mysql/`。
+
 ## 文档与接口
 
 - 项目文档：`../doc/`

@@ -1,0 +1,8 @@
+# 复制为 /etc/gbnt-mysql-backup.cnf 后填密码，权限必须 600
+#   sudo cp backup.cnf.example /etc/gbnt-mysql-backup.cnf
+#   sudo chmod 600 /etc/gbnt-mysql-backup.cnf
+[client]
+user=root
+password=CHANGE_ME
+host=127.0.0.1
+port=3306
