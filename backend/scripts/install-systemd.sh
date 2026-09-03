@@ -2,8 +2,14 @@
 # 将 gbnt 后台注册为 systemd 服务（需 root）。
 # 用法：
 #   sudo ./install-systemd.sh
+#   sudo bash install-systemd.sh
 #   sudo APP_DIR=/opt/gbnt BIN=/opt/gbnt/gbnt ./install-systemd.sh
 #   sudo ./install-systemd.sh uninstall
+# 不要用 sh 执行（Debian/Ubuntu 的 sh=dash，不支持 pipefail）。
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "本脚本需要 bash，请执行：sudo bash $0 $*" >&2
+  exit 1
+fi
 set -euo pipefail
 
 SERVICE_NAME="${SERVICE_NAME:-gbnt}"
