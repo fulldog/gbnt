@@ -180,6 +180,13 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
+	user, err := userFromCtx(c)
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	// [PRD] App 端上报人固定为当前登录用户，忽略外部传入值。
+	req.ReportUserID = user.ID
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())

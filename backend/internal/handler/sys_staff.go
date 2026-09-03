@@ -12,6 +12,7 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 	users := api.Group("/sys/users")
 	{
 		users.GET("", d.ListUsers)
+		users.GET("/by-org", d.ListUsersByOrgID)
 		users.GET("/export", d.ExportUsers)
 		users.POST("/import", d.ImportUsers)
 		users.POST("", d.CreateUser)
@@ -30,6 +31,17 @@ func (d *Deps) ListUsers(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"list": list, "total": total})
+}
+
+// ListUsersByOrgID GET /api/sys/users/by-org — 按行政区划 ID 获取用户列表。
+func (d *Deps) ListUsersByOrgID(c *gin.Context) {
+	orgID := parseUint64Query(c.Query("org_id"))
+	list, err := d.Sys.ListUsersByOrgID(orgID)
+	if err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"list": list, "total": len(list)})
 }
 
 // ExportUsers GET /api/sys/users/export — 导出人员 xlsx；query 同列表、不分页。

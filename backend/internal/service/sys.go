@@ -233,6 +233,16 @@ func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]
 	return list, total, err
 }
 
+// ListUsersByOrgID 按行政区划 org_id 返回用户列表（不分页）。
+func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
+	if orgID == 0 {
+		return nil, errors.New("org_id 必填")
+	}
+	var list []model.SysUser
+	err := s.DB.Model(&model.SysUser{}).Where("org_id = ?", orgID).Order("id DESC").Find(&list).Error
+	return list, err
+}
+
 func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUser, error) {
 	if in.Username == "" {
 		return nil, errors.New("username 必填")

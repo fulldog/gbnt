@@ -126,6 +126,7 @@ type Issue struct {
 	PlanDate                string  `gorm:"size:16;index;comment:计划完成日 YYYY-MM-DD" json:"plan_date"`
 	Status                  string  `gorm:"size:16;index;comment:状态 new待整改 pending整改中 done已整改" json:"status"`
 	ReporterSignatureFileID string  `gorm:"size:36;comment:排查电子签名附件file_id" json:"reporter_signature_file_id"`
+	ReportUserID            uint64  `gorm:"column:report_user_id;index;default:0;comment:上报人用户ID app端为登录用户 后台创建需显式传入" json:"report_user_id"`
 	AssigneeUser            uint64  `gorm:"column:assignee_user;default:0;comment:整改责任人用户ID" json:"assignee_user"`
 	TypeExt                 string  `gorm:"type:json;comment:类型扩展字段JSON" json:"type_ext"`
 	Base

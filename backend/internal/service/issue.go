@@ -41,6 +41,7 @@ type IssueInput struct {
 	Lng                     float64         `json:"lng"`                        // 经度
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
+	ReportUserID            uint64          `json:"report_user_id"`             // 上报人用户ID：app端由登录用户注入；后台创建必填
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 仅更新用 new|pending|done；新建由 quiz 推导
 }
@@ -387,6 +388,9 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if strings.TrimSpace(in.ReporterSignatureFileID) == "" {
 		return nil, errors.New("请提交电子签名")
 	}
+	if in.ReportUserID == 0 {
+		return nil, errors.New("请传入上报人report_user_id")
+	}
 	if s.Attach != nil {
 		if _, err := s.Attach.EnsureFiles(ctx, []string{in.ReporterSignatureFileID}); err != nil {
 			return nil, fmt.Errorf("电子签名: %w", err)
@@ -417,6 +421,7 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		PlanDate:                in.PlanDate,
 		Status:                  string(status),
 		ReporterSignatureFileID: in.ReporterSignatureFileID,
+		ReportUserID:            in.ReportUserID,
 		TypeExt:                 ext,
 	}
 	if err := s.db(ctx).Create(item).Error; err != nil {
