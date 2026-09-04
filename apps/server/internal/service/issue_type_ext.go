@@ -284,6 +284,9 @@ func (s *IssueService) normalizeWellExt(ctx context.Context, raw json.RawMessage
 	if err != nil {
 		return "", false, err
 	}
+	if err := ValidateOptionalCNPhone(ext.KeeperPhone); err != nil {
+		return "", false, err
+	}
 	if !ext.BuildKind.Valid() {
 		return "", false, errors.New("请选择新建/配套")
 	}
@@ -322,6 +325,9 @@ func (s *IssueService) normalizeRoadExt(ctx context.Context, raw json.RawMessage
 	if err != nil {
 		return "", false, err
 	}
+	if err := ValidateOptionalCNPhone(ext.KeeperPhone); err != nil {
+		return "", false, err
+	}
 	if err := requireFloatGE0(ext.Length, "道路长度"); err != nil {
 		return "", false, err
 	}
@@ -348,6 +354,9 @@ func (s *IssueService) normalizeBridgeExt(ctx context.Context, raw json.RawMessa
 	if err != nil {
 		return "", false, err
 	}
+	if err := ValidateOptionalCNPhone(ext.KeeperPhone); err != nil {
+		return "", false, err
+	}
 	if !ext.Kind.Valid() {
 		return "", false, errors.New("请选择设施类型（桥/涵/闸）")
 	}
@@ -369,6 +378,9 @@ func (s *IssueService) normalizeBridgeExt(ctx context.Context, raw json.RawMessa
 func (s *IssueService) normalizeForestExt(ctx context.Context, raw json.RawMessage) (string, bool, error) {
 	ext, err := decodeExt[ForestExt](raw)
 	if err != nil {
+		return "", false, err
+	}
+	if err := ValidateOptionalCNPhone(ext.KeeperPhone); err != nil {
 		return "", false, err
 	}
 	if err := requireFloatGE0(ext.HandoverCount, "移交株数"); err != nil {
@@ -395,6 +407,9 @@ func (s *IssueService) normalizeForestExt(ctx context.Context, raw json.RawMessa
 func (s *IssueService) normalizeTransformerExt(ctx context.Context, raw json.RawMessage) (string, bool, error) {
 	ext, err := decodeExt[TransformerExt](raw)
 	if err != nil {
+		return "", false, err
+	}
+	if err := ValidateOptionalCNPhone(ext.KeeperPhone); err != nil {
 		return "", false, err
 	}
 	if err := requireFloatGE0(ext.Capacity, "变压器容量"); err != nil {

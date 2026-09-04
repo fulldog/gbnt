@@ -293,6 +293,9 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		if username == "" {
 			return 0, fmt.Errorf("第 %d 行: 登录账号不能为空", line)
 		}
+		if err := ValidateOptionalCNPhone(phone); err != nil {
+			return 0, fmt.Errorf("第 %d 行: %w", line, err)
+		}
 		if prev, ok := seen[username]; ok {
 			return 0, fmt.Errorf("第 %d 行: 登录账号与第 %d 行重复", line, prev)
 		}

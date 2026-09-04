@@ -56,9 +56,9 @@ type OrgTreeNode struct {
 // UserInput 创建/更新用户入参。
 type UserInput struct {
 	Username string `json:"username"` // 登录账号（新建必填）
-	Password string `json:"password"` // 明文密码（新建空则=账户名；更新时空则不改）
+	Password string `json:"password"` // 明文密码（新建空则=账户名且不套复杂度；有值则须大于 8 位字母+数字）
 	Name     string `json:"name"`     // 姓名
-	Phone    string `json:"phone"`    // 手机号
+	Phone    string `json:"phone"`    // 手机号（选填；有值须为中国大陆 11 位）
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
 	RoleID   uint64 `json:"role_id"`  // 角色 ID
 	Status   *int   `json:"status"`   // 1 启用 / 0 禁用；空则新建默认 1
@@ -247,9 +247,14 @@ func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUs
 	if in.Username == "" {
 		return nil, errors.New("username 必填")
 	}
+	if err := ValidateOptionalCNPhone(in.Phone); err != nil {
+		return nil, err
+	}
 	pwd := strings.TrimSpace(in.Password)
 	if pwd == "" {
 		pwd = in.Username // 初始化密码=账户名
+	} else if err := ValidateSetPassword(pwd); err != nil {
+		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 	if err != nil {
@@ -282,6 +287,9 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 	if u.IsSuperAdmin {
 		return nil, errors.New("超级管理员不可编辑")
 	}
+	if err := ValidateOptionalCNPhone(in.Phone); err != nil {
+		return nil, err
+	}
 	updates := map[string]interface{}{
 		"name": in.Name, "phone": in.Phone, "org_id": in.OrgID, "role_id": in.RoleID,
 	}
@@ -289,7 +297,11 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 		updates["status"] = *in.Status
 	}
 	if in.Password != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+		pwd := strings.TrimSpace(in.Password)
+		if err := ValidateSetPassword(pwd); err != nil {
+			return nil, err
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, err
 		}

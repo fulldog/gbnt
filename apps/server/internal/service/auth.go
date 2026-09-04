@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -47,31 +46,8 @@ func (s *AuthService) Login(username, password string) (*model.SysUser, string, 
 // ChangePasswordReq 本人修改密码。
 type ChangePasswordReq struct {
 	OldPassword     string `json:"old_password"`     // 原密码（必填）
-	NewPassword     string `json:"new_password"`     // 新密码（必填；6–14 位字母+数字，区分大小写）
+	NewPassword     string `json:"new_password"`     // 新密码（必填；长度大于 8，仅字母和数字且须同时包含，区分大小写）
 	ConfirmPassword string `json:"confirm_password"` // 确认新密码（必填；须与 new_password 一致）
-}
-
-// validateNewPassword 新密码：6–14 位字母+数字组合（区分大小写，须同时含字母与数字）。
-func validateNewPassword(pwd string) error {
-	n := len(pwd)
-	if n < 6 || n > 14 {
-		return errors.New("新密码须为 6–14 位字母与数字组合")
-	}
-	hasLetter, hasDigit := false, false
-	for _, r := range pwd {
-		switch {
-		case unicode.IsLetter(r):
-			hasLetter = true
-		case unicode.IsDigit(r):
-			hasDigit = true
-		default:
-			return errors.New("新密码只能包含字母和数字")
-		}
-	}
-	if !hasLetter || !hasDigit {
-		return errors.New("新密码须同时包含字母和数字")
-	}
-	return nil
 }
 
 // ChangePassword 当前登录用户改密：校验旧密码与确认密码后写入新哈希，并递增 token_ver。
@@ -91,7 +67,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint64, oldPwd,
 	if newPwd != confirmPwd {
 		return errors.New("两次输入的新密码不一致")
 	}
-	if err := validateNewPassword(newPwd); err != nil {
+	if err := ValidateSetPassword(newPwd); err != nil {
 		return err
 	}
 	if oldPwd == newPwd {
