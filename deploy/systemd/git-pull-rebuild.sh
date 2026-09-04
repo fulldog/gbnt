@@ -46,15 +46,27 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "${LOG}"
 }
 
-# root 时 git/go 用 RUN_USER（需能写仓库、有 git 凭证）；systemctl 仍用 root。
+# Git 2.35.2+：执行用户与目录属主不一致会报 dubious ownership。
+# 只对本仓库设置，不写 ~/.gitconfig。
+repo_git() {
+  as_deploy git -c "safe.directory=${REPO_DIR}" -C "${REPO_DIR}" "$@"
+}
+
+# root 时：仓库属主是 RUN_USER 且该用户存在，则 git/go/pnpm 用该用户；否则留在 root
+#（常见于 root 克隆到 /opt/www/gbnt）。systemctl 仍用 root。
 as_deploy() {
-  if [[ "${EUID}" -eq 0 && -n "${RUN_USER:-}" && "${RUN_USER}" != "root" ]]; then
-    local home
-    home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
-    sudo -H -u "${RUN_USER}" env HOME="${home}" GOPROXY="${GOPROXY}" PATH="${PATH}" CI="${CI:-true}" "$@"
-  else
-    "$@"
+  if [[ "${EUID}" -eq 0 && -n "${RUN_USER:-}" && "${RUN_USER}" != "root" ]] \
+    && id -u "${RUN_USER}" >/dev/null 2>&1; then
+    local owner
+    owner="$(stat -c %U "${REPO_DIR}" 2>/dev/null || true)"
+    if [[ "${owner}" == "${RUN_USER}" ]]; then
+      local home
+      home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
+      sudo -H -u "${RUN_USER}" env HOME="${home}" GOPROXY="${GOPROXY}" PATH="${PATH}" CI="${CI:-true}" "$@"
+      return
+    fi
   fi
+  "$@"
 }
 
 run_job() {
@@ -73,10 +85,16 @@ run_job() {
     exit 1
   fi
 
-  OLD="$(as_deploy git -C "${REPO_DIR}" rev-parse HEAD)"
+  local repo_owner
+  repo_owner="$(stat -c %U "${REPO_DIR}" 2>/dev/null || true)"
+  if [[ "${EUID}" -eq 0 && -n "${repo_owner}" && "${repo_owner}" != "${RUN_USER}" ]]; then
+    log "仓库属主是 ${repo_owner}，与 RUN_USER=${RUN_USER} 不同，git/编译以当前用户执行；已设 safe.directory。建议: chown -R ${RUN_USER}: ${REPO_DIR}"
+  fi
+
+  OLD="$(repo_git rev-parse HEAD)"
   log "pull 前 HEAD=${OLD}"
-  as_deploy git -C "${REPO_DIR}" pull --ff-only
-  NEW="$(as_deploy git -C "${REPO_DIR}" rev-parse HEAD)"
+  repo_git pull --ff-only
+  NEW="$(repo_git rev-parse HEAD)"
   log "pull 后 HEAD=${NEW}"
 
   if [[ "${OLD}" == "${NEW}" ]]; then
@@ -85,7 +103,7 @@ run_job() {
   fi
 
   local changed need_go need_admin
-  changed="$(as_deploy git -C "${REPO_DIR}" diff --name-only "${OLD}" "${NEW}" || true)"
+  changed="$(repo_git diff --name-only "${OLD}" "${NEW}" || true)"
   need_go=0
   need_admin=0
   if printf '%s\n' "${changed}" | grep -qE '^apps/server/'; then

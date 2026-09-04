@@ -84,6 +84,8 @@ sudo bash deploy/systemd/git-pull-rebuild.sh install
 
 `RUN_USER` 默认 `gbnt`（与常驻服务一致）。若该用户无法 `git pull`，安装时指定有仓库写权限且已配远程凭证的账号：`sudo RUN_USER=部署用户 bash deploy/systemd/git-pull-rebuild.sh install`。打包管理后台时，该用户还需能执行 `pnpm`（或 `corepack pnpm`）。已经装过旧版定时器的机器必须再跑一次 `install`，才会写入 30 分钟超时和前端相关环境变量。
 
+Git 在属主与执行用户不一致时会拒绝操作（`dubious ownership`）。脚本已对本仓库设置 `safe.directory`。仓库若由 root 克隆，可 `chown -R gbnt:gbnt /opt/www/gbnt`，与 `RUN_USER` 对齐。
+
 ```bash
 sudo bash deploy/systemd/git-pull-rebuild.sh    # 立刻跑一轮
 sudo systemctl start gbnt-pull.service         # 同样立刻跑一轮
