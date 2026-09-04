@@ -28,9 +28,8 @@ go run ./cmd/server
 | `pkg` | 可复用工具 |
 | `storage/uploads` | 附件本地存储 |
 | `logs` | 五类日志 |
-| `scripts/install-systemd.sh` | Linux systemd 注册脚本 |
-| `scripts/git-pull-rebuild.sh` | git 有更新则编译二进制 `gbnt.service`，成功后 systemctl 重启业务单元 |
-| `scripts/install-pull-timer.sh` | 每 5 分钟跑上一脚本的 systemd 定时器 |
+| `scripts/install-systemd.sh` | Linux systemd 注册常驻服务 |
+| `scripts/git-pull-rebuild.sh` | git pull；有更新则编译 `gbnt.service` 并用 systemctl 重启；可装 5 分钟定时器 |
 
 ## Linux systemd 部署
 
@@ -66,25 +65,28 @@ sudo bash scripts/install-systemd.sh uninstall   # 禁用并删除单元文件
 
 ## 每 5 分钟 git pull 编译重启
 
-依赖已安装的 systemd 单元 `gbnt.service`（ExecStart 为二进制 `backend/gbnt.service`）。流程：仓库根 `git pull --ff-only`；HEAD 有变化则编译；成功后 `systemctl restart gbnt`。无更新或编译失败都不重启。
+与 `install-systemd.sh` 使用同一套路径：`APP_DIR`（默认本 `backend` 目录）、二进制 `BIN=$APP_DIR/gbnt.service`、单元名 `SERVICE_NAME=gbnt`。
 
-先注册常驻服务，再装定时器：
+流程：仓库根 `git pull --ff-only`；HEAD 有变化则 `go build -o "$BIN" ./cmd/server`；成功后 `systemctl restart gbnt`。无更新或编译失败都不重启。
+
+先注册常驻服务，再装定时器（可合并成一次）：
 
 ```bash
 cd backend
 go build -o gbnt.service ./cmd/server
 sudo bash scripts/install-systemd.sh
-sudo REPO_DIR=/path/to/gbnt RUN_USER=部署用户 bash scripts/install-pull-timer.sh
+sudo bash scripts/git-pull-rebuild.sh install
 ```
 
-`RUN_USER` 需能写仓库并免交互 `git pull`；定时任务以 root 调 `systemctl`，git/编译用 `sudo -u RUN_USER`。业务单元名可用 `APP_SERVICE` 覆盖（默认 `gbnt`）。
+`RUN_USER` 默认 `gbnt`（与常驻服务一致）。若该用户无法 `git pull`，安装时指定有仓库写权限且已配远程凭证的账号：`sudo RUN_USER=部署用户 bash scripts/git-pull-rebuild.sh install`。
 
 ```bash
-sudo systemctl start gbnt-pull.service    # 立刻跑一轮
+sudo bash scripts/git-pull-rebuild.sh          # 立刻跑一轮
+sudo systemctl start gbnt-pull.service         # 同样立刻跑一轮
 systemctl list-timers gbnt-pull.timer
 journalctl -u gbnt-pull -f
-# 任务日志还在 backend/logs/deploy.log
-sudo bash backend/scripts/install-pull-timer.sh uninstall
+# 任务日志: backend/logs/deploy.log
+sudo bash scripts/git-pull-rebuild.sh uninstall
 ```
 
 ## MySQL 8 安装与备份
