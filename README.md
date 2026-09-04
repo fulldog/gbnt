@@ -51,4 +51,6 @@ make check
 
 - [API 文档](./docs/api/README.md)
 - [仓库目录设计](./docs/architecture/repository-layout.md)
+- [Linux 同域部署](./docs/operations/linux-deploy.md)
+- [Nginx 同域分流](./docs/operations/nginx.md)
 - [MySQL 部署与备份](./docs/operations/linux-mysql.md)

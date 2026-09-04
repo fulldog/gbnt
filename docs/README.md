@@ -7,3 +7,5 @@
 - [管理后台迁移实施说明](./architecture/admin-web-migration-analysis.md)
 - [小程序 UniApp 改造实施方案](./architecture/miniapp-uniapp-implementation-plan.md)
 - [MySQL 安装与备份](./operations/linux-mysql.md)
+- [Linux 同域部署](./operations/linux-deploy.md)
+- [Nginx 同域分流](./operations/nginx.md)
