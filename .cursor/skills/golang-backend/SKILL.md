@@ -2,8 +2,8 @@
 name: golang-backend
 description: >-
   Go backend conventions for gbnt (Gin + Zap + MySQL + JWT + GORM).
-  Use when writing or changing backend/, API handlers, middleware, migrations,
-  attachment upload, or logging. Do not edit doc/ API files unless the user
+  Use when writing or changing apps/server/, API handlers, middleware, migrations,
+  attachment upload, or logging. Do not edit docs/api/ files unless the user
   explicitly asks to rebuild API docs.
 ---
 
@@ -12,13 +12,13 @@ description: >-
 ## Stack
 
 - Go 1.27+, Gin, Zap + lumberjack, GORM + MySQL, golang-jwt
-- Config: `backend/configs/config.yaml` + env override
+- Config: `apps/server/configs/config.yaml` + env override
 - Attachments: local disk under `storage/uploads/`
 
 ## Layout
 
 ```text
-backend/
+apps/server/
   cmd/server/main.go
   configs/
   internal/{config,middleware,logger,model,migrate,handler,service,repo,upload}
@@ -34,7 +34,8 @@ backend/
 - Return request duration in body `cost_ms` and header `X-Response-Time`
 - Propagate `X-Request-Id` / `trace_id` through context → logs → SQL
 - **Comments required**: every new/changed exported API type, handler, and request/response field needs Chinese comments (see `.cursor/rules/api-comments.mdc`)
-- **Do not** update `doc/api.md` / `doc/apifox/openapi.yaml` during ordinary code changes. Only when the user explicitly asks to rebuild API docs: delete those files and rewrite them from current code.
+- **Do not** update `docs/api/api.md` / `docs/api/apifox/openapi.yaml` during ordinary code changes. Only when the user explicitly asks to rebuild API docs: delete those files and rewrite them from current code.
+- Every backend HTTP API addition, change, or deletion must also update the corresponding formal frontend API method and TypeScript types following the root `AGENTS.md`; never use `prototypes/static-demo/` as the target.
 
 ## Logging
 
@@ -74,7 +75,7 @@ backend/
 
 ## Docs
 
-- Project docs live under `doc/` (`api.md`, Apifox `doc/apifox/openapi.yaml`)
+- Project API docs live under `docs/api/` (`api.md`, Apifox `docs/api/apifox/openapi.yaml`)
 - Agents must **not** patch these on feature work. Rebuild only on explicit user request: delete then rewrite from handlers/routes/DTOs.
 
 ## Migration

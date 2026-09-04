@@ -1,0 +1,11 @@
+---
+description: 禁止修改只读原型 prototypes/static-demo/ 下的任何内容
+alwaysApply: true
+---
+
+# 禁止改动只读原型
+
+- **严禁**创建、修改、删除、重命名 `prototypes/static-demo/` 及其子路径下的任何文件或目录。
+- 包含但不限于：`prototypes/static-demo/web/`、`prototypes/static-demo/miniapp/`、`prototypes/static-demo/frontend/`、`prototypes/static-demo/media/` 等。
+- 即使用户口头要求「顺手改一下演示页 / 种子 / 前端」，也应**拒绝修改只读原型**，仅说明约束，并只改 `apps/`、`packages/`、`docs/` 等正式工程范围（或请用户先撤销本规则）。
+- 需要对照演示行为时：**只读**查看 `prototypes/static-demo/`，不得写入。

@@ -1,11 +1,11 @@
 ---
-description: 后端接口代码写中文注释；默认不改接口文档，仅在明确要求重建时整份重写
+description: 后端接口代码写中文注释并同步正式前端 API；默认不改接口文档
 alwaysApply: true
 ---
 
-# 注释与接口文档（backend / doc）
+# 注释、前端 API 与接口文档（apps/server / docs）
 
-凡**新增或修改** `backend/` 中的接口与业务代码，必须遵守：
+凡**新增或修改** `apps/server/` 中的接口与业务代码，必须遵守：
 
 ## 代码注释（必写）
 
@@ -16,11 +16,13 @@ alwaysApply: true
 
 ## 接口文档（默认不改）
 
-改代码时**优先只改 `backend/`**（及必要的规则/skill 惯例摘要）。**不要主动**增删改：
+后端 HTTP 接口新增、修改或删除时，必须按根目录 `AGENTS.md` 同步正式前端对应的 API 方法与 TypeScript 类型。`prototypes/static-demo/` 不是同步目标。
 
-- `doc/api.md`
-- `doc/apifox/openapi.yaml`
-- `doc/` 下其它对外接口说明
+普通开发**不要主动**增删改：
+
+- `docs/api/api.md`
+- `docs/api/apifox/openapi.yaml`
+- `docs/api/` 下其它对外接口说明
 
 未同步文档**不算**任务未完成。用户未点名时，不要为「契约变了」而顺手改文档。
 
@@ -28,11 +30,11 @@ alwaysApply: true
 
 仅当用户明确说「重建接口文档 / 重写 api 文档 / 重新生成 OpenAPI」等时：
 
-1. **删除**旧的 `doc/api.md`、`doc/apifox/openapi.yaml`（及相关过时接口说明）。
+1. **删除**旧的 `docs/api/api.md`、`docs/api/apifox/openapi.yaml`（及相关过时接口说明）。
 2. **按当前代码**重新编写完整接口文档（路径、参数、行为、鉴权），不要在旧稿上打补丁。
-3. 仍**不**改 `demo/`（见 `no-demo-edits`）。
+3. 仍**不**改 `prototypes/static-demo/`（见 `no-prototype-edits`）。
 
 ## 范围
 
-- 适用于：`backend/internal/handler`、`service`、`model`、请求 DTO、路由注册等。
-- **不**改 `demo/`。
+- 适用于：`apps/server/internal/handler`、`service`、`model`、请求 DTO、路由注册等。
+- **不**改 `prototypes/static-demo/`。

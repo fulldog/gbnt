@@ -1,0 +1,11 @@
+{
+  "name": "gbnt-monorepo",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}
