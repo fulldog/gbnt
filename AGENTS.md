@@ -15,6 +15,55 @@
 - `prototypes/static-demo/`：只读演示参考，不是正式前端，不得作为接口同步目标；不得创建、修改、删除或重命名其中的内容。
 - `docs/`：接口、架构和运维文档。普通功能开发不得自动修改 API 文档；仅在用户明确要求重建接口文档时处理。
 
+## 前端本地运行
+
+所有前端依赖和命令都从仓库根目录执行，统一使用根 `package.json` 声明的 pnpm 版本。首次运行或依赖发生变化时先执行：
+
+```bash
+pnpm install
+```
+
+### 管理后台
+
+启动正式管理后台：
+
+```bash
+pnpm dev:admin
+```
+
+- 访问地址以 Vite 终端实际输出为准，默认通常为 `http://localhost:5173`；
+- 默认将同源 `/api` 和 `/uploads` 代理到测试服务 `http://www.weilone.com`；
+- 连接本机后端时，在不提交的 `apps/admin-web/.env.local` 中设置 `VITE_API_PROXY_TARGET=http://127.0.0.1:8080`，并保持 `VITE_API_BASE_URL` 为空以继续使用同源代理；
+- 前后端分别部署或不使用开发代理时，通过 `VITE_API_BASE_URL` 注入完整后端 Origin；
+- 不得在源码或共享包中硬编码本机、测试或生产地址，也不得提交 `.env.local` 和任何密钥。
+
+管理后台完成修改后，按影响范围运行：
+
+```bash
+pnpm --filter @gbnt/admin-web typecheck
+pnpm --filter @gbnt/admin-web test
+pnpm --filter @gbnt/admin-web build
+```
+
+### UniApp 小程序
+
+当前 `apps/miniapp/` 只有 API 适配层，还没有 `App.vue`、`pages.json`、`manifest.json` 和 UniApp 构建依赖，因此目前不能启动或导入微信开发者工具。不得把 `prototypes/static-demo/` 当作正式小程序运行，也不得声称 `pnpm dev:mp` 当前可用。
+
+完成 UniApp 工程初始化时，必须同时维护根目录统一命令：
+
+```bash
+pnpm dev:mp
+pnpm --filter @gbnt/miniapp typecheck
+pnpm --filter @gbnt/miniapp test
+pnpm --filter @gbnt/miniapp build:mp-weixin
+```
+
+- `dev:mp` 应持续编译微信小程序开发产物到 `apps/miniapp/dist/dev/mp-weixin`，再将该目录导入微信开发者工具；
+- 小程序运行时使用 `uni.request` 和 `uni.uploadFile`，不能依赖管理后台的 Axios 或 Vite 代理；
+- 测试和生产 API 必须使用对应环境配置注入的 HTTPS 地址，并在微信公众平台配置 request、uploadFile 和 downloadFile 合法域名；
+- 定位、相机、Canvas、上传和隐私授权不能只在 H5 或浏览器中验收，必须使用微信开发者工具及真机验证；
+- 在上述脚本和产物尚未落地时，涉及页面运行或真机验收的任务应明确报告阻塞，不能用原型运行结果代替。
+
 ## 后端接口与前端 API 同步（强制）
 
 新增、修改或删除后端 HTTP 接口时，任务只有在正式前端对应的 API 方法同步完成后才算完成。不得只提交后端实现，把前端方法留作 TODO。
