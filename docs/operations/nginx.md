@@ -2,7 +2,7 @@
 
 管理后台、API、附件 GET 共用一个 `server_name`。可安装示例：[`deploy/nginx/weilone.com.conf`](../../deploy/nginx/weilone.com.conf)。部署顺序与验收见 [linux-deploy.md](./linux-deploy.md)。
 
-下文路径以仓库根 `/opt/gbnt`、域名 `weilone.com` 为例，安装前改成机器实际值。
+下文路径以仓库根 `/opt/www/gbnt`、域名 `weilone.com` 为例。
 
 ---
 
@@ -19,7 +19,7 @@
 `alias` 必须与 `apps/server/configs/config.yaml` 的 `upload.root` **同一绝对路径**。默认相对路径是 `storage/uploads`，相对 systemd 工作目录 `apps/server/`，即：
 
 ```text
-/opt/gbnt/apps/server/storage/uploads/
+/opt/www/gbnt/apps/server/storage/uploads/
 ```
 
 `location /uploads/` 与 `alias` 都要带末尾 `/`，否则路径会拼错。缺文件应 404，不能落到管理后台首页。
@@ -36,7 +36,7 @@
 
 ```bash
 sudo apt-get install -y nginx
-sudo cp /opt/gbnt/deploy/nginx/weilone.com.conf /etc/nginx/sites-available/weilone.com
+sudo cp /opt/www/gbnt/deploy/nginx/weilone.com.conf /etc/nginx/sites-available/weilone.com
 # 编辑：server_name、root、alias
 sudo ln -sf /etc/nginx/sites-available/weilone.com /etc/nginx/sites-enabled/
 # 若存在 default 站点抢 80 端口，按需 disable

@@ -3,7 +3,7 @@
 # 用法：
 #   sudo ./install-systemd.sh
 #   sudo bash install-systemd.sh
-#   sudo APP_DIR=/opt/gbnt BIN=/opt/gbnt/gbnt.service ./install-systemd.sh
+#   sudo APP_DIR=/opt/www/gbnt/apps/server BIN=/opt/www/gbnt/apps/server/gbnt.service ./install-systemd.sh
 #   sudo ./install-systemd.sh uninstall
 # 不要用 sh 执行（Debian/Ubuntu 的 sh=dash，不支持 pipefail）。
 if [ -z "${BASH_VERSION:-}" ]; then

@@ -33,7 +33,7 @@ go run .
 | `storage/uploads` | 附件本地存储 |
 | `logs` | 五类日志 |
 | `../../deploy/systemd/install-systemd.sh` | Linux systemd 注册常驻服务 |
-| `../../deploy/systemd/git-pull-rebuild.sh` | git pull；有更新则编译 `gbnt.service` 并用 systemctl 重启；可装 5 分钟定时器 |
+| `../../deploy/systemd/git-pull-rebuild.sh` | git pull；有更新则编译 API 和/或打包 admin-web；Go 编成功才重启服务 |
 
 ## Linux systemd 部署
 
@@ -51,7 +51,7 @@ sudo bash deploy/systemd/install-systemd.sh
 部署到其它目录时：
 
 ```bash
-sudo APP_DIR=/opt/gbnt BIN=/opt/gbnt/gbnt.service CONFIG=/opt/gbnt/configs/config.yaml bash deploy/systemd/install-systemd.sh
+sudo APP_DIR=/opt/www/gbnt/apps/server BIN=/opt/www/gbnt/apps/server/gbnt.service CONFIG=/opt/www/gbnt/apps/server/configs/config.yaml bash deploy/systemd/install-systemd.sh
 ```
 
 可选环境变量：`SERVICE_NAME`（默认 `gbnt`）、`RUN_USER` / `RUN_GROUP`（默认 `gbnt`）。
@@ -71,7 +71,7 @@ sudo bash deploy/systemd/install-systemd.sh uninstall   # 禁用并删除单元�
 
 与 `install-systemd.sh` 使用同一套路径：`APP_DIR`（默认仓库内 `apps/server`）、二进制 `BIN=$APP_DIR/gbnt.service`、单元名 `SERVICE_NAME=gbnt`。
 
-流程：仓库根 `git pull --ff-only`；HEAD 有变化则 `go build -o "$BIN" .`；成功后 `systemctl restart gbnt`。无更新或编译失败都不重启。
+流程：仓库根 `git pull --ff-only`。HEAD 有变化则按路径决定动作：`apps/server/` → `go build -o "$BIN" .` 并 `systemctl restart gbnt`；`apps/admin-web/`、`packages/`、`pnpm-lock.yaml` 等 → 仓库根 `pnpm install --frozen-lockfile` 与 `pnpm --filter @gbnt/admin-web build`。仅文档等其它文件变化则跳过。Go 编译失败不重启；仅前端变更不重启 API。`BUILD_ADMIN=0` 跳过前端。无更新或构建失败都不重启。
 
 先注册常驻服务，再装定时器（可合并成一次）：
 
@@ -82,7 +82,7 @@ sudo bash deploy/systemd/install-systemd.sh
 sudo bash deploy/systemd/git-pull-rebuild.sh install
 ```
 
-`RUN_USER` 默认 `gbnt`（与常驻服务一致）。若该用户无法 `git pull`，安装时指定有仓库写权限且已配远程凭证的账号：`sudo RUN_USER=部署用户 bash deploy/systemd/git-pull-rebuild.sh install`。
+`RUN_USER` 默认 `gbnt`（与常驻服务一致）。若该用户无法 `git pull`，安装时指定有仓库写权限且已配远程凭证的账号：`sudo RUN_USER=部署用户 bash deploy/systemd/git-pull-rebuild.sh install`。打包管理后台时，该用户还需能执行 `pnpm`（或 `corepack pnpm`）。已经装过旧版定时器的机器必须再跑一次 `install`，才会写入 30 分钟超时和前端相关环境变量。
 
 ```bash
 sudo bash deploy/systemd/git-pull-rebuild.sh    # 立刻跑一轮

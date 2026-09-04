@@ -2,7 +2,7 @@
 
 适用：Ubuntu/Debian 等（需 systemd）。把 **Go API**、**管理后台静态页**、**附件目录** 挂在 **同一个域名** 上：浏览器只访问 Nginx，不直连 8080。
 
-脚本与示例配置在仓库 `deploy/`。下文用 `/opt/gbnt` 表示 **仓库根目录**；若克隆到别处，全文替换该路径。
+脚本与示例配置在仓库 `deploy/`。服务器上 **仓库根目录** 为 `/opt/www/gbnt`。
 
 小程序（`apps/miniapp`）不是这套静态站。微信侧要单独配置 HTTPS request / uploadFile / downloadFile 合法域名，不能把 `prototypes/static-demo/` 当正式前端发布。
 
@@ -34,7 +34,7 @@ Nginx 分流细节见 [nginx.md](./nginx.md)。
 完整命令与排障见 [apps/server/README.md](../../apps/server/README.md)。仓库根执行：
 
 ```bash
-cd /opt/gbnt
+cd /opt/www/gbnt
 cp apps/server/configs/config.example.yaml apps/server/configs/config.yaml
 # 编辑 config.yaml（见下一节）
 sudo bash deploy/systemd/install-systemd.sh
@@ -47,7 +47,7 @@ sudo systemctl status gbnt
 curl -sS http://127.0.0.1:8080/api/health
 ```
 
-可选：`sudo bash deploy/systemd/git-pull-rebuild.sh install` 每 5 分钟 `git pull`，有更新则 **只** `go build` 并重启 `gbnt`。**不会**构建管理后台，前端变更需按第 4 节再打一次包。
+可选：`sudo bash deploy/systemd/git-pull-rebuild.sh install` 每 5 分钟 `git pull`。HEAD 有变化时：触及 `apps/server/` 则 `go build` 并重启 `gbnt`；触及 `apps/admin-web/`、`packages/` 或锁文件则在仓库根 `pnpm install --frozen-lockfile` 并 `pnpm --filter @gbnt/admin-web build`（产物 `apps/admin-web/dist`）。`RUN_USER` 需能执行 `go`，打包前端还需 `pnpm` 或带 `corepack` 的 Node。`BUILD_ADMIN=0` 可关掉前端打包。已安装过定时器的机器需 **重新执行 install** 才会写入更长超时和新环境变量。
 
 从旧 `backend/` 目录迁过来时，须重跑安装脚本或显式传入新的 `APP_DIR`、`BIN`、`CONFIG`，否则 unit 仍指向旧工作目录。
 
@@ -89,7 +89,7 @@ fc-list :lang=zh | head
 Node 与 pnpm 版本以仓库根 `package.json` 的 `packageManager` 为准（当前 `pnpm@11.25.0`）。在 **仓库根**：
 
 ```bash
-cd /opt/gbnt
+cd /opt/www/gbnt
 pnpm install
 pnpm --filter @gbnt/admin-web build
 ```
