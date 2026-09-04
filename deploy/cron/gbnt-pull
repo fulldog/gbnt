@@ -4,7 +4,12 @@
 #   sudo cp /opt/www/gbnt/deploy/cron/gbnt-pull /etc/cron.d/gbnt-pull
 #   sudo chmod 644 /etc/cron.d/gbnt-pull
 #
-# 或 root 的 crontab -e（不要用户字段）：
+# 或写入 root 的 crontab（不要先 crontab -e 再跟表达式，-e 后面不能带参数）：
+#   crontab -l 2>/dev/null | grep -v git-pull-rebuild.sh | crontab -
+#   (crontab -l 2>/dev/null; echo '*/5 * * * * flock -n /var/lock/gbnt-pull.lock bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh') | crontab -
+#   crontab -l
+#
+# 若坚持 crontab -e：只输入 crontab -e，回车后在编辑器里单独粘贴下面这一行（不要用户名）：
 #   */5 * * * * flock -n /var/lock/gbnt-pull.lock bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh
 #
 # 不要与 systemd 的 gbnt-pull.timer 同时启用：
