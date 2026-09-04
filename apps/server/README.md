@@ -44,9 +44,7 @@ go run .
 从旧 `backend/` 目录升级时，已经安装的 systemd unit 不会自动更新工作目录；部署新目录后需重新运行安装脚本，或显式传入新的 `APP_DIR`、`BIN` 和 `CONFIG`。
 
 ```bash
-# 在仓库根目录执行
-go -C apps/server build -o gbnt.service .
-chmod +x apps/server/gbnt.service
+# 在仓库根目录执行；若还没有二进制，安装脚本会自动 go build
 sudo bash deploy/systemd/install-systemd.sh
 ```
 

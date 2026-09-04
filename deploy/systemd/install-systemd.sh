@@ -42,6 +42,34 @@ uninstall() {
   echo "已卸载 ${SERVICE_NAME}.service"
 }
 
+ensure_bin() {
+  if [[ -x "${BIN}" ]]; then
+    return 0
+  fi
+  if [[ -f "${BIN}" ]]; then
+    chmod +x "${BIN}"
+    return 0
+  fi
+
+  export PATH="/usr/local/go/bin:/usr/lib/go-1.27/bin:${HOME}/go/bin:/usr/bin:/bin:${PATH:-}"
+  export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
+  if ! command -v go >/dev/null 2>&1; then
+    echo "找不到可执行文件 ${BIN}，且本机没有 go，无法编译" >&2
+    echo "请安装 Go 后重试，或设置 BIN=已编译二进制的绝对路径" >&2
+    exit 1
+  fi
+  echo "未找到 ${BIN}，正在编译：cd ${APP_DIR} && go build -o ${BIN} ."
+  (
+    cd "${APP_DIR}"
+    go build -o "${BIN}" .
+  )
+  chmod +x "${BIN}"
+  if [[ ! -x "${BIN}" ]]; then
+    echo "编译失败或产物不可执行: ${BIN}" >&2
+    exit 1
+  fi
+}
+
 write_unit() {
   cat >"${UNIT_PATH}" <<EOF
 [Unit]
@@ -82,13 +110,7 @@ install_svc() {
     echo "请先准备 configs/config.yaml，或设置 CONFIG=绝对路径" >&2
     exit 1
   fi
-  if [[ ! -x "${BIN}" ]]; then
-    echo "可执行文件不存在或不可执行: ${BIN}" >&2
-    echo "请先在 ${APP_DIR} 编译，例如：" >&2
-    echo "  cd ${APP_DIR} && go build -o gbnt.service . && chmod +x gbnt.service" >&2
-    echo "或设置 BIN=二进制绝对路径" >&2
-    exit 1
-  fi
+  ensure_bin
 
   if ! getent group "${RUN_GROUP}" >/dev/null; then
     groupadd --system "${RUN_GROUP}"
