@@ -3,7 +3,7 @@
 # 用法：
 #   sudo ./install-systemd.sh
 #   sudo bash install-systemd.sh
-#   sudo APP_DIR=/opt/gbnt BIN=/opt/gbnt/gbnt ./install-systemd.sh
+#   sudo APP_DIR=/opt/gbnt BIN=/opt/gbnt/gbnt.service ./install-systemd.sh
 #   sudo ./install-systemd.sh uninstall
 # 不要用 sh 执行（Debian/Ubuntu 的 sh=dash，不支持 pipefail）。
 if [ -z "${BASH_VERSION:-}" ]; then
@@ -21,7 +21,7 @@ DEFAULT_APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_DIR="${APP_DIR:-${DEFAULT_APP_DIR}}"
 RUN_USER="${RUN_USER:-gbnt}"
 RUN_GROUP="${RUN_GROUP:-${RUN_USER}}"
-BIN="${BIN:-${APP_DIR}/gbnt}"
+BIN="${BIN:-${APP_DIR}/gbnt.service}"
 CONFIG="${CONFIG:-${APP_DIR}/configs/config.yaml}"
 
 need_root() {
@@ -84,7 +84,7 @@ install_svc() {
   if [[ ! -x "${BIN}" ]]; then
     echo "可执行文件不存在或不可执行: ${BIN}" >&2
     echo "请先在 ${APP_DIR} 编译，例如：" >&2
-    echo "  cd ${APP_DIR} && go build -o gbnt ./cmd/server && chmod +x gbnt" >&2
+    echo "  cd ${APP_DIR} && go build -o gbnt.service ./cmd/server && chmod +x gbnt.service" >&2
     echo "或设置 BIN=二进制绝对路径" >&2
     exit 1
   fi
