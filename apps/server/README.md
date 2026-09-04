@@ -12,8 +12,10 @@
 cd apps/server
 cp configs/config.example.yaml configs/config.yaml
 go mod tidy
-go run ./cmd/server
+go run .
 ```
+
+也可在仓库根执行 `make server-run`。
 
 默认监听 `:8080`。健康检查：`GET /api/health`
 
@@ -23,7 +25,7 @@ go run ./cmd/server
 
 | 路径 | 说明 |
 | --- | --- |
-| `cmd/server` | 入口 |
+| `main.go` | 入口 |
 | `configs` | 配置 |
 | `assets/templates` | 随应用发布的导入模板等静态资源 |
 | `internal` | 业务与基建 |
@@ -43,7 +45,7 @@ go run ./cmd/server
 
 ```bash
 # 在仓库根目录执行
-go -C apps/server build -o gbnt.service ./cmd/server
+go -C apps/server build -o gbnt.service .
 chmod +x apps/server/gbnt.service
 sudo bash deploy/systemd/install-systemd.sh
 ```
@@ -71,13 +73,13 @@ sudo bash deploy/systemd/install-systemd.sh uninstall   # 禁用并删除单元�
 
 与 `install-systemd.sh` 使用同一套路径：`APP_DIR`（默认仓库内 `apps/server`）、二进制 `BIN=$APP_DIR/gbnt.service`、单元名 `SERVICE_NAME=gbnt`。
 
-流程：仓库根 `git pull --ff-only`；HEAD 有变化则 `go build -o "$BIN" ./cmd/server`；成功后 `systemctl restart gbnt`。无更新或编译失败都不重启。
+流程：仓库根 `git pull --ff-only`；HEAD 有变化则 `go build -o "$BIN" .`；成功后 `systemctl restart gbnt`。无更新或编译失败都不重启。
 
 先注册常驻服务，再装定时器（可合并成一次）：
 
 ```bash
 # 在仓库根目录执行
-go -C apps/server build -o gbnt.service ./cmd/server
+go -C apps/server build -o gbnt.service .
 sudo bash deploy/systemd/install-systemd.sh
 sudo bash deploy/systemd/git-pull-rebuild.sh install
 ```

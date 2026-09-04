@@ -28,7 +28,7 @@ cd apps/server
 cp configs/config.example.yaml configs/config.yaml
 # 编辑 configs/config.yaml 中 mysql.dsn
 go mod tidy
-go run ./cmd/server
+go run .
 ```
 
 默认监听 `:8080`。健康检查：`GET /api/health`。
@@ -176,10 +176,11 @@ H5 能力参考 `prototypes/static-demo/miniapp`（登录 / 待办 / 上报 / �
 
 ```text
 apps/server/
-  cmd/server/main.go
+  main.go
   configs/config.yaml
-  internal/{config,database,logger,migrate,model,handler,service}
-  pkg/{response,jwtutil,middleware}
+  assets/templates/
+  internal/{config,database,logger,migrate,model,handler,service,perm,cachex,watermark}
+  pkg/{response,jwtutil,middleware,xlsxutil}
   storage/uploads/
   logs/
 docs/api/

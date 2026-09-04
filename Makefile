@@ -3,7 +3,7 @@ SERVER_DIR := apps/server
 .PHONY: server-run server-test server-build frontend-typecheck check
 
 server-run:
-	cd $(SERVER_DIR) && go run ./cmd/server
+	cd $(SERVER_DIR) && go run .
 
 server-test:
 	cd $(SERVER_DIR) && go test ./...

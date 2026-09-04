@@ -83,7 +83,7 @@ run_job() {
 
   log "开始编译 ${BIN}"
   TMP="${BIN}.new"
-  as_deploy bash -c "cd $(printf '%q' "${APP_DIR}") && go build -o $(printf '%q' "${TMP}") ./cmd/server"
+  as_deploy bash -c "cd $(printf '%q' "${APP_DIR}") && go build -o $(printf '%q' "${TMP}") ."
   chmod +x "${TMP}"
   mv -f "${TMP}" "${BIN}"
   log "编译成功"

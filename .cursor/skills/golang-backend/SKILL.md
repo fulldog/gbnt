@@ -19,10 +19,11 @@ description: >-
 
 ```text
 apps/server/
-  cmd/server/main.go
+  main.go
   configs/
-  internal/{config,middleware,logger,model,migrate,handler,service,repo,upload}
-  pkg/{response,jwtutil,traceid,xlsxutil}
+  assets/templates/
+  internal/{config,database,logger,model,migrate,handler,service,perm,cachex,watermark}
+  pkg/{response,jwtutil,xlsxutil,middleware}
   storage/uploads/
   logs/{info,access,error,slow,sql}/
 ```
