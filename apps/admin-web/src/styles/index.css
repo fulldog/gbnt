@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  color: var(--gbnt-text);
+  background: var(--gbnt-bg);
+  font-family: var(--el-font-family);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid rgb(1 92 187 / 28%);
+  outline-offset: 2px;
+}
+
+.page-card {
+  border: 1px solid var(--gbnt-border);
+  border-radius: var(--gbnt-radius);
+  background: var(--gbnt-surface);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.table-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.el-table th.el-table__cell {
+  color: #344054;
+  background: #f7f9fc;
+  font-weight: 600;
+}
+
+.el-table .cell {
+  line-height: 1.45;
+}
+
+.el-dialog__body,
+.el-drawer__body {
+  color: var(--gbnt-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

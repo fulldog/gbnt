@@ -1,0 +1,132 @@
+<script setup lang="ts">
+import type { Issue } from "@gbnt/api-client";
+import { computed } from "vue";
+import IssueStatusTag from "@/components/IssueStatusTag.vue";
+import { ISSUE_TYPE_LABELS, QUIZ_DEFINITIONS, quizIndicatesIssue, quizLabel } from "@/constants/issue";
+import { resolveAssetUrl } from "@/utils/asset";
+import { formatDate, formatDateTime } from "@/utils/format";
+import { issueExtensionFields } from "./issue-display";
+
+const { issue, orgPaths, userNames } = defineProps<{
+  issue: Issue | null;
+  orgPaths: ReadonlyMap<number, string>;
+  userNames: ReadonlyMap<number, string>;
+}>();
+
+const visible = defineModel<boolean>({ required: true });
+const fields = computed(() => (issue ? issueExtensionFields(issue) : []));
+
+function quizIsIssue(type: string, value: boolean): boolean {
+  if (!issue) return false;
+  const definition = QUIZ_DEFINITIONS[issue.type].find((item) => item.type === type);
+  return definition ? quizIndicatesIssue(value, definition.negative) : false;
+}
+
+function userName(id: number): string {
+  if (!id) return "—";
+  return userNames.get(id) ?? `用户 #${id}`;
+}
+</script>
+
+<template>
+  <ElDrawer v-model="visible" title="排查整改详情" size="min(980px, 96vw)" destroy-on-close>
+    <div v-if="issue" class="space-y-6">
+      <section>
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <h2 class="m-0 text-lg font-semibold text-slate-900">{{ issue.issue_key }}</h2>
+          <IssueStatusTag :status="issue.status" />
+          <ElTag effect="plain">{{ ISSUE_TYPE_LABELS[issue.type] }}</ElTag>
+        </div>
+        <ElDescriptions :column="2" border class="max-sm:[--el-descriptions-table-border:1px]">
+          <ElDescriptionsItem label="设施编号">{{ issue.code || "—" }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="项目年度">{{ issue.project_year }} 年</ElDescriptionsItem>
+          <ElDescriptionsItem label="所属组织" :span="2">{{ orgPaths.get(issue.org_id) ?? `组织 #${issue.org_id}` }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="定位地址" :span="2">{{ issue.address }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="经纬度">{{ issue.lat }}, {{ issue.lng }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="计划完成">{{ formatDate(issue.plan_date) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="上报人">{{ userName(issue.report_user_id) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="整改人">{{ userName(issue.assignee_user) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="创建时间">{{ formatDateTime(issue.created_at) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="更新时间">{{ formatDateTime(issue.updated_at) }}</ElDescriptionsItem>
+        </ElDescriptions>
+      </section>
+
+      <section>
+        <h3 class="mb-3 text-base font-semibold text-slate-900">设施属性</h3>
+        <ElDescriptions :column="3" border>
+          <ElDescriptionsItem v-for="field in fields" :key="field.label" :label="field.label">
+            {{ field.value }}
+          </ElDescriptionsItem>
+        </ElDescriptions>
+      </section>
+
+      <section>
+        <h3 class="mb-3 text-base font-semibold text-slate-900">排查清单</h3>
+        <div class="space-y-3">
+          <article v-for="item in issue.type_ext.checklist" :key="item.type" class="rounded-lg border border-slate-200 p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <strong>{{ quizLabel(item.type) }}</strong>
+              <div class="flex items-center gap-2">
+                <ElTag effect="plain">{{ item.value ? "是" : "否" }}</ElTag>
+                <ElTag :type="quizIsIssue(item.type, item.value) ? 'danger' : 'success'">
+                  {{ quizIsIssue(item.type, item.value) ? "存在问题" : "未判定问题" }}
+                </ElTag>
+              </div>
+            </div>
+            <p class="mt-3 mb-0 whitespace-pre-wrap text-sm text-slate-600">{{ item.desc || "无补充说明" }}</p>
+            <div v-if="item.photos?.length" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+              <ElImage
+                v-for="photo in item.photos"
+                :key="photo.file_id"
+                :src="resolveAssetUrl(photo.url)"
+                :preview-src-list="(item.photos ?? []).map((entry) => resolveAssetUrl(entry.url))"
+                fit="cover"
+                class="aspect-square w-full rounded-md border border-slate-200"
+                loading="lazy"
+              />
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="issue.reporter_signature">
+        <h3 class="mb-3 text-base font-semibold text-slate-900">上报人电子签名</h3>
+        <ElImage
+          :src="resolveAssetUrl(issue.reporter_signature.url)"
+          :preview-src-list="[resolveAssetUrl(issue.reporter_signature.url)]"
+          fit="contain"
+          class="h-40 w-full max-w-xl rounded-lg border border-slate-200 bg-white"
+        />
+      </section>
+
+      <section>
+        <h3 class="mb-3 text-base font-semibold text-slate-900">整改记录</h3>
+        <ElTimeline v-if="issue.rectify_records.length">
+          <ElTimelineItem
+            v-for="record in issue.rectify_records"
+            :key="record.id"
+            :timestamp="formatDateTime(record.created_at)"
+            placement="top"
+          >
+            <article class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <strong>{{ quizLabel(record.quiz_type) }}</strong>
+              <p class="mt-2 whitespace-pre-wrap text-sm text-slate-600">{{ record.note }}</p>
+              <div v-if="record.photos.length" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                <ElImage
+                  v-for="photo in record.photos"
+                  :key="photo.file_id"
+                  :src="resolveAssetUrl(photo.url)"
+                  :preview-src-list="record.photos.map((entry) => resolveAssetUrl(entry.url))"
+                  fit="cover"
+                  class="aspect-square w-full rounded-md border border-slate-200"
+                  loading="lazy"
+                />
+              </div>
+            </article>
+          </ElTimelineItem>
+        </ElTimeline>
+        <ElEmpty v-else description="暂无整改记录" :image-size="72" />
+      </section>
+    </div>
+  </ElDrawer>
+</template>

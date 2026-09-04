@@ -1,7 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "element-plus/global"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@gbnt/api-client": ["../../packages/api-client/src/index.ts"],
+      "@gbnt/api-client/*": ["../../packages/api-client/src/*"]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "vueCompilerOptions": {
+    "strictTemplates": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts", "vite.config.ts"]
 }

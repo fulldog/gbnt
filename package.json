@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.25.0",
   "scripts": {
+    "dev:admin": "pnpm --filter @gbnt/admin-web dev",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
