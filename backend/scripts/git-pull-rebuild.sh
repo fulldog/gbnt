@@ -122,14 +122,14 @@ install_timer() {
     echo "用户不存在: ${RUN_USER}（git pull/编译用；可与 install-systemd.sh 的 RUN_USER 相同，或改成有 git 凭证的账号）" >&2
     exit 1
   fi
-  if [[ ! -x "${SELF}" ]]; then
-    echo "脚本不可执行: ${SELF}" >&2
+  if [[ ! -f "${SELF}" ]]; then
+    echo "找不到脚本: ${SELF}" >&2
     exit 1
   fi
 
   mkdir -p "${LOG_DIR}"
   chown "${RUN_USER}:" "${LOG_DIR}" 2>/dev/null || true
-  chmod +x "${SELF}"
+  chmod +x "${SELF}" 2>/dev/null || true
 
   local home
   home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
