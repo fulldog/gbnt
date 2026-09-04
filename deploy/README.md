@@ -1,6 +1,7 @@
 # 部署资产
 
-- `systemd/`：API 服务安装与定时拉取重建。
+- `systemd/`：API 服务安装与 systemd 定时拉取重建。
+- `cron/`：每 5 分钟拉取重建的 crontab 示例（`/etc/cron.d/gbnt-pull`）。
 - `nginx/`：同域分流示例（页面 dist、`/api` 反代、`/uploads` 读盘）。
 - `mysql/`：MySQL Community 安装与备份脚本。
 
