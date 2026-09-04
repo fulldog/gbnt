@@ -93,6 +93,26 @@ journalctl -u gbnt-pull -f
 sudo bash deploy/systemd/git-pull-rebuild.sh uninstall
 ```
 
+## 上传水印字体（Linux）
+
+图片上传会在左下角绘制中文取证水印，服务器没有中文字体时会报 `watermark: no cjk font found`。先装字体：
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y fonts-wqy-zenhei fonts-noto-cjk
+# CentOS/Rocky/Alma
+sudo dnf install -y wqy-zenhei-fonts google-noto-sans-cjk-ttc-fonts
+
+fc-list :lang=zh | head        # 确认实际路径
+```
+
+装完常见路径可自动探测；路径特殊时在配置里显式指定后重启服务：
+
+```yaml
+upload:
+  font: "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+```
+
 ## MySQL 8 安装与备份
 
 Linux 上安装 MySQL 8、每天凌晨 2 点全量（保留 5 天）、每小时 binlog 增量：见 [`../../docs/operations/linux-mysql.md`](../../docs/operations/linux-mysql.md)，脚本在 `../../deploy/mysql/`。

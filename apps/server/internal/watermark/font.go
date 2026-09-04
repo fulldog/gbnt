@@ -2,6 +2,7 @@ package watermark
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -101,9 +102,19 @@ func resolveFont(configured string) (string, error) {
 			"/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
 			"/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
 			"/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
 			"/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+			"/usr/share/fonts/wqy-zenhei/wqy-zenhei.ttc",
 			"/usr/share/fonts/wqy-microhei/wqy-microhei.ttc",
+			// RHEL 系 google-noto / 通用发行版路径
+			"/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+			"/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
 		)
+		// 兜底：扫描字体目录里名字含 cjk/wqy/noto 的 ttc/otf/ttf
+		if p := scanCJKFont([]string{"/usr/share/fonts", "/usr/local/share/fonts"}); p != "" {
+			candidates = append(candidates, p)
+		}
 	}
 	for _, p := range candidates {
 		if p == "" {
@@ -115,4 +126,34 @@ func resolveFont(configured string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no cjk font found; set upload.font to a ttf/otf/ttc path")
+}
+
+// scanCJKFont 在字体目录中查找中文字体文件，返回首个命中路径；找不到返回空串。
+func scanCJKFont(roots []string) string {
+	keys := []string{"cjk", "wqy", "notosanssc", "notoserifsc", "sourcehansans", "droidsansfallback"}
+	found := ""
+	for _, root := range roots {
+		if found != "" {
+			break
+		}
+		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || found != "" {
+				return nil //nolint:nilerr // 单个目录不可读时继续扫描
+			}
+			name := strings.ToLower(d.Name())
+			switch filepath.Ext(name) {
+			case ".ttc", ".otf", ".ttf":
+			default:
+				return nil
+			}
+			for _, k := range keys {
+				if strings.Contains(name, k) {
+					found = path
+					return filepath.SkipAll
+				}
+			}
+			return nil
+		})
+	}
+	return found
 }

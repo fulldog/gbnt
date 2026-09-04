@@ -29,7 +29,9 @@ upload:
   root: "storage/uploads"
   chunk_size: 20971520             # 预留：分片上传未实现，当前直传不使用
   max_file_size: 20971520         # 100MB；单张图片大小上限
-  font: ""
+  font: ""                        # 水印中文字体 ttf/otf/ttc 绝对路径；留空自动探测系统 CJK 字体
+                                  # Linux 需先装字体：apt install fonts-wqy-zenhei / dnf install wqy-zenhei-fonts
+                                  # 例：/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
 
 captcha:
   enabled: true
