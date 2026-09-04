@@ -13,5 +13,5 @@ func (d *Deps) registerHealth(api *gin.RouterGroup) {
 
 // Health GET /api/health — 健康检查（公开），返回 {status:up}。
 func (d *Deps) Health(c *gin.Context) {
-	response.OK(c, gin.H{"status": "up"})
+	response.OK(c, gin.H{"status": "ok"})
 }
