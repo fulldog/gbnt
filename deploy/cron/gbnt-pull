@@ -1,0 +1,19 @@
+# gbnt：每 5 分钟 git pull 并按需重建（与 git-pull-rebuild.sh 相同）
+#
+# 安装（/etc/cron.d，必须有用户字段）：
+#   sudo cp /opt/www/gbnt/deploy/cron/gbnt-pull /etc/cron.d/gbnt-pull
+#   sudo chmod 644 /etc/cron.d/gbnt-pull
+#
+# 或 root 的 crontab -e（不要用户字段）：
+#   */5 * * * * flock -n /var/lock/gbnt-pull.lock bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh
+#
+# 不要与 systemd 的 gbnt-pull.timer 同时启用：
+#   sudo bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh uninstall
+#
+# 任务日志：/opt/www/gbnt/apps/server/logs/deploy.log
+
+SHELL=/bin/bash
+PATH=/usr/local/go/bin:/usr/lib/go-1.27/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+*/5 * * * * root flock -n /var/lock/gbnt-pull.lock bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh
