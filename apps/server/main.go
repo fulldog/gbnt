@@ -90,6 +90,12 @@ func main() {
 	gin.SetMode(cfg.Server.Mode)
 	r := gin.New()
 	r.Use(middleware.Recovery())
+	r.Use(middleware.CORS(middleware.CORSOptions{
+		Enabled:          cfg.CORS.Enabled,
+		AllowOrigins:     cfg.CORS.AllowOrigins,
+		AllowCredentials: cfg.CORS.AllowCredentials,
+		MaxAge:           cfg.CORS.MaxAge,
+	}))
 	r.Use(middleware.TraceAndTiming())
 	r.Use(middleware.AccessLog())
 	uploadRoot := cfg.Upload.Root

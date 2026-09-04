@@ -18,11 +18,20 @@ type Config struct {
 	Upload  UploadConfig  `mapstructure:"upload"`
 	Captcha CaptchaConfig `mapstructure:"captcha"`
 	RBAC    RBACConfig    `mapstructure:"rbac"`
+	CORS    CORSConfig    `mapstructure:"cors"`
 }
 
 type ServerConfig struct {
-	Addr string `mapstructure:"addr"`
-	Mode string `mapstructure:"mode"`
+	Addr string `mapstructure:"addr"` // 监听地址，如 :8080
+	Mode string `mapstructure:"mode"` // debug / release
+}
+
+// CORSConfig HTTP 跨域。enabled=true 时允许浏览器跨 Origin 调 API 与读续期响应头。
+type CORSConfig struct {
+	Enabled          bool     `mapstructure:"enabled"`           // 是否启用；默认 true
+	AllowOrigins     []string `mapstructure:"allow_origins"`     // 允许的 Origin 列表；空或含 * 表示允许任意
+	AllowCredentials bool     `mapstructure:"allow_credentials"` // 是否允许凭证；默认 true
+	MaxAge           int      `mapstructure:"max_age"`           // 预检缓存秒数；默认 86400
 }
 
 type MySQLConfig struct {
@@ -97,6 +106,9 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("captcha.slider_min_ms", 300)
 	v.SetDefault("captcha.slider_max_ms", 8000)
 	v.SetDefault("rbac.enabled", true)
+	v.SetDefault("cors.enabled", true)
+	v.SetDefault("cors.allow_credentials", true)
+	v.SetDefault("cors.max_age", 86400)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -124,6 +136,15 @@ func Load(path string) (*Config, error) {
 	if v.IsSet("MIGRATE_SEED") {
 		c.Migrate.Seed = v.GetBool("MIGRATE_SEED")
 	}
+	if v.IsSet("CORS_ENABLED") {
+		c.CORS.Enabled = v.GetBool("CORS_ENABLED")
+	} else if !v.InConfig("cors.enabled") {
+		c.CORS.Enabled = true
+	}
+	if !v.InConfig("cors.allow_credentials") && !v.IsSet("cors.allow_credentials") {
+		c.CORS.AllowCredentials = true
+	}
+	normalizeCORS(&c.CORS)
 	if c.Log.SlowSQLMs <= 0 {
 		c.Log.SlowSQLMs = 200
 	}
@@ -148,6 +169,12 @@ func Load(path string) (*Config, error) {
 	}
 	normalizeCaptcha(&c.Captcha)
 	return &c, nil
+}
+
+func normalizeCORS(c *CORSConfig) {
+	if c.MaxAge <= 0 {
+		c.MaxAge = 86400
+	}
 }
 
 func normalizeCaptcha(c *CaptchaConfig) {

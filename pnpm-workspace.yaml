@@ -2,3 +2,4 @@ packages:
   - "apps/admin-web"
   - "apps/miniapp"
   - "packages/*"
+minimumReleaseAge: 0
