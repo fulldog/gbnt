@@ -3,3 +3,12 @@ packages:
   - "apps/miniapp"
   - "packages/*"
 minimumReleaseAge: 0
+
+# pnpm 11：未列入的依赖不允许跑 install 脚本，否则 CI/cron 会报 ERR_PNPM_IGNORED_BUILDS。
+allowBuilds:
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  vue-demi: true
+  "@tailwindcss/oxide": true
+  lightningcss: true
