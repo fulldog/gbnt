@@ -1,0 +1,41 @@
+page {
+  --gb-color-primary: #015cbb;
+  --gb-color-primary-dark: #00488f;
+  --gb-color-primary-soft: #e8f2fc;
+  --gb-color-background: #f4f7fb;
+  --gb-color-surface: #ffffff;
+  --gb-color-text-primary: #172033;
+  --gb-color-text-secondary: #4b5565;
+  --gb-color-text-muted: #7a8494;
+  --gb-color-border: #dfe5ee;
+  --gb-color-success: #1a7f4b;
+  --gb-color-warning: #b76e00;
+  --gb-color-danger: #c93737;
+  --gb-radius-sm: 8rpx;
+  --gb-radius-md: 16rpx;
+  --gb-radius-lg: 24rpx;
+  --gb-space-xs: 8rpx;
+  --gb-space-sm: 16rpx;
+  --gb-space-md: 24rpx;
+  --gb-space-lg: 32rpx;
+  --gb-space-xl: 48rpx;
+  --gb-safe-area-bottom: env(safe-area-inset-bottom);
+
+  /* 领域组件使用的语义别名，值仍统一由 gb token 管理。 */
+  --color-primary: var(--gb-color-primary);
+  --color-primary-soft: var(--gb-color-primary-soft);
+  --color-surface: var(--gb-color-surface);
+  --color-surface-muted: var(--gb-color-background);
+  --color-text: var(--gb-color-text-primary);
+  --color-text-secondary: var(--gb-color-text-secondary);
+  --color-text-tertiary: var(--gb-color-text-muted);
+  --color-border: var(--gb-color-border);
+  --color-border-strong: #c8d1de;
+  --color-danger: var(--gb-color-danger);
+  --color-warning-soft: #fff8e6;
+  --color-warning-border: #f4cf84;
+  --radius-sm: var(--gb-radius-sm);
+  --radius-md: var(--gb-radius-md);
+  --radius-lg: var(--gb-radius-lg);
+  --radius-xl: 32rpx;
+}

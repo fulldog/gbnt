@@ -35,7 +35,7 @@ export function createMiniappApi(config: MiniappApiConfig) {
 }
 
 export type MiniappApi = ReturnType<typeof createMiniappApi>;
-export type * from "@gbnt/api-client";
+export * from "@gbnt/api-client";
 export * from "./attachments";
 export * from "./auth";
 export * from "./client";

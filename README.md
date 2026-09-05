@@ -1,6 +1,6 @@
 # GBNT · 高标准农田专项整改平台
 
-GBNT 是同时包含 Go API、管理后台和 UniApp 小程序的多语言 monorepo。当前 Go API、两个正式前端的 TypeScript API 层与共享 API client 已就位，页面工程仍可按最终产品技术栈继续初始化；历史静态演示已冻结为只读原型。
+GBNT 是同时包含 Go API、Vue 3 管理后台和 UniApp 小程序的多语言 monorepo。两个正式前端都已具备可运行页面与 TypeScript API 层，共享请求契约位于 `packages/api-client/`；历史静态演示已冻结为只读原型。
 
 ## 目录
 
@@ -21,7 +21,6 @@ deploy/
   systemd/             API 服务部署
   nginx/               反向代理配置
   mysql/               MySQL 安装与备份
-scripts/                仓库级开发脚本
 ```
 
 ## 后端启动
@@ -34,14 +33,31 @@ make server-run
 
 默认监听 `:8080`，健康检查为 `GET /api/health`。注意：`debug` 或 `dev` 模式可能重建开发数据库，使用前请阅读 [API 服务说明](./apps/server/README.md)。
 
+## 前端启动
+
+前端依赖和命令统一从仓库根目录执行：
+
+```bash
+pnpm install
+pnpm dev:admin
+pnpm dev:mp
+```
+
+管理后台默认通过 Vite 代理访问测试服务；小程序不能使用该代理，启动前须按 [小程序说明](./apps/miniapp/README.md) 配置 `apps/miniapp/.env.local`。小程序开发产物导入微信开发者工具，不能用浏览器运行结果代替真机验收。
+
 ## 常用检查
 
 ```bash
 make server-test
 make server-build
 pnpm typecheck
+pnpm test
+pnpm --filter @gbnt/admin-web build
+pnpm --filter @gbnt/miniapp build:mp-weixin
 make check
 ```
+
+小程序生产构建会校验 `VITE_API_BASE_URL`，必须使用真实 HTTPS Origin；缺失配置、示例域名或 HTTP 地址会直接终止构建。`make check` 覆盖后端测试/构建及前端类型检查和测试，两个前端的生产构建仍按上面命令分别执行。
 
 ## 接口与前端同步
 

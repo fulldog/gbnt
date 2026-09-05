@@ -1,6 +1,6 @@
 SERVER_DIR := apps/server
 
-.PHONY: server-run server-test server-build frontend-typecheck check
+.PHONY: server-run server-test server-build frontend-typecheck frontend-test check
 
 server-run:
 	cd $(SERVER_DIR) && go run .
@@ -14,4 +14,7 @@ server-build:
 frontend-typecheck:
 	pnpm typecheck
 
-check: server-test server-build frontend-typecheck
+frontend-test:
+	pnpm test
+
+check: server-test server-build frontend-typecheck frontend-test

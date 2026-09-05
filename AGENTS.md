@@ -47,9 +47,9 @@ pnpm --filter @gbnt/admin-web build
 
 ### UniApp 小程序
 
-当前 `apps/miniapp/` 只有 API 适配层，还没有 `App.vue`、`pages.json`、`manifest.json` 和 UniApp 构建依赖，因此目前不能启动或导入微信开发者工具。不得把 `prototypes/static-demo/` 当作正式小程序运行，也不得声称 `pnpm dev:mp` 当前可用。
+`apps/miniapp/` 已初始化为 UniApp、Vue 3、TypeScript 与 Vite 应用。首次运行前复制 `apps/miniapp/.env.example` 为不提交的 `.env.local`，并配置完整的 `VITE_API_BASE_URL`。
 
-完成 UniApp 工程初始化时，必须同时维护根目录统一命令：
+从仓库根目录启动或检查：
 
 ```bash
 pnpm dev:mp
@@ -58,11 +58,11 @@ pnpm --filter @gbnt/miniapp test
 pnpm --filter @gbnt/miniapp build:mp-weixin
 ```
 
-- `dev:mp` 应持续编译微信小程序开发产物到 `apps/miniapp/dist/dev/mp-weixin`，再将该目录导入微信开发者工具；
+- `dev:mp` 持续编译微信小程序开发产物到 `apps/miniapp/dist/dev/mp-weixin`，再将该目录导入微信开发者工具；生产构建产物位于 `apps/miniapp/dist/build/mp-weixin`；
 - 小程序运行时使用 `uni.request` 和 `uni.uploadFile`，不能依赖管理后台的 Axios 或 Vite 代理；
 - 测试和生产 API 必须使用对应环境配置注入的 HTTPS 地址，并在微信公众平台配置 request、uploadFile 和 downloadFile 合法域名；
 - 定位、相机、Canvas、上传和隐私授权不能只在 H5 或浏览器中验收，必须使用微信开发者工具及真机验证；
-- 在上述脚本和产物尚未落地时，涉及页面运行或真机验收的任务应明确报告阻塞，不能用原型运行结果代替。
+- 不得把 `prototypes/static-demo/` 当作正式小程序运行，也不能用原型运行结果代替微信开发者工具或真机验收。
 
 ## 后端接口与前端 API 同步（强制）
 

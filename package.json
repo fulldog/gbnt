@@ -4,6 +4,11 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev:admin": "pnpm --filter @gbnt/admin-web dev",
+    "dev:mp": "pnpm --filter @gbnt/miniapp dev:mp-weixin",
+    "build:admin": "pnpm --filter @gbnt/admin-web build",
+    "build:mp-weixin": "pnpm --filter @gbnt/miniapp build:mp-weixin",
+    "test": "pnpm -r --if-present test",
+    "test:miniapp": "pnpm --filter @gbnt/miniapp test",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {

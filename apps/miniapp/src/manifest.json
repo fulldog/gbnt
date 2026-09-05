@@ -1,0 +1,29 @@
+{
+  "name": "GBNT 巡查",
+  "appid": "",
+  "description": "GBNT 设施巡查小程序",
+  "versionName": "0.1.0",
+  "versionCode": "10",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "",
+    "lazyCodeLoading": "requiredComponents",
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于记录巡查问题的现场位置并展示问题地图"
+      }
+    },
+    "requiredPrivateInfos": ["getLocation", "chooseLocation"],
+    "setting": {
+      "es6": true,
+      "minified": true,
+      "postcss": true,
+      "urlCheck": true
+    },
+    "usingComponents": true
+  },
+  "uniStatistics": {
+    "enable": false
+  },
+  "vueVersion": "3"
+}
