@@ -8,6 +8,7 @@ import (
 
 func (d *Deps) registerLedgerStreet(api *gin.RouterGroup) {
 	api.GET("/ledger/street", d.LedgerStreet)
+	api.GET("/ledger/street/options/orgs", d.LedgerStreetOrgOptions)
 }
 
 // LedgerStreet GET /api/ledger/street — 按组织聚合；query: street_org_id/date_from/date_to。

@@ -7,6 +7,7 @@ import { computed, onMounted, reactive, shallowRef } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import PageHeader from "@/components/PageHeader.vue";
+import { useLatestQuery } from "@/composables/useLatestQuery";
 import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
 import { buildOrgTree } from "@/utils/org";
@@ -20,10 +21,12 @@ const ORG_TYPE_LABELS: Record<OrgType, string> = {
 
 const api = useAdminApi();
 const permission = usePermissionStore();
-const loading = shallowRef(false);
 const submitting = shallowRef(false);
-const loadError = shallowRef("");
-const orgs = shallowRef<SysOrg[]>([]);
+const { data: orgs, loading, loadError, run: load } = useLatestQuery<SysOrg[]>({
+  initial: () => [],
+  load: () => api.orgs.list(),
+  errorMessage: "组织架构加载失败",
+});
 const dialogVisible = shallowRef(false);
 const editing = shallowRef<SysOrg | null>(null);
 const formRef = shallowRef<FormInstance>();
@@ -36,18 +39,6 @@ const rules: FormRules<typeof form> = {
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    orgs.value = await api.orgs.list();
-  } catch (error) {
-    loadError.value = errorMessage(error, "组织架构加载失败");
-  } finally {
-    loading.value = false;
-  }
 }
 
 function createRoot(): void {
@@ -136,7 +127,7 @@ onMounted(() => {
         row-key="id"
         default-expand-all
         :tree-props="{ children: 'children' }"
-        empty-text="暂无组织数据"
+        :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无组织数据'"
       >
         <ElTableColumn prop="name" label="组织名称" min-width="260" />
         <ElTableColumn label="组织类型" width="120"><template #default="scope">{{ ORG_TYPE_LABELS[scope.row.type as OrgType] }}</template></ElTableColumn>

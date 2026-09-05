@@ -25,12 +25,13 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 // ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size。
 func (d *Deps) ListUsers(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
-	list, total, err := d.Sys.ListUsers(orgID, c.Query("keyword"), atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20))
+	page, size := service.NormalizePagination(atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20), 0)
+	list, total, err := d.Sys.ListAdminUsers(c.Request.Context(), orgID, c.Query("keyword"), page, size)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	response.OK(c, gin.H{"list": list, "total": total})
+	response.OK(c, gin.H{"list": list, "total": total, "page": page, "size": size})
 }
 
 // ListUsersByOrgID GET /api/sys/users/by-org — 按行政区划 ID 获取用户列表。

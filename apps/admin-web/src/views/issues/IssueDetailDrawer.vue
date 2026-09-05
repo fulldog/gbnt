@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import type { Issue } from "@gbnt/api-client";
 import { computed } from "vue";
+import type { AdminIssue } from "@/api/types";
+import AsyncError from "@/components/AsyncError.vue";
 import IssueStatusTag from "@/components/IssueStatusTag.vue";
 import { ISSUE_TYPE_LABELS, QUIZ_DEFINITIONS, quizIndicatesIssue, quizLabel } from "@/constants/issue";
 import { resolveAssetUrl } from "@/utils/asset";
 import { formatDate, formatDateTime } from "@/utils/format";
+import { displayOrg, displayUser } from "@/utils/display";
 import { issueExtensionFields } from "./issue-display";
 
-const { issue, orgPaths, userNames } = defineProps<{
-  issue: Issue | null;
-  orgPaths: ReadonlyMap<number, string>;
-  userNames: ReadonlyMap<number, string>;
+const { issue, loading = false, loadError = "" } = defineProps<{
+  issue: AdminIssue | null;
+  loading?: boolean;
+  loadError?: string;
 }>();
+defineEmits<{ retry: [] }>();
 
 const visible = defineModel<boolean>({ required: true });
 const fields = computed(() => (issue ? issueExtensionFields(issue) : []));
@@ -22,14 +25,12 @@ function quizIsIssue(type: string, value: boolean): boolean {
   return definition ? quizIndicatesIssue(value, definition.negative) : false;
 }
 
-function userName(id: number): string {
-  if (!id) return "—";
-  return userNames.get(id) ?? `用户 #${id}`;
-}
 </script>
 
 <template>
   <ElDrawer v-model="visible" title="排查整改详情" size="min(980px, 96vw)" destroy-on-close>
+    <ElSkeleton v-if="loading" :rows="8" animated />
+    <AsyncError v-else-if="loadError" :message="loadError" @retry="$emit('retry')" />
     <div v-if="issue" class="space-y-6">
       <section>
         <div class="mb-4 flex flex-wrap items-center gap-3">
@@ -40,12 +41,12 @@ function userName(id: number): string {
         <ElDescriptions :column="2" border class="max-sm:[--el-descriptions-table-border:1px]">
           <ElDescriptionsItem label="设施编号">{{ issue.code || "—" }}</ElDescriptionsItem>
           <ElDescriptionsItem label="项目年度">{{ issue.project_year }} 年</ElDescriptionsItem>
-          <ElDescriptionsItem label="所属组织" :span="2">{{ orgPaths.get(issue.org_id) ?? `组织 #${issue.org_id}` }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="所属组织" :span="2">{{ displayOrg(issue.org_id, issue.org_path || issue.org_name) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="定位地址" :span="2">{{ issue.address }}</ElDescriptionsItem>
           <ElDescriptionsItem label="经纬度">{{ issue.lat }}, {{ issue.lng }}</ElDescriptionsItem>
           <ElDescriptionsItem label="计划完成">{{ formatDate(issue.plan_date) }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="上报人">{{ userName(issue.report_user_id) }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="整改人">{{ userName(issue.assignee_user) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="上报人">{{ displayUser(issue.report_user_id, issue.report_user_name) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="整改人">{{ displayUser(issue.assignee_user, issue.assignee_user_name) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="创建时间">{{ formatDateTime(issue.created_at) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="更新时间">{{ formatDateTime(issue.updated_at) }}</ElDescriptionsItem>
         </ElDescriptions>

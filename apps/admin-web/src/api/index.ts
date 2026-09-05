@@ -31,6 +31,7 @@ export function createAdminApi(config: AdminApiClientConfig) {
 
 export type AdminApi = ReturnType<typeof createAdminApi>;
 export type * from "@gbnt/api-client";
+export type * from "./types";
 export * from "./attachments";
 export * from "./auth";
 export * from "./client";

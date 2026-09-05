@@ -218,17 +218,15 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 	return s.db(ctx).Delete(&model.SysOrg{}, id).Error
 }
 
+// ListUsers 查询工作人员基础分页；计数失败立即返回，避免伪造 total=0。
 func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
-	if page <= 0 {
-		page = 1
-	}
-	if size <= 0 {
-		size = 20
-	}
+	page, size = NormalizePagination(page, size, 0)
 	q := s.userListQuery(orgID, keyword)
 	var total int64
-	_ = q.Count(&total).Error
-	var list []model.SysUser
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	list := make([]model.SysUser, 0)
 	err := q.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error
 	return list, total, err
 }

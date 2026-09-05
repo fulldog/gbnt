@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { SysOrg, SysRole, SysUser } from "@gbnt/api-client";
+import type { SysOrg, SysRole } from "@gbnt/api-client";
+import type { AdminUser, AdminUserListResult } from "@/api/types";
 import { Delete, Download, Edit, Plus, Refresh, Upload } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, vLoading } from "element-plus";
 import type { UploadRequestOptions } from "element-plus";
@@ -8,56 +9,53 @@ import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
 import PageHeader from "@/components/PageHeader.vue";
+import { useLatestQuery } from "@/composables/useLatestQuery";
 import { usePermissionStore } from "@/stores/permission";
 import { downloadBlob } from "@/utils/download";
 import { errorMessage } from "@/utils/error";
 import { formatDateTime } from "@/utils/format";
-import { buildOrgPathMap } from "@/utils/org";
+import { displayOrg, displayRole } from "@/utils/display";
 import UserFormDialog from "./UserFormDialog.vue";
 
 const api = useAdminApi();
 const permission = usePermissionStore();
-const loading = shallowRef(false);
-const loadError = shallowRef("");
-const users = shallowRef<SysUser[]>([]);
-const orgs = shallowRef<SysOrg[]>([]);
-const roles = shallowRef<SysRole[]>([]);
-const total = shallowRef(0);
 const page = shallowRef(1);
 const size = shallowRef(20);
 const formVisible = shallowRef(false);
-const editingUser = shallowRef<SysUser | null>(null);
+const editingUser = shallowRef<AdminUser | null>(null);
 const filters = reactive({ org_id: undefined as number | undefined, keyword: "" });
-const orgPaths = computed(() => buildOrgPathMap(orgs.value));
-const roleNames = computed(() => new Map(roles.value.map((role) => [role.id, role.name])));
+const { data: orgs, loading: orgsLoading, loadError: orgsError, hasLoaded: orgsReady, run: loadOrgs } = useLatestQuery<SysOrg[]>({
+  initial: () => [],
+  load: () => api.orgs.list(),
+  errorMessage: "组织候选加载失败，筛选和人员表单暂不可选择组织",
+});
+const { data: roles, loading: rolesLoading, loadError: rolesError, hasLoaded: rolesReady, run: loadRoles } = useLatestQuery<SysRole[]>({
+  initial: () => [],
+  load: () => api.roles.list(),
+  errorMessage: "角色候选加载失败，人员表单暂不可保存",
+});
+const { data: result, loading, loadError, hasLoaded, run: load } = useLatestQuery<AdminUserListResult>({
+  initial: () => ({ list: [], total: 0, page: 1, size: 20 }),
+  load: () => api.users.list({
+    org_id: filters.org_id,
+    keyword: filters.keyword.trim() || undefined,
+    page: page.value,
+    size: size.value,
+  }),
+  errorMessage: "工作人员列表加载失败",
+});
+const users = computed(() => result.value.list);
+const total = computed(() => result.value.total);
+const optionsReady = computed(() => orgsReady.value && rolesReady.value);
+const optionsLoading = computed(() => orgsLoading.value || rolesLoading.value);
+const optionsError = computed(() => [orgsError.value, rolesError.value].filter(Boolean).join("；"));
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
 }
 
 async function loadDictionaries(): Promise<void> {
-  const [orgResult, roleResult] = await Promise.allSettled([api.orgs.list(), api.roles.list()]);
-  if (orgResult.status === "fulfilled") orgs.value = orgResult.value;
-  if (roleResult.status === "fulfilled") roles.value = roleResult.value;
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    const result = await api.users.list({
-      org_id: filters.org_id,
-      keyword: filters.keyword.trim() || undefined,
-      page: page.value,
-      size: size.value,
-    });
-    users.value = result.list;
-    total.value = result.total;
-  } catch (error) {
-    loadError.value = errorMessage(error, "工作人员列表加载失败");
-  } finally {
-    loading.value = false;
-  }
+  await Promise.all([loadOrgs(), loadRoles()]);
 }
 
 function search(): void {
@@ -76,12 +74,12 @@ function createUser(): void {
   formVisible.value = true;
 }
 
-function editUser(user: SysUser): void {
+function editUser(user: AdminUser): void {
   editingUser.value = user;
   formVisible.value = true;
 }
 
-async function removeUser(user: SysUser): Promise<void> {
+async function removeUser(user: AdminUser): Promise<void> {
   try {
     await ElMessageBox.confirm(`确定删除账号“${user.username}”吗？`, "删除确认", {
       confirmButtonText: "删除",
@@ -90,13 +88,19 @@ async function removeUser(user: SysUser): Promise<void> {
     });
     await api.users.remove(user.id);
     ElMessage.success("工作人员已删除");
-    await load();
+    if (await load()) {
+      const lastPage = Math.max(1, Math.ceil(total.value / size.value));
+      if (page.value > lastPage) {
+        page.value = lastPage;
+        await load();
+      }
+    }
   } catch (error) {
     if (!isCancelled(error)) ElMessage.error(errorMessage(error, "工作人员删除失败"));
   }
 }
 
-async function resetPassword(user: SysUser): Promise<void> {
+async function resetPassword(user: AdminUser): Promise<void> {
   try {
     await ElMessageBox.confirm(`密码将重置为账号“${user.username}”，是否继续？`, "重置密码", {
       confirmButtonText: "重置",
@@ -110,7 +114,7 @@ async function resetPassword(user: SysUser): Promise<void> {
   }
 }
 
-async function toggleStatus(user: SysUser): Promise<void> {
+async function toggleStatus(user: AdminUser): Promise<void> {
   try {
     await api.users.update(user.id, {
       name: user.name,
@@ -150,8 +154,8 @@ async function importUsers(options: UploadRequestOptions): Promise<unknown> {
   }
 }
 
-function asUser(row: unknown): SysUser {
-  return row as SysUser;
+function asUser(row: unknown): AdminUser {
+  return row as AdminUser;
 }
 
 onMounted(() => {
@@ -180,27 +184,29 @@ onMounted(() => {
     <section class="page-card p-4" @submit.prevent="search">
       <ElForm :model="filters" label-position="top">
         <div class="grid items-end gap-4 md:grid-cols-[320px_1fr_auto]">
-          <ElFormItem label="所属组织" class="!mb-0"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" placeholder="全部组织" /></ElFormItem>
+          <ElFormItem label="所属组织" class="!mb-0"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部组织" /></ElFormItem>
           <ElFormItem label="账号、姓名或手机号" class="!mb-0"><ElInput v-model="filters.keyword" clearable /></ElFormItem>
           <div class="flex justify-end gap-2"><ElButton @click="reset">重置</ElButton><ElButton native-type="submit" type="primary">查询</ElButton></div>
         </div>
       </ElForm>
     </section>
 
+    <AsyncError v-if="orgsError" :message="orgsError" @retry="loadOrgs" />
+    <AsyncError v-if="rolesError" :message="rolesError" @retry="loadRoles" />
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
     <section class="page-card overflow-hidden">
       <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <span class="text-sm text-slate-600">共 {{ total }} 名工作人员</span>
+        <span class="text-sm text-slate-600">{{ hasLoaded ? `共 ${total} 名工作人员` : loading ? "正在加载工作人员…" : "工作人员列表未加载成功" }}</span>
         <ElButton text :icon="Refresh" :loading="loading" @click="load">刷新</ElButton>
       </div>
-      <ElTable v-loading="loading" :data="users" row-key="id" empty-text="暂无工作人员">
+      <ElTable v-loading="loading" :data="users" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无工作人员'">
         <ElTableColumn type="index" label="#" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
         <ElTableColumn prop="username" label="登录账号" min-width="130" />
         <ElTableColumn prop="name" label="姓名" min-width="100" />
         <ElTableColumn prop="phone" label="手机号" min-width="135" />
-        <ElTableColumn label="所属组织" min-width="220" show-overflow-tooltip><template #default="scope">{{ orgPaths.get(scope.row.org_id) ?? `组织 #${scope.row.org_id}` }}</template></ElTableColumn>
-        <ElTableColumn label="角色" min-width="130"><template #default="scope">{{ roleNames.get(scope.row.role_id) ?? `角色 #${scope.row.role_id}` }}</template></ElTableColumn>
+        <ElTableColumn label="所属组织" min-width="220" show-overflow-tooltip><template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template></ElTableColumn>
+        <ElTableColumn label="角色" min-width="130"><template #default="scope">{{ displayRole(asUser(scope.row)) }}</template></ElTableColumn>
         <ElTableColumn label="状态" width="90" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
         <ElTableColumn label="创建时间" min-width="155"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
         <ElTableColumn label="操作" width="280" fixed="right">
@@ -215,7 +221,7 @@ onMounted(() => {
           </template>
         </ElTableColumn>
       </ElTable>
-      <div class="flex justify-end border-t border-slate-200 px-4 py-3">
+      <div v-if="hasLoaded" class="flex justify-end border-t border-slate-200 px-4 py-3">
         <ElPagination
           v-model:current-page="page"
           v-model:page-size="size"
@@ -228,6 +234,6 @@ onMounted(() => {
       </div>
     </section>
 
-    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" @saved="load" />
+    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
   </div>
 </template>

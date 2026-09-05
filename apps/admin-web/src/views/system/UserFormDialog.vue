@@ -5,15 +5,19 @@ import type { FormInstance, FormRules } from "element-plus";
 import { reactive, shallowRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
+import AsyncError from "@/components/AsyncError.vue";
 import { errorMessage } from "@/utils/error";
 
-const { user = null, orgs, roles } = defineProps<{
+const { user = null, orgs, roles, optionsReady, optionsLoading, optionsError } = defineProps<{
   user?: SysUser | null;
   orgs: readonly SysOrg[];
   roles: readonly SysRole[];
+  optionsReady: boolean;
+  optionsLoading: boolean;
+  optionsError: string;
 }>();
 
-const emit = defineEmits<{ saved: [] }>();
+const emit = defineEmits<{ saved: []; retryOptions: [] }>();
 const visible = defineModel<boolean>({ required: true });
 const api = useAdminApi();
 const formRef = shallowRef<FormInstance>();
@@ -48,8 +52,13 @@ watch(visible, (open) => {
 });
 
 async function submit(): Promise<void> {
+  if (!optionsReady || optionsLoading || submitting.value) return;
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (!form.org_id || !form.role_id) return;
+  if (!orgs.some((org) => org.id === form.org_id) || !roles.some((role) => role.id === form.role_id)) {
+    ElMessage.error("所选组织或角色信息不可用，请重新选择后保存");
+    return;
+  }
   submitting.value = true;
   try {
     if (user) {
@@ -90,7 +99,9 @@ function updateStatus(value: string | number | boolean | undefined): void {
 
 <template>
   <ElDialog v-model="visible" :title="user ? '编辑工作人员' : '新增工作人员'" width="min(680px, 94vw)" destroy-on-close :close-on-click-modal="false">
-    <ElForm ref="formRef" :model="form" :rules="rules" label-position="top">
+    <AsyncError v-if="optionsError" class="mb-4" :message="optionsError" @retry="emit('retryOptions')" />
+    <ElAlert v-else-if="!optionsReady" class="mb-4" type="info" :closable="false" title="正在加载组织和角色候选，请稍候。" />
+    <ElForm ref="formRef" :model="form" :rules="rules" :disabled="!optionsReady || submitting" label-position="top">
       <div class="grid gap-x-4 sm:grid-cols-2">
         <ElFormItem label="登录账号" prop="username">
           <ElInput v-model="form.username" :disabled="Boolean(user)" maxlength="64" autocomplete="off" />
@@ -116,7 +127,7 @@ function updateStatus(value: string | number | boolean | undefined): void {
     </ElForm>
     <template #footer>
       <ElButton @click="visible = false">取消</ElButton>
-      <ElButton type="primary" :loading="submitting" @click="submit">保存</ElButton>
+      <ElButton type="primary" :loading="submitting || optionsLoading" :disabled="!optionsReady" @click="submit">保存</ElButton>
     </template>
   </ElDialog>
 </template>

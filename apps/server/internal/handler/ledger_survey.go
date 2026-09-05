@@ -8,6 +8,7 @@ import (
 
 func (d *Deps) registerLedgerSurvey(api *gin.RouterGroup) {
 	api.GET("/ledger/survey", d.LedgerSurvey)
+	api.GET("/ledger/survey/options/orgs", d.LedgerSurveyOrgOptions)
 }
 
 // LedgerSurvey GET /api/ledger/survey — 按类型汇总；query: street_org_id/date_from/date_to。

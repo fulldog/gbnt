@@ -25,7 +25,7 @@ type IssueQuery struct {
 	Status      string // new|pending|done；空或 all 不限状态
 	OrgID       uint64 // 落点组织 ID；>0 时含该组织及全部下级；0 不限
 	ProjectYear int    // 项目年度 2020–2023；0 不限
-	Keyword     string // 编号/地址模糊
+	Keyword     string // 管理端为问题编号/设施编号/地址模糊；小程序保持设施编号/地址模糊
 	Page        int    // 页码，默认 1
 	Size        int    // 每页条数，默认 20
 }
@@ -135,6 +135,7 @@ func parseFileIDJSON(raw string) []string {
 	return ids
 }
 
+// MarshalJSON 保留基础业务字段，并将类型扩展与整改附件展开为 JSON 对象。
 func (v IssueVO) MarshalJSON() ([]byte, error) {
 	b, err := json.Marshal(v.Issue)
 	if err != nil {
@@ -159,21 +160,19 @@ func (v IssueVO) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
+// List 管理端基础列表；编号搜索仅在该入口扩大，小程序待办保持原语义。
 func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
-	if q.Page <= 0 {
-		q.Page = 1
-	}
-	if q.Size <= 0 {
-		q.Size = 20
-	}
-	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
+	q.Page, q.Size = NormalizePagination(q.Page, q.Size, 0)
+	db := s.applyAdminIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
 	var err error
 	db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
 	if err != nil {
 		return nil, 0, err
 	}
 	var total int64
-	_ = db.Count(&total).Error
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	var list []model.Issue
 	if err := db.Order("id DESC").Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
 		return nil, 0, err
@@ -187,6 +186,18 @@ func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64
 		out = append(out, *vo)
 	}
 	return out, total, nil
+}
+
+func (s *IssueService) applyAdminIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
+	keyword := strings.TrimSpace(q.Keyword)
+	q.Keyword = ""
+	db = s.applyIssueFilters(db, q)
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		// 一个括号组避免 OR 绕过类型、年度、状态及组织条件。
+		db = db.Where("(issue_key LIKE ? OR code LIKE ? OR address LIKE ?)", like, like, like)
+	}
+	return db
 }
 
 func (s *IssueService) applyIssueFilters(db *gorm.DB, q IssueQuery) *gorm.DB {
@@ -689,16 +700,27 @@ func (s *IssueService) Import(ctx context.Context, rows []IssueInput) (int, erro
 	return n, nil
 }
 
+// Stats 返回工作台全局计数；遵循软删除及原状态口径，任何计数失败均不返回部分统计。
 func (s *IssueService) Stats() (map[string]interface{}, error) {
 	var total, statusNew, statusPending, done int64
-	s.DB.Model(&model.Issue{}).Count(&total)
-	s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusNew).Count(&statusNew)
-	s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusPending).Count(&statusPending)
-	s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusDone).Count(&done)
+	if err := s.DB.Model(&model.Issue{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusNew).Count(&statusNew).Error; err != nil {
+		return nil, err
+	}
+	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusPending).Count(&statusPending).Error; err != nil {
+		return nil, err
+	}
+	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusDone).Count(&done).Error; err != nil {
+		return nil, err
+	}
 	byType := map[string]int64{}
 	for _, t := range []string{"well", "road", "bridge", "forest", "transformer"} {
 		var c int64
-		s.DB.Model(&model.Issue{}).Where("type = ?", t).Count(&c)
+		if err := s.DB.Model(&model.Issue{}).Where("type = ?", t).Count(&c).Error; err != nil {
+			return nil, err
+		}
 		byType[t] = c
 	}
 	rate := float64(0)
@@ -725,24 +747,42 @@ func (s *IssueService) filterLedgerOrg(q *gorm.DB, orgID uint64) (*gorm.DB, erro
 	return s.applyOrgSubtreeFilter(context.Background(), q, orgID)
 }
 
+// LedgerStreet 按落点组织与问题类型聚合；无记录仍返回 rows: []，批量补齐组织名称。
 func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interface{}, error) {
 	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {
 		return nil, err
 	}
 	type row struct {
-		OrgID   uint64 `json:"org_id"`  // 落点组织 ID
-		Type    string `json:"type"`    // 问题类型
-		Total   int64  `json:"total"`   // 条数
-		Pending int64  `json:"pending"` // new+pending
-		Done    int64  `json:"done"`    // done
+		OrgID   uint64  `json:"org_id"`            // 落点组织 ID
+		Type    string  `json:"type"`              // 问题类型
+		Total   int64   `json:"total"`             // 条数
+		Pending int64   `json:"pending"`           // new+pending
+		Done    int64   `json:"done"`              // done
+		OrgName *string `json:"org_name" gorm:"-"` // 当前组织名称；关联缺失为 null
+		OrgPath *string `json:"org_path" gorm:"-"` // 可解析组织路径；关联缺失为 null
 	}
-	var list []row
+	list := make([]row, 0)
 	err = q.Select("org_id, type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
 		Group("org_id, type").Scan(&list).Error
-	return ginH{"rows": list, "street_org_id": streetOrgID}, err
+	if err != nil {
+		return nil, err
+	}
+	orgIDs := make([]uint64, 0, len(list))
+	for _, item := range list {
+		orgIDs = append(orgIDs, item.OrgID)
+	}
+	names, err := loadAdminDisplayNames(s.DB, nil, orgIDs, nil)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].OrgName, list[i].OrgPath = names.orgDisplay(list[i].OrgID)
+	}
+	return ginH{"rows": list, "street_org_id": streetOrgID}, nil
 }
 
+// LedgerSurvey 按问题类型聚合；无记录返回空数组，查询失败不包装为成功。
 func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interface{}, error) {
 	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {
@@ -754,10 +794,13 @@ func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interf
 		Pending int64  `json:"pending"` // new+pending
 		Done    int64  `json:"done"`    // done
 	}
-	var list []row
+	list := make([]row, 0)
 	err = q.Select("type, COUNT(*) as total, SUM(CASE WHEN status IN ('new','pending') THEN 1 ELSE 0 END) as pending, SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) as done").
 		Group("type").Scan(&list).Error
-	return ginH{"rows": list, "street_org_id": streetOrgID}, err
+	if err != nil {
+		return nil, err
+	}
+	return ginH{"rows": list, "street_org_id": streetOrgID}, nil
 }
 
 type ginH map[string]interface{}

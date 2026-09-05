@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ISSUE_TYPES, PROJECT_YEARS } from "@gbnt/api-client";
-import type { Issue, SysOrg, SysUser, UpdateIssueInput } from "@gbnt/api-client";
+import type { Issue, UpdateIssueInput } from "@gbnt/api-client";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
-import { computed, reactive, shallowRef, watch } from "vue";
+import { computed, onScopeDispose, reactive, shallowRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
+import type { OrgOption, UserOptionQuery } from "@/api/types";
+import BusinessUserSelect from "@/components/BusinessUserSelect.vue";
 import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
 import PhotoUpload from "@/components/PhotoUpload.vue";
 import SignaturePad from "@/components/SignaturePad.vue";
@@ -26,13 +28,14 @@ interface SignaturePadExpose {
   toBlob: () => Promise<Blob>;
 }
 
-const { issue = null, orgs } = defineProps<{
+const { issue = null, orgs, orgsReady = true } = defineProps<{
   issue?: Issue | null;
-  orgs: readonly SysOrg[];
+  orgs: readonly OrgOption[];
+  orgsReady?: boolean;
 }>();
 
 const emit = defineEmits<{
-  saved: [];
+  saved: [issueId: number];
 }>();
 
 const visible = defineModel<boolean>({ required: true });
@@ -41,9 +44,13 @@ const auth = useAuthStore();
 const formRef = shallowRef<FormInstance>();
 const signatureRef = shallowRef<SignaturePadExpose>();
 const submitting = shallowRef(false);
-const usersLoading = shallowRef(false);
-const orgUsers = shallowRef<Array<Pick<SysUser, "id" | "name" | "username">>>([]);
+const reporterReady = shallowRef(false);
+const photoSession = shallowRef(0);
+const uploadingQuestions = shallowRef<ReadonlySet<ChecklistDraft>>(new Set());
+const photosUploading = computed(() => uploadingQuestions.value.size > 0);
 const form = reactive<IssueFormDraft>(createIssueDraft(auth.user?.id));
+let session = 0;
+onScopeDispose(() => { session += 1; });
 
 const editing = computed(() => Boolean(issue));
 const needsRectify = computed(() => draftNeedsRectify(form));
@@ -74,53 +81,60 @@ function resetForm(): void {
   formRef.value?.clearValidate();
 }
 
-async function loadOrgUsers(orgId: number | undefined): Promise<void> {
-  if (!orgId) {
-    orgUsers.value = [];
-    return;
-  }
-  usersLoading.value = true;
-  try {
-    const result = await api.users.listByOrg(orgId);
-    orgUsers.value = result.list;
-    if (!editing.value && !form.report_user_id) {
-      form.report_user_id = result.list[0]?.id ?? auth.user?.id;
-    }
-  } catch {
-    orgUsers.value = auth.user
-      ? [{ id: auth.user.id, name: auth.user.name, username: auth.user.username }]
-      : [];
-    form.report_user_id ??= auth.user?.id;
-  } finally {
-    usersLoading.value = false;
-  }
+function loadReporters(query: UserOptionQuery) {
+  if (!form.org_id) return Promise.reject(new Error("请先选择组织"));
+  return api.issues.listReporterOptions({ ...query, org_id: form.org_id });
+}
+
+function resetPhotoUploads(): void {
+  photoSession.value += 1;
+  uploadingQuestions.value = new Set();
+}
+
+function updatePhotoUploading(item: ChecklistDraft, busy: boolean): void {
+  // 旧题目组件卸载/请求完成时，不得覆盖新弹窗或新题型的上传状态。
+  if (!visible.value || !form.checklist.includes(item)) return;
+  const next = new Set(uploadingQuestions.value);
+  if (busy) next.add(item);
+  else next.delete(item);
+  uploadingQuestions.value = next;
 }
 
 watch(
   () => form.type,
   (type, previous) => {
-    if (!editing.value && type !== previous) form.checklist = createChecklist(type);
+    if (!editing.value && type !== previous) {
+      resetPhotoUploads();
+      form.checklist = createChecklist(type);
+    }
   },
+  { flush: "sync" },
 );
 
 watch(
   () => form.org_id,
-  (orgId) => {
-    if (visible.value) void loadOrgUsers(orgId);
+  () => {
+    reporterReady.value = false;
+    if (!editing.value) form.report_user_id = undefined;
   },
+  { flush: "sync" },
 );
 
-watch(visible, (open) => {
-  if (!open) return;
-  resetForm();
-  void loadOrgUsers(form.org_id);
-});
+watch(() => [visible.value, issue?.id] as const, ([open]) => {
+  session += 1;
+  submitting.value = false;
+  reporterReady.value = false;
+  resetPhotoUploads();
+  if (open) resetForm();
+}, { immediate: true, flush: "sync" });
 
-async function uploadSignature(): Promise<string> {
-  if (!signatureRef.value) throw new Error("电子签名组件未就绪");
-  const blob = await signatureRef.value.toBlob();
+async function uploadSignature(current: number): Promise<string> {
+  const pad = signatureRef.value;
+  if (!pad) throw new Error("电子签名组件未就绪");
+  const blob = await pad.toBlob();
+  if (current !== session || !visible.value) throw new Error("当前填报已取消");
   const file = new File([blob], `signature-${Date.now()}.png`, { type: "image/png" });
-  const result = await api.attachments.uploadImages({ files: [file] });
+  const result = await api.attachments.uploadImages({ files: [file], watermark: false });
   const fileId = result.list[0]?.file_id;
   if (!fileId) throw new Error("电子签名上传失败");
   return fileId;
@@ -134,7 +148,14 @@ function updateChecklistValue(
 }
 
 async function submit(): Promise<void> {
+  if (submitting.value || photosUploading.value || !visible.value) return;
+  const current = session;
   if (!(await formRef.value?.validate().catch(() => false))) return;
+  if (current !== session || submitting.value || photosUploading.value) return;
+  if (!orgsReady || (!editing.value && !reporterReady.value)) {
+    ElMessage.error("请先成功加载组织和人员候选，并选择有效的上报人");
+    return;
+  }
 
   if (!editing.value) {
     const validationError = validateChecklist(form);
@@ -146,6 +167,7 @@ async function submit(): Promise<void> {
 
   submitting.value = true;
   try {
+    let savedId: number;
     if (issue) {
       if (!form.org_id) throw new Error("请选择组织");
       const input: UpdateIssueInput = {
@@ -153,23 +175,28 @@ async function submit(): Promise<void> {
         org_id: form.org_id,
         code: form.code.trim(),
         address: form.address.trim(),
-        lat: form.lat ?? 0,
-        lng: form.lng ?? 0,
+        lat: form.lat,
+        lng: form.lng,
         plan_date: form.plan_date,
       };
       await api.issues.update(issue.id, input);
+      if (current !== session) return;
+      savedId = issue.id;
       ElMessage.success("基础信息已更新");
     } else {
-      const signatureFileId = await uploadSignature();
-      await api.issues.create(buildCreateInput(form, signatureFileId));
+      const signatureFileId = await uploadSignature(current);
+      if (current !== session) return;
+      const created = await api.issues.create(buildCreateInput(form, signatureFileId));
+      if (current !== session) return;
+      savedId = created.id;
       ElMessage.success("排查记录已新增");
     }
     visible.value = false;
-    emit("saved");
+    emit("saved", savedId);
   } catch (error) {
-    ElMessage.error(errorMessage(error, editing.value ? "更新失败" : "新增失败"));
+    if (current === session) ElMessage.error(errorMessage(error, editing.value ? "更新失败" : "新增失败"));
   } finally {
-    submitting.value = false;
+    if (current === session) submitting.value = false;
   }
 }
 </script>
@@ -182,6 +209,8 @@ async function submit(): Promise<void> {
     top="4vh"
     destroy-on-close
     :close-on-click-modal="false"
+    :close-on-press-escape="!submitting"
+    :show-close="!submitting"
   >
     <ElAlert
       v-if="editing"
@@ -192,7 +221,8 @@ async function submit(): Promise<void> {
       title="当前后端更新接口仅保存基础信息，排查清单与电子签名在编辑时只读。"
     />
 
-    <ElForm ref="formRef" :model="form" :rules="rules" label-position="top" scroll-to-error>
+    <ElAlert v-if="!orgsReady" class="mb-4" type="warning" :closable="false" title="组织候选尚未加载成功，请关闭弹窗后重试组织查询。" />
+    <ElForm ref="formRef" :model="form" :rules="rules" :disabled="submitting" label-position="top" scroll-to-error>
       <section>
         <h3 class="mt-0 mb-4 text-base font-semibold text-slate-900">基础信息</h3>
         <div class="grid gap-x-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -210,26 +240,25 @@ async function submit(): Promise<void> {
             <ElInput v-model="form.code" maxlength="64" placeholder="请输入设施编号" />
           </ElFormItem>
           <ElFormItem label="所属组织" prop="org_id" class="lg:col-span-2">
-            <OrgTreeSelect v-model="form.org_id" :orgs="orgs" :clearable="false" />
+            <OrgTreeSelect v-model="form.org_id" :orgs="orgs" :disabled="!orgsReady" :clearable="false" />
           </ElFormItem>
           <ElFormItem v-if="!editing" label="上报人" prop="report_user_id">
-            <ElSelect v-model="form.report_user_id" filterable :loading="usersLoading" class="w-full">
-              <ElOption
-                v-for="user in orgUsers"
-                :key="user.id"
-                :label="`${user.name || user.username}（${user.username}）`"
-                :value="user.id"
-              />
-            </ElSelect>
+            <BusinessUserSelect
+              v-model="form.report_user_id"
+              :active="visible && Boolean(form.org_id) && orgsReady"
+              :scope-key="form.org_id ?? 0"
+              :load-options="loadReporters"
+              @ready="reporterReady = $event"
+            />
           </ElFormItem>
           <ElFormItem label="定位地址" prop="address" class="sm:col-span-2 lg:col-span-3">
             <ElInput v-model="form.address" maxlength="255" show-word-limit placeholder="请输入详细定位地址" />
           </ElFormItem>
           <ElFormItem label="纬度">
-            <ElInputNumber v-model="form.lat" :precision="6" :controls="false" class="!w-full" />
+            <ElInputNumber v-model="form.lat" :min="-90" :max="90" :precision="6" :controls="false" class="!w-full" />
           </ElFormItem>
           <ElFormItem label="经度">
-            <ElInputNumber v-model="form.lng" :precision="6" :controls="false" class="!w-full" />
+            <ElInputNumber v-model="form.lng" :min="-180" :max="180" :precision="6" :controls="false" class="!w-full" />
           </ElFormItem>
           <ElFormItem label="计划整改完成日期">
             <ElDatePicker
@@ -241,6 +270,7 @@ async function submit(): Promise<void> {
             />
           </ElFormItem>
         </div>
+        <p v-if="!editing" class="m-0 text-xs text-slate-500">上传现场照片前，请填写真实定位地址和经纬度，用于生成现场水印；未填写或 (0, 0) 占位坐标不能用于上传，系统不会自动补零。</p>
       </section>
 
       <template v-if="!editing">
@@ -313,7 +343,7 @@ async function submit(): Promise<void> {
           </div>
 
           <div class="space-y-4">
-            <article v-for="(item, index) in form.checklist" :key="item.type" class="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <article v-for="(item, index) in form.checklist" :key="`${photoSession}:${item.type}`" class="rounded-lg border border-slate-200 bg-slate-50/70 p-4">
               <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <strong class="text-sm text-slate-900">{{ index + 1 }}. {{ item.label }}</strong>
                 <span class="text-xs text-slate-500">{{ item.negative ? '是 = 有问题' : '否 = 有问题' }}</span>
@@ -334,8 +364,17 @@ async function submit(): Promise<void> {
                 show-word-limit
                 :placeholder="item.value !== null && quizIndicatesIssue(item.value, item.negative) ? '存在问题，说明必填' : '补充说明（选填）'"
               />
-              <div v-if="item.mustImg" class="mt-3">
-                <PhotoUpload v-model="item.files" />
+              <div class="mt-3">
+                <p class="mb-2 text-xs text-slate-500">现场照片（{{ item.mustImg ? '必填' : '选填' }}）</p>
+                <PhotoUpload
+                  v-if="visible"
+                  v-model="item.files"
+                  :address="form.address"
+                  :lat="form.lat"
+                  :lng="form.lng"
+                  :disabled="submitting"
+                  @uploading="updatePhotoUploading(item, $event)"
+                />
               </div>
             </article>
           </div>
@@ -344,14 +383,15 @@ async function submit(): Promise<void> {
         <ElDivider />
         <section>
           <h3 class="mt-0 mb-4 text-base font-semibold text-slate-900">上报人电子签名</h3>
-          <SignaturePad ref="signatureRef" />
+          <SignaturePad v-if="visible" :key="photoSession" ref="signatureRef" />
         </section>
       </template>
     </ElForm>
 
     <template #footer>
-      <ElButton @click="visible = false">取消</ElButton>
-      <ElButton type="primary" :loading="submitting" @click="submit">
+      <span v-if="photosUploading" class="mr-3 text-sm text-amber-700" role="status">现场照片上传中，请完成后再提交。</span>
+      <ElButton :disabled="submitting" @click="visible = false">取消</ElButton>
+      <ElButton type="primary" :loading="submitting" :disabled="photosUploading || !orgsReady || (!editing && !reporterReady)" @click="submit">
         {{ editing ? '保存基础信息' : '提交排查记录' }}
       </ElButton>
     </template>

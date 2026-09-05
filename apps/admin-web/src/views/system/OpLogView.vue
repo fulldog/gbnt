@@ -1,42 +1,32 @@
 <script setup lang="ts">
-import type { OpLog } from "@gbnt/api-client";
+import type { OpLog, OpLogListResult } from "@gbnt/api-client";
 import { Refresh, Search, View } from "@element-plus/icons-vue";
 import { vLoading } from "element-plus";
-import { onMounted, shallowRef } from "vue";
+import { computed, onMounted, shallowRef } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import PageHeader from "@/components/PageHeader.vue";
-import { errorMessage } from "@/utils/error";
+import { useLatestQuery } from "@/composables/useLatestQuery";
 import { formatDateTime, prettyJson } from "@/utils/format";
 
 const api = useAdminApi();
-const loading = shallowRef(false);
-const loadError = shallowRef("");
-const logs = shallowRef<OpLog[]>([]);
-const total = shallowRef(0);
 const page = shallowRef(1);
 const size = shallowRef(20);
 const keyword = shallowRef("");
 const detailVisible = shallowRef(false);
 const selected = shallowRef<OpLog | null>(null);
 
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    const result = await api.opLogs.list({
-      keyword: keyword.value.trim() || undefined,
-      page: page.value,
-      size: size.value,
-    });
-    logs.value = result.list;
-    total.value = result.total;
-  } catch (error) {
-    loadError.value = errorMessage(error, "操作日志加载失败");
-  } finally {
-    loading.value = false;
-  }
-}
+const { data: result, loading, loadError, hasLoaded, run: load } = useLatestQuery<OpLogListResult>({
+  initial: () => ({ list: [], total: 0, page: 1, size: 20 }),
+  load: () => api.opLogs.list({
+    keyword: keyword.value.trim() || undefined,
+    page: page.value,
+    size: size.value,
+  }),
+  errorMessage: "操作日志加载失败",
+});
+const logs = computed(() => result.value.list);
+const total = computed(() => result.value.total);
 
 function search(): void {
   page.value = 1;
@@ -83,7 +73,7 @@ onMounted(() => {
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
     <section class="page-card overflow-hidden">
-      <ElTable v-loading="loading" :data="logs" row-key="id" empty-text="暂无操作日志">
+      <ElTable v-loading="loading" :data="logs" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无操作日志'">
         <ElTableColumn type="index" label="#" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
         <ElTableColumn prop="username" label="操作账号" min-width="130" />
         <ElTableColumn prop="action" label="操作动作" min-width="150" show-overflow-tooltip />
@@ -96,7 +86,7 @@ onMounted(() => {
           <template #default="scope"><ElButton link type="primary" :icon="View" @click="openDetail(asOpLog(scope.row))">详情</ElButton></template>
         </ElTableColumn>
       </ElTable>
-      <div class="flex justify-end border-t border-slate-200 px-4 py-3">
+      <div v-if="hasLoaded" class="flex justify-end border-t border-slate-200 px-4 py-3">
         <ElPagination
           v-model:current-page="page"
           v-model:page-size="size"

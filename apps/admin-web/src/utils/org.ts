@@ -1,6 +1,7 @@
-import type { OrgTreeNode, SysOrg } from "@gbnt/api-client";
+import type { OrgTreeNode } from "@gbnt/api-client";
+import type { OrgOption } from "@/api/types";
 
-export function buildOrgTree(orgs: readonly SysOrg[]): OrgTreeNode[] {
+export function buildOrgTree(orgs: readonly OrgOption[]): OrgTreeNode[] {
   const nodes = new Map<number, OrgTreeNode>();
   for (const org of orgs) {
     nodes.set(org.id, {
@@ -28,7 +29,7 @@ export function buildOrgTree(orgs: readonly SysOrg[]): OrgTreeNode[] {
   return roots;
 }
 
-export function buildOrgPathMap(orgs: readonly SysOrg[]): Map<number, string> {
+export function buildOrgPathMap(orgs: readonly OrgOption[]): Map<number, string> {
   const byId = new Map(orgs.map((org) => [org.id, org]));
   const cache = new Map<number, string>();
 
@@ -55,7 +56,7 @@ export interface OrgSelectOption {
   children?: OrgSelectOption[];
 }
 
-export function orgTreeSelectData(orgs: readonly SysOrg[]): OrgSelectOption[] {
+export function orgTreeSelectData(orgs: readonly OrgOption[]): OrgSelectOption[] {
   const transform = (nodes: readonly OrgTreeNode[]): OrgSelectOption[] =>
     nodes.map((node) => ({
       value: node.id,

@@ -170,7 +170,17 @@ func (d *Deps) AppRegions(c *gin.Context) {
 
 // AppGetIssue 小程序问题详情。
 func (d *Deps) AppGetIssue(c *gin.Context) {
-	d.GetIssue(c)
+	// 管理端读取会增加展示名称；小程序继续读取基础视图，不改变既有契约和访问规则。
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	item, err := d.Issue.Get(id)
+	if err != nil {
+		response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+		return
+	}
+	response.OK(c, item)
 }
 
 // AppCreateIssue 小程序上报（按 quiz 推导 new/done）。

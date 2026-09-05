@@ -3,10 +3,11 @@ import type { SysApi, SysRole } from "@gbnt/api-client";
 import { Delete, Edit, Key, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, ElTree, vLoading } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
-import { computed, nextTick, onMounted, reactive, shallowRef } from "vue";
+import { computed, nextTick, onMounted, reactive, shallowRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import PageHeader from "@/components/PageHeader.vue";
+import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useAuthStore } from "@/stores/auth";
 import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
@@ -41,10 +42,16 @@ const ACTION_LABELS: Record<string, string> = {
 const api = useAdminApi();
 const auth = useAuthStore();
 const permission = usePermissionStore();
-const loading = shallowRef(false);
-const loadError = shallowRef("");
-const roles = shallowRef<SysRole[]>([]);
-const apis = shallowRef<SysApi[]>([]);
+const { data: roleData, loading, loadError, run: load } = useLatestQuery<{ roles: SysRole[]; apis: SysApi[] }>({
+  initial: () => ({ roles: [], apis: [] }),
+  load: async () => {
+    const [roles, apis] = await Promise.all([api.roles.list(), api.roles.listApis()]);
+    return { roles, apis };
+  },
+  errorMessage: "角色权限数据加载失败",
+});
+const roles = computed(() => roleData.value.roles);
+const apis = computed(() => roleData.value.apis);
 const keyword = shallowRef("");
 const roleDialogVisible = shallowRef(false);
 const permissionVisible = shallowRef(false);
@@ -53,7 +60,18 @@ const selectedRole = shallowRef<SysRole | null>(null);
 const formRef = shallowRef<FormInstance>();
 const treeRef = shallowRef<InstanceType<typeof ElTree>>();
 const submitting = shallowRef(false);
-const permissionLoading = shallowRef(false);
+const {
+  data: permissionIds, loading: permissionLoading, loadError: permissionError,
+  hasLoaded: permissionsReady, run: loadPermissionIds, invalidate: invalidatePermissions,
+} = useLatestQuery<number[]>({
+  initial: () => [],
+  load: async () => {
+    if (!selectedRole.value) throw new Error("请先选择角色");
+    const result = await api.roles.getPermissions(selectedRole.value.id);
+    return result.api_ids === "*" ? apis.value.map((item) => item.id) : result.api_ids;
+  },
+  errorMessage: "角色权限加载失败，请重试后保存",
+});
 const form = reactive({ name: "", desc: "", status: 1 });
 const rules: FormRules<typeof form> = {
   name: [{ required: true, message: "请输入角色名称", trigger: "blur" }],
@@ -88,20 +106,6 @@ const permissionTree = computed<PermissionNode[]>(() => {
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    const [roleList, apiList] = await Promise.all([api.roles.list(), api.roles.listApis()]);
-    roles.value = roleList;
-    apis.value = apiList;
-  } catch (error) {
-    loadError.value = errorMessage(error, "角色权限数据加载失败");
-  } finally {
-    loading.value = false;
-  }
 }
 
 function createRole(): void {
@@ -173,21 +177,23 @@ async function removeRole(role: SysRole): Promise<void> {
 async function openPermissions(role: SysRole): Promise<void> {
   selectedRole.value = role;
   permissionVisible.value = true;
-  permissionLoading.value = true;
-  try {
-    const result = await api.roles.getPermissions(role.id);
+  await loadPermissions();
+}
+
+async function loadPermissions(): Promise<void> {
+  treeRef.value?.setCheckedKeys([], false);
+  if (await loadPermissionIds()) {
     await nextTick();
-    const ids = result.api_ids === "*" ? apis.value.map((item) => item.id) : result.api_ids;
-    treeRef.value?.setCheckedKeys(ids, false);
-  } catch (error) {
-    ElMessage.error(errorMessage(error, "角色权限加载失败"));
-  } finally {
-    permissionLoading.value = false;
+    if (permissionVisible.value && permissionsReady.value) treeRef.value?.setCheckedKeys(permissionIds.value, false);
   }
 }
 
+watch(permissionVisible, (visible) => {
+  if (!visible) invalidatePermissions();
+});
+
 async function savePermissions(): Promise<void> {
-  if (!selectedRole.value || selectedRole.value.id === 1) return;
+  if (!selectedRole.value || selectedRole.value.id === 1 || !permissionsReady.value || permissionLoading.value || loading.value || loadError.value || submitting.value) return;
   const checked = treeRef.value?.getCheckedKeys(false) ?? [];
   const apiIds = checked.filter((id): id is number => typeof id === "number");
   submitting.value = true;
@@ -242,7 +248,7 @@ onMounted(() => {
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
     <section class="page-card overflow-hidden">
-      <ElTable v-loading="loading" :data="filteredRoles" row-key="id" empty-text="暂无角色">
+      <ElTable v-loading="loading" :data="filteredRoles" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无角色'">
         <ElTableColumn prop="id" label="角色 ID" width="100" align="center" />
         <ElTableColumn prop="name" label="角色名称" min-width="160" />
         <ElTableColumn prop="desc" label="角色说明" min-width="240" show-overflow-tooltip />
@@ -276,6 +282,7 @@ onMounted(() => {
     </ElDialog>
 
     <ElDrawer v-model="permissionVisible" :title="`${selectedRole?.name ?? ''} · API 权限`" size="min(760px, 96vw)" destroy-on-close>
+      <AsyncError v-if="permissionError" class="mb-4" :message="permissionError" @retry="loadPermissions" />
       <ElAlert
         v-if="selectedRole?.id === 1"
         class="mb-4"
@@ -285,6 +292,7 @@ onMounted(() => {
         title="管理员角色固定拥有全部 API 权限，不允许修改。"
       />
       <ElTree
+        v-if="!permissionError"
         ref="treeRef"
         v-loading="permissionLoading"
         :data="permissionTree"
@@ -296,7 +304,7 @@ onMounted(() => {
       <template #footer>
         <div class="flex justify-end gap-2 p-4">
           <ElButton @click="permissionVisible = false">关闭</ElButton>
-          <ElButton v-if="selectedRole?.id !== 1" type="primary" :loading="submitting" @click="savePermissions">保存权限</ElButton>
+          <ElButton v-if="selectedRole?.id !== 1" type="primary" :loading="submitting" :disabled="!permissionsReady || permissionLoading || loading || Boolean(loadError)" @click="savePermissions">保存权限</ElButton>
         </div>
       </template>
     </ElDrawer>

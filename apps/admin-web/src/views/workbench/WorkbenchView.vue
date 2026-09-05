@@ -2,12 +2,12 @@
 import type { WorkbenchStats } from "@gbnt/api-client";
 import { CircleCheck, Clock, DataLine, Refresh, Warning } from "@element-plus/icons-vue";
 import type { Component } from "vue";
-import { computed, onMounted, shallowRef } from "vue";
+import { computed, onMounted } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import TypeDistributionChart from "@/components/TypeDistributionChart.vue";
-import { errorMessage } from "@/utils/error";
+import { useLatestQuery } from "@/composables/useLatestQuery";
 import { formatNumber, formatPercent } from "@/utils/format";
 
 interface MetricCard {
@@ -19,9 +19,11 @@ interface MetricCard {
 }
 
 const api = useAdminApi();
-const stats = shallowRef<WorkbenchStats | null>(null);
-const loading = shallowRef(false);
-const loadError = shallowRef("");
+const { data: stats, loading, loadError, run: load } = useLatestQuery<WorkbenchStats | null>({
+  initial: () => null,
+  load: () => api.workbench.getStats(),
+  errorMessage: "工作台数据加载失败",
+});
 
 const cards = computed<MetricCard[]>(() => {
   const value = stats.value;
@@ -43,18 +45,6 @@ function toneClasses(tone: string): string {
     green: "bg-emerald-50 text-emerald-700",
     violet: "bg-violet-50 text-violet-700",
   }[tone] ?? "bg-slate-50 text-slate-700";
-}
-
-async function load(): Promise<void> {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    stats.value = await api.workbench.getStats();
-  } catch (error) {
-    loadError.value = errorMessage(error, "工作台数据加载失败");
-  } finally {
-    loading.value = false;
-  }
 }
 
 onMounted(() => {

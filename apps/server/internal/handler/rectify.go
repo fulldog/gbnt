@@ -17,6 +17,9 @@ func (d *Deps) registerRectify(api *gin.RouterGroup) {
 		issues.GET("", d.ListIssues)
 		issues.POST("", d.CreateIssue)
 		issues.POST("/import", d.ImportIssues)
+		issues.GET("/options/orgs", d.IssueOrgOptions)
+		issues.GET("/options/reporters", d.IssueReporterOptions)
+		issues.GET("/:id/assignee-options", d.IssueAssigneeOptions)
 		issues.GET("/:id", d.GetIssue)
 		issues.PUT("/:id", d.UpdateIssue)
 		issues.DELETE("/:id", d.DeleteIssue)
@@ -37,7 +40,8 @@ func (d *Deps) ListIssues(c *gin.Context) {
 		Page:        atoiDefault(c.Query("page"), 1),
 		Size:        atoiDefault(c.Query("size"), 20),
 	}
-	list, total, err := d.Issue.List(c.Request.Context(), q)
+	q.Page, q.Size = service.NormalizePagination(q.Page, q.Size, 0)
+	list, total, err := d.Issue.ListAdmin(c.Request.Context(), q)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -51,9 +55,13 @@ func (d *Deps) GetIssue(c *gin.Context) {
 	if !ok {
 		return
 	}
-	item, err := d.Issue.Get(id)
+	item, err := d.Issue.GetAdmin(c.Request.Context(), id)
 	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+			return
+		}
+		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
 	response.OK(c, item)
