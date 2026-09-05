@@ -55,7 +55,11 @@ func main() {
 			zap.Bool("seed", cfg.Migrate.Seed || dev),
 		)
 	} else {
-		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"))
+		// 关闭 AutoMigrate 时仍同步 sys_apis，否则新路由不在目录里，RBAC 对所有人 403。
+		if err := migrate.SyncSysAPIs(db); err != nil {
+			logs.Error.Fatal("sync sys_apis", zap.Error(err))
+		}
+		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"), zap.String("sys_apis", "synced"))
 	}
 	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
 	memCache := cachex.New(5*time.Minute, 10*time.Minute)
@@ -68,10 +72,8 @@ func main() {
 	}
 	captchaSvc := &service.CaptchaService{Store: memCache, Cfg: cfg.Captcha}
 	permSvc := perm.NewService(db, memCache)
-	if cfg.Migrate.Enabled {
-		if err := permSvc.ReloadAPIIndex(); err != nil {
-			logs.Error.Fatal("perm index", zap.Error(err))
-		}
+	if err := permSvc.ReloadAPIIndex(); err != nil {
+		logs.Error.Fatal("perm index", zap.Error(err))
 	}
 	sysSvc := &service.SysService{DB: db, Perm: permSvc}
 	deps := &handler.Deps{

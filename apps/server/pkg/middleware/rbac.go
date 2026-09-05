@@ -50,6 +50,11 @@ func RBAC(svc *perm.Service, enabled bool, publicPaths []string) gin.HandlerFunc
 			c.Abort()
 			return
 		}
+		// 超管在目录命中前放行：新接口尚未 SyncSysAPIs 进 sys_apis 时，FindAPI 失败也会 403。
+		if info.IsSuperAdmin {
+			c.Next()
+			return
+		}
 		api, ok := svc.FindAPI(c.Request.Method, path)
 		if !ok {
 			response.Fail(c, 403, response.CodeForbid, "无权限访问该接口")

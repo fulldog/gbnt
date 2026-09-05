@@ -119,6 +119,43 @@ func TestRBACSkipsAppPrefixWithUser(t *testing.T) {
 	}
 }
 
+func TestRBACSuperAdminAllowsUnindexedAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := perm.NewStaticService(cachex.New(0, 0), nil)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 1, RoleID: 0, IsSuperAdmin: true}))
+		c.Next()
+	})
+	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.GET("/api/ledger/street/options/orgs", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/ledger/street/options/orgs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("超管在 sys_apis 未收录时也应放行，got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRBACNormalUserUnindexedAPIForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := perm.NewStaticService(cachex.New(0, 0), nil)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 2, RoleID: 3, IsSuperAdmin: false}))
+		c.Next()
+	})
+	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.GET("/api/ledger/street/options/orgs", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/ledger/street/options/orgs", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("普通用户未收录接口应为 403，got %d body=%s", w.Code, w.Body.String())
+	}
+}
 func TestRBACRequiresLoginForProtectedTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
