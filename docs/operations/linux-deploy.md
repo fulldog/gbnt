@@ -54,6 +54,12 @@ curl -sS http://127.0.0.1:8080/api/health
 
 都是每 5 分钟执行 `bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh`（cron 用 `flock` 防止上一轮未结束又开一轮）。HEAD 有变化时：触及 `apps/server/` 则 `go build` 并重启 `gbnt`；触及 `apps/admin-web/`、`packages/` 或锁文件则在仓库根 `pnpm install --frozen-lockfile` 并 `pnpm --filter @gbnt/admin-web build`（产物 `apps/admin-web/dist`）。`RUN_USER` 需能执行 `go`，打包前端还需 `pnpm` 或带 `corepack` 的 Node。`BUILD_ADMIN=0` 可关掉前端打包。已安装过 systemd 定时器的机器需 **重新执行 install** 才会写入更长超时和新环境变量。
 
+当前树强制重编（不 `git pull`、不看 HEAD 是否变化）：
+
+```bash
+sudo bash /opt/www/gbnt/deploy/systemd/git-pull-rebuild.sh force
+```
+
 用 root 执行而仓库属主不是 `gbnt` 时（例如 `root` 克隆到 `/opt/www/gbnt`），Git 会报 `dubious ownership`。脚本会对本仓库加 `safe.directory`，不必执行 `git config --global --add safe.directory`。长期建议：`chown -R gbnt:gbnt /opt/www/gbnt`，与 systemd 的 `RUN_USER` 一致。
 
 从旧 `backend/` 目录迁过来时，须重跑安装脚本或显式传入新的 `APP_DIR`、`BIN`、`CONFIG`，否则 unit 仍指向旧工作目录。

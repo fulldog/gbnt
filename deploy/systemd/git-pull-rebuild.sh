@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # git pull → 有更新则按变更编译 Go 和/或打包 admin-web；Go 编成功才 systemctl restart。
 # 用法：
-#   sudo bash git-pull-rebuild.sh              # 立刻跑一轮
+#   sudo bash git-pull-rebuild.sh              # 立刻跑一轮（有 git 更新才编译）
+#   sudo bash git-pull-rebuild.sh force        # 不 pull、不看 HEAD，强制编 Go/前端并重启
 #   sudo bash git-pull-rebuild.sh install      # 注册每 5 分钟定时器
 #   sudo bash git-pull-rebuild.sh uninstall
 # 路径/服务名与 install-systemd.sh 对齐：APP_DIR、BIN、SERVICE_NAME、RUN_USER。
@@ -26,6 +27,7 @@ RUN_USER="${RUN_USER:-gbnt}"
 TIMER_NAME="${TIMER_NAME:-gbnt-pull}"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
 BUILD_ADMIN="${BUILD_ADMIN:-1}"
+FORCE="${FORCE:-0}"
 
 REPO_DIR="${REPO_DIR:-${DEFAULT_REPO_DIR}}"
 ADMIN_DIR="${ADMIN_DIR:-${REPO_DIR}/apps/admin-web}"
@@ -91,30 +93,39 @@ run_job() {
     log "仓库属主是 ${repo_owner}，与 RUN_USER=${RUN_USER} 不同，git/编译以当前用户执行；已设 safe.directory。建议: chown -R ${RUN_USER}: ${REPO_DIR}"
   fi
 
-  OLD="$(repo_git rev-parse HEAD)"
-  log "pull 前 HEAD=${OLD}"
-  repo_git pull --ff-only
-  NEW="$(repo_git rev-parse HEAD)"
-  log "pull 后 HEAD=${NEW}"
-
-  if [[ "${OLD}" == "${NEW}" ]]; then
-    log "无更新，跳过编译与重启"
-    exit 0
-  fi
-
   local changed need_go need_admin
-  changed="$(repo_git diff --name-only "${OLD}" "${NEW}" || true)"
   need_go=0
   need_admin=0
-  if printf '%s\n' "${changed}" | grep -qE '^apps/server/'; then
+
+  if [[ "${FORCE}" == "1" ]]; then
+    log "强制编译：跳过 git pull 与变更判断 HEAD=$(repo_git rev-parse HEAD)"
     need_go=1
-  fi
-  if [[ "${BUILD_ADMIN}" != "0" ]] && printf '%s\n' "${changed}" | grep -qE '^(apps/admin-web/|packages/|pnpm-lock.yaml|pnpm-workspace.yaml|package.json$)'; then
-    need_admin=1
-  fi
-  if [[ "${need_go}" -eq 0 && "${need_admin}" -eq 0 ]]; then
-    log "HEAD 有变化但无 apps/server 或管理后台相关文件，跳过编译与重启"
-    exit 0
+    if [[ "${BUILD_ADMIN}" != "0" ]]; then
+      need_admin=1
+    fi
+  else
+    OLD="$(repo_git rev-parse HEAD)"
+    log "pull 前 HEAD=${OLD}"
+    repo_git pull --ff-only
+    NEW="$(repo_git rev-parse HEAD)"
+    log "pull 后 HEAD=${NEW}"
+
+    if [[ "${OLD}" == "${NEW}" ]]; then
+      log "无更新，跳过编译与重启"
+      exit 0
+    fi
+
+    changed="$(repo_git diff --name-only "${OLD}" "${NEW}" || true)"
+    if printf '%s\n' "${changed}" | grep -qE '^apps/server/'; then
+      need_go=1
+    fi
+    if [[ "${BUILD_ADMIN}" != "0" ]] && printf '%s\n' "${changed}" | grep -qE '^(apps/admin-web/|packages/|pnpm-lock.yaml|pnpm-workspace.yaml|package.json$)'; then
+      need_admin=1
+    fi
+    if [[ "${need_go}" -eq 0 && "${need_admin}" -eq 0 ]]; then
+      log "HEAD 有变化但无 apps/server 或管理后台相关文件，跳过编译与重启"
+      exit 0
+    fi
   fi
 
   if [[ "${need_go}" -eq 1 ]]; then
@@ -249,7 +260,20 @@ EOF
   systemctl list-timers "${TIMER_NAME}.timer" --no-pager || true
 }
 
-case "${1:-run}" in
+for arg in "$@"; do
+  case "${arg}" in
+    force|--force|-f)
+      FORCE=1
+      ;;
+  esac
+done
+
+cmd="${1:-run}"
+if [[ "${cmd}" == "force" || "${cmd}" == "--force" || "${cmd}" == "-f" ]]; then
+  cmd="run"
+fi
+
+case "${cmd}" in
   run|"")
     run_job
     ;;
@@ -260,8 +284,9 @@ case "${1:-run}" in
     uninstall_timer
     ;;
   *)
-    echo "用法: sudo bash $0 [run|install|uninstall]" >&2
-    echo "环境变量: APP_DIR BIN SERVICE_NAME RUN_USER REPO_DIR ADMIN_DIR BUILD_ADMIN TIMER_NAME GOPROXY" >&2
+    echo "用法: sudo bash $0 [run|force|install|uninstall]" >&2
+    echo "force / --force / -f：跳过 git pull 与 HEAD 判断，强制编译并重启" >&2
+    echo "环境变量: APP_DIR BIN SERVICE_NAME RUN_USER REPO_DIR ADMIN_DIR BUILD_ADMIN FORCE TIMER_NAME GOPROXY" >&2
     echo "默认与 install-systemd.sh 一致: SERVICE_NAME=gbnt BIN=\$APP_DIR/gbnt.service" >&2
     exit 1
     ;;

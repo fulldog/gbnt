@@ -87,7 +87,8 @@ sudo bash deploy/systemd/git-pull-rebuild.sh install
 Git 在属主与执行用户不一致时会拒绝操作（`dubious ownership`）。脚本已对本仓库设置 `safe.directory`。仓库若由 root 克隆，可 `chown -R gbnt:gbnt /opt/www/gbnt`，与 `RUN_USER` 对齐。
 
 ```bash
-sudo bash deploy/systemd/git-pull-rebuild.sh    # 立刻跑一轮
+sudo bash deploy/systemd/git-pull-rebuild.sh    # 立刻跑一轮（有 git 更新才编译）
+sudo bash deploy/systemd/git-pull-rebuild.sh force   # 不 pull，强制编 Go/前端并重启 gbnt
 sudo systemctl start gbnt-pull.service         # 同样立刻跑一轮
 systemctl list-timers gbnt-pull.timer
 journalctl -u gbnt-pull -f
