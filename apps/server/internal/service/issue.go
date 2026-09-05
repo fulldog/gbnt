@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 
 	"gbnt/apps/server/internal/database"
@@ -69,7 +70,8 @@ type RectifyItem struct {
 
 // RectifyInput 整改入参。
 type RectifyInput struct {
-	RectifyList []RectifyItem `json:"rectify_list"` // 分项整改列表；可含重复 type；不能为空
+	RectifyList   []RectifyItem `json:"rectify_list"`   // 分项整改列表；可含重复 type；不能为空
+	ExpectedRound *uint64       `json:"expected_round"` // 客户端当前轮次；新客户端必传，旧客户端省略保持兼容；与锁定轮次不符时拒绝提交
 }
 
 // ReassignInput 管理端重新指派整改人。
@@ -548,23 +550,11 @@ func assertAppAssignee(item *model.Issue, userID uint64) error {
 	return nil
 }
 
-// Rectify 提交分项整改：写入 rectify_list 各条记录；覆盖全部需整改 type 则 done，否则 pending。
-// lockAssignee 为 true 时（App）校验已认领人。
+// Rectify 提交分项整改：仅本轮记录覆盖全部需整改 type 才转 done，否则 pending。
+// 同一问题行锁串行提交与重新整改；lockAssignee 为 true 时保留 App 已认领人校验。
 func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, lockAssignee bool) (*IssueVO, error) {
 	user, err := database.UserFromContext(ctx)
 	if err != nil {
-		return nil, err
-	}
-	var item model.Issue
-	if err := s.db(ctx).First(&item, id).Error; err != nil {
-		return nil, err
-	}
-	if lockAssignee {
-		if err := assertAppAssignee(&item, user.ID); err != nil {
-			return nil, err
-		}
-	}
-	if err := rectifyGate(item.Status, true); err != nil {
 		return nil, err
 	}
 	if len(in.RectifyList) == 0 {
@@ -599,34 +589,46 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 		prep = append(prep, prepared{typ: it.Type, note: note, photo: string(b)})
 	}
 
-	need := neededQuizTypes(item.Type, item.TypeExt)
-	covered := map[model.QuizType]struct{}{}
-	var hist []model.IssueRectifyRecord
-	if err := s.db(ctx).Where("issue_id = ?", id).Find(&hist).Error; err != nil {
-		return nil, err
-	}
-	for _, r := range hist {
-		t := model.QuizType(r.QuizType)
-		if t.Valid() {
-			covered[t] = struct{}{}
-		}
-	}
-	for _, p := range prep {
-		covered[p.typ] = struct{}{}
-	}
-	st := model.IssueStatusPending
-	if rectifyTypesCovered(need, covered) {
-		st = model.IssueStatusDone
-	}
-
 	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Issue
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
+			return err
+		}
+		// 授权与状态以获得锁后的数据为准，避免并发认领或重新整改使用旧快照。
+		if lockAssignee {
+			if err := assertAppAssignee(&item, user.ID); err != nil {
+				return err
+			}
+		}
+		// 即使服务器已完成并重开，旧页面的取证也不能悄悄写入下一轮。
+		if in.ExpectedRound != nil && *in.ExpectedRound != item.RectifyRound {
+			return errors.New("整改轮次已更新，请刷新问题后重新提交")
+		}
+		if err := rectifyGate(item.Status, true); err != nil {
+			return err
+		}
+		var hist []model.IssueRectifyRecord
+		if err := tx.Where("issue_id = ? AND round = ?", id, item.RectifyRound).Find(&hist).Error; err != nil {
+			return err
+		}
+		covered := map[model.QuizType]struct{}{}
+		for _, record := range hist {
+			if typ := model.QuizType(record.QuizType); typ.Valid() && record.Round == item.RectifyRound {
+				covered[typ] = struct{}{}
+			}
+		}
 		for _, p := range prep {
+			covered[p.typ] = struct{}{}
 			rec := model.IssueRectifyRecord{
-				IssueID: id, QuizType: string(p.typ), Note: p.note, PhotoFileIDs: p.photo,
+				IssueID: id, Round: item.RectifyRound, QuizType: string(p.typ), Note: p.note, PhotoFileIDs: p.photo,
 			}
 			if err := tx.Create(&rec).Error; err != nil {
 				return err
 			}
+		}
+		st := model.IssueStatusPending
+		if rectifyTypesCovered(neededQuizTypes(item.Type, item.TypeExt), covered) {
+			st = model.IssueStatusDone
 		}
 		return tx.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
 			"status":        st,
@@ -639,26 +641,35 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 	return s.Get(id)
 }
 
-// ReRectify 重新整改：done → pending；不删历史记录、不改 assignee_user。
+// ReRectify 重新整改：行锁事务内 done → pending 并递增整改轮次；不删历史、不改责任人。
 func (s *IssueService) ReRectify(ctx context.Context, id uint64, lockAssignee bool) (*IssueVO, error) {
-	var item model.Issue
-	if err := s.db(ctx).First(&item, id).Error; err != nil {
-		return nil, err
-	}
+	var user *database.UserInfo
 	if lockAssignee {
-		user, err := database.UserFromContext(ctx)
+		var err error
+		user, err = database.UserFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if err := assertAppAssignee(&item, user.ID); err != nil {
-			return nil, err
+	}
+	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Issue
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
+			return err
 		}
-	}
-	need := neededQuizTypes(item.Type, item.TypeExt)
-	if err := reRectifyGate(item.Status, len(need) > 0); err != nil {
-		return nil, err
-	}
-	if err := s.db(ctx).Model(&item).Update("status", model.IssueStatusPending).Error; err != nil {
+		if lockAssignee {
+			if err := assertAppAssignee(&item, user.ID); err != nil {
+				return err
+			}
+		}
+		if err := reRectifyGate(item.Status, len(neededQuizTypes(item.Type, item.TypeExt)) > 0); err != nil {
+			return err
+		}
+		// 历史保留在原轮次；下一次提交不能借用上一轮已完成的题项。
+		return tx.Model(&item).Updates(map[string]interface{}{
+			"status": model.IssueStatusPending, "rectify_round": gorm.Expr("rectify_round + 1"),
+		}).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 	return s.Get(id)

@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { Issue, IssueStatus, IssueType } from "@gbnt/api-client";
+import type { IssueStatus, IssueType } from "@gbnt/api-client";
+import type { MiniappIssue } from "@/api/types";
 import { computed } from "vue";
 import { toAssetUrl } from "@/api/runtime";
+import IssuePhotoGrid from "@/components/issue/IssuePhotoGrid.vue";
+import { formatDateTime, issueChecklistPhotos, issueSummary, issueReporter, issueOrganization, issuePlanHint } from "@/utils/issue-display";
 
-const props = defineProps<{ issue: Issue }>();
+const props = defineProps<{ issue: MiniappIssue; today?: string }>();
 const emit = defineEmits<{
   open: [id: number];
   preview: [urls: string[], current: string];
@@ -32,27 +35,19 @@ const statusLabels: Record<IssueStatus, string> = {
 };
 
 const photos = computed(() => {
-  const urls = props.issue.type_ext.checklist.flatMap((item) =>
-    (item.photos ?? []).map((photo) => toAssetUrl(photo.url)),
-  );
-  return [...new Set(urls.filter(Boolean))].slice(0, 3);
+  return issueChecklistPhotos(props.issue).map((photo) => toAssetUrl(photo.url)).filter(Boolean);
 });
+const summary = computed(() => issueSummary(props.issue));
+const plan = computed(() => issuePlanHint(props.issue, props.today));
 
 const createdText = computed(() => formatDateTime(props.issue.created_at));
 const title = computed(
   () => `${typeLabels[props.issue.type]} · ${props.issue.code || props.issue.issue_key}`,
 );
 
-function formatDateTime(value: string): string {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (number: number) => String(number).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function preview(current: string): void {
-  emit("preview", photos.value, current);
+function preview(index: number): void {
+  const current = photos.value[index];
+  if (current) emit("preview", photos.value, current);
 }
 </script>
 
@@ -76,29 +71,47 @@ function preview(current: string): void {
       </text>
     </view>
 
+    <view class="mine-issue-card__reporter">
+      <text>{{ issueReporter(issue) }}</text>
+      <text>{{ issueOrganization(issue) }}</text>
+    </view>
+    <text class="mine-issue-card__summary">{{ summary }}</text>
     <text class="mine-issue-card__address">{{ issue.address || "暂未填写地址" }}</text>
 
-    <view v-if="photos.length" class="mine-issue-card__photos">
-      <image
-        v-for="url in photos"
-        :key="url"
-        class="mine-issue-card__photo"
-        :src="url"
-        mode="aspectFill"
-        lazy-load
-        @tap.stop="preview(url)"
-      />
-    </view>
+    <IssuePhotoGrid v-if="photos.length" :urls="photos" :max="3" compact @preview="preview" />
 
     <view class="mine-issue-card__meta">
       <text>{{ issue.project_year }} 年度</text>
-      <text v-if="issue.plan_date">计划整改：{{ issue.plan_date }}</text>
+      <text>{{ plan.label }}</text>
       <text class="mine-issue-card__caret" aria-hidden="true">›</text>
     </view>
   </view>
 </template>
 
 <style scoped lang="scss">
+.mine-issue-card__reporter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--gbnt-text-secondary, #526277);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.mine-issue-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 10px;
+  color: var(--gbnt-text, #152033);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .mine-issue-card {
   padding: 16px;
   border: 1px solid var(--gbnt-border, #dce4ee);

@@ -17,6 +17,8 @@ interface SignatureExport {
   revision: number;
 }
 
+const props = withDefaults(defineProps<{ disabled?: boolean }>(), { disabled: false });
+
 const emit = defineEmits<{
   cleared: [];
   changed: [];
@@ -69,11 +71,13 @@ function pointFromEvent(event: TouchEventLike): { x: number; y: number } | null 
 }
 
 function start(event: TouchEventLike): void {
+  if (props.disabled) return;
   lastPoint = pointFromEvent(event);
   strokeChanged = false;
 }
 
 function move(event: TouchEventLike): void {
+  if (props.disabled) return;
   const nextPoint = pointFromEvent(event);
   if (!context || !lastPoint || !nextPoint) {
     return;
@@ -160,7 +164,7 @@ defineExpose({
         <text class="signature-pad__title">排查人电子签名</text>
         <text class="signature-pad__required">必填</text>
       </view>
-      <button class="signature-pad__clear" @tap="clear">清空重签</button>
+      <button class="signature-pad__clear" :disabled="disabled" @tap="clear">清空重签</button>
     </view>
     <canvas
       :canvas-id="canvasId"

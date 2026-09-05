@@ -8,6 +8,9 @@ import (
 
 func (d *Deps) registerLedgerSurvey(api *gin.RouterGroup) {
 	api.GET("/ledger/survey", d.LedgerSurvey)
+	api.GET("/ledger/survey/report", d.LedgerSurveyReport)
+	api.GET("/ledger/survey/rows", d.LedgerSurveyRows)
+	api.GET("/ledger/survey/statistics", d.LedgerSurveyStatistics)
 	api.GET("/ledger/survey/options/orgs", d.LedgerSurveyOrgOptions)
 }
 

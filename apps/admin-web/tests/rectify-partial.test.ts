@@ -50,6 +50,7 @@ describe("管理端分项整改", () => {
     submit().vm.$emit("click");
     await flushPromises();
     expect(rectify).toHaveBeenCalledExactlyOnceWith(1, {
+      expected_round: 0,
       rectify_list: [{ type: "water_out", note: "已修好", file_uuids: ["photo-0"] }],
     });
     expect(wrapper.emitted("saved")).toEqual([[1]]);
@@ -78,15 +79,48 @@ describe("管理端分项整改", () => {
   });
 
   it("历史已反馈仅作标记，重新整改时依然能选中并重复反馈", async () => {
-    const { wrapper, rectify, submit, select, fill } = mountDialog(issue(7, ["water_out"]));
+    const reopened = { ...issue(7, ["water_out"]), rectify_round: 1 };
+    const { wrapper, rectify, submit, select, fill } = mountDialog(reopened);
     expect(wrapper.findAllComponents({ name: "ElCheckbox" })).toHaveLength(2);
-    expect(wrapper.findAllComponents({ name: "ElTag" }).map((tag) => tag.text())).toEqual(["历史已反馈"]);
+    expect(wrapper.findAllComponents({ name: "ElTag" }).map((tag) => tag.text())).toEqual(["历史轮已反馈"]);
     expect(wrapper.findComponent({ name: "ElAlert" }).props("description")).toContain("不表示本轮已经完成");
     await select(0);
     await fill(0);
     submit().vm.$emit("click");
     await flushPromises();
-    expect(rectify).toHaveBeenCalledWith(7, expect.objectContaining({ rectify_list: [expect.objectContaining({ type: "water_out" })] }));
+    expect(rectify).toHaveBeenCalledWith(7, expect.objectContaining({ expected_round: 1, rectify_list: [expect.objectContaining({ type: "water_out" })] }));
+    wrapper.unmount();
+  });
+
+  it("按当前轮次标记本轮与历史反馈，不隐藏任何可提交题项", async () => {
+    const record = issue(7, ["water_out", "pipe_ok", "water_out"]);
+    record.rectify_round = 2;
+    record.rectify_records[0]!.round = 2;
+    record.rectify_records[1]!.round = 1;
+    record.rectify_records[2]!.round = 0;
+    const { wrapper } = mountDialog(record);
+    const articles = wrapper.findAll("article");
+    expect(articles).toHaveLength(2);
+    expect(articles[0]!.text()).toContain("本轮已反馈");
+    expect(articles[0]!.text()).toContain("历史轮已反馈");
+    expect(articles[1]!.text()).not.toContain("本轮已反馈");
+    expect(articles[1]!.text()).toContain("历史轮已反馈");
+    expect(wrapper.findComponent({ name: "ElAlert" }).props("description")).toContain("第 3 轮整改");
+    expect(wrapper.findAllComponents({ name: "ElCheckbox" }).every((checkbox) => !checkbox.props("disabled"))).toBe(true);
+    wrapper.unmount();
+  });
+
+  it("旧服务缺少轮次按初始轮读取；同一问题推进轮次后清除旧提交草稿", async () => {
+    const { wrapper, select, fill, submit } = mountDialog(issue(7, ["water_out"]));
+    expect(wrapper.findAllComponents({ name: "ElTag" }).map((tag) => tag.text())).toEqual(["本轮已反馈"]);
+    await select(0);
+    await fill(0);
+    expect(submit().props("disabled")).toBe(false);
+    await wrapper.setProps({ issue: { ...issue(7, ["water_out"]), rectify_round: 1 } });
+    expect(submit().props("disabled")).toBe(true);
+    expect(wrapper.findAllComponents({ name: "ElCheckbox" })[0]!.props("modelValue")).toBe(false);
+    expect(wrapper.findAllComponents({ name: "ElInput" })[0]!.props("modelValue")).toBe("");
+    expect(wrapper.findAllComponents({ name: "ElTag" }).map((tag) => tag.text())).toEqual(["历史轮已反馈"]);
     wrapper.unmount();
   });
 

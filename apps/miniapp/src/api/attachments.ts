@@ -104,7 +104,13 @@ function uploadOne(
             data: parseEnvelope(result.data),
             headers: normalizeUniHeaders(result.header),
           };
-          resolve(handleApiResponse<UploadImagesResult>(response, config));
+          const data = handleApiResponse<UploadImagesResult>(response, config);
+          if (!data || !Array.isArray(data.list) || data.list.length !== 1 ||
+              !data.list[0] || typeof data.list[0].file_id !== "string" || !data.list[0].file_id.trim() ||
+              typeof data.list[0].url !== "string" || !data.list[0].url.trim()) {
+            throw new Error("照片上传结果异常，请重试");
+          }
+          resolve(data);
         } catch (error) {
           reject(error);
         }

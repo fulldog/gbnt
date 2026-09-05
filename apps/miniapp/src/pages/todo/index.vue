@@ -11,6 +11,7 @@ import { computed, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
 import IssueCard from "@/components/issue/IssueCard.vue";
 import { usePagedIssues } from "@/composables/usePagedIssues";
+import { useBusinessToday } from "@/composables/useBusinessToday";
 import {
   errorMessage,
   ISSUE_FILTER_TYPE_OPTIONS,
@@ -44,16 +45,20 @@ const {
   hasMore,
   isRefreshing,
   isLoadingMore,
+  isStale,
   reload,
   resetFilters,
   loadMore,
+  retry,
   invalidate,
 } = usePagedIssues();
 
 const searchKeyword = shallowRef("");
+const today = useBusinessToday();
 const regionOptions = shallowRef<RegionOption[]>([{ label: "全部区域", value: undefined }]);
 const regionError = shallowRef("");
 let showCount = 0;
+let regionRequestSequence = 0;
 
 const typeIndex = computed(() =>
   Math.max(0, ISSUE_FILTER_TYPE_OPTIONS.findIndex((option) => option.value === filters.value.type)),
@@ -91,15 +96,17 @@ function flattenRegions(
 }
 
 async function loadRegions(): Promise<void> {
+  const requestId = ++regionRequestSequence;
   regionError.value = "";
   try {
     const result = await miniappApi.regions.list();
+    if (requestId !== regionRequestSequence) return;
     regionOptions.value = [
       { label: "全部区域", value: undefined },
       ...flattenRegions(result.list),
     ];
   } catch (cause) {
-    regionError.value = errorMessage(cause, "区域加载失败");
+    if (requestId === regionRequestSequence) regionError.value = errorMessage(cause, "区域加载失败");
   }
 }
 
@@ -176,7 +183,10 @@ onReachBottom(() => {
   void loadMore();
 });
 
-onUnload(invalidate);
+onUnload(() => {
+  regionRequestSequence += 1;
+  invalidate();
+});
 </script>
 
 <template>
@@ -261,6 +271,9 @@ onUnload(invalidate);
           清除筛选
         </button>
       </view>
+      <view v-if="isStale" class="todo-page__stale" role="alert">
+        刷新失败，当前显示上次加载的数据和总数。{{ error }}
+      </view>
 
       <view v-if="isInitialLoading" class="todo-page__state">
         <view class="todo-page__spinner" />
@@ -270,7 +283,7 @@ onUnload(invalidate);
       <view v-else-if="!items.length && error" class="todo-page__state">
         <text class="todo-page__state-title">待办加载失败</text>
         <text class="todo-page__state-text">{{ error }}</text>
-        <button class="todo-page__retry" @tap="reload()">重新加载</button>
+        <button class="todo-page__retry" @tap="retry()">重新加载</button>
       </view>
 
       <view v-else-if="!items.length" class="todo-page__state">
@@ -287,6 +300,7 @@ onUnload(invalidate);
           v-for="issue in items"
           :key="issue.id"
           :issue="issue"
+          :today="today"
           @open="openDetail"
           @map="openMap"
           @preview="previewImages"
@@ -294,9 +308,10 @@ onUnload(invalidate);
       </view>
 
       <view v-if="items.length" class="todo-page__footer-state">
-        <text v-if="isLoadingMore">正在加载更多…</text>
-        <button v-else-if="error" class="todo-page__footer-retry" @tap="loadMore">
-          加载失败，点击重试
+        <text v-if="isRefreshing">正在刷新…</text>
+        <text v-else-if="isLoadingMore">正在加载更多…</text>
+        <button v-else-if="error" class="todo-page__footer-retry" @tap="retry()">
+          {{ isStale ? '刷新失败' : error }}，点击重试
         </button>
         <text v-else-if="!hasMore">已经到底了</text>
         <text v-else>上拉加载更多</text>
@@ -306,6 +321,16 @@ onUnload(invalidate);
 </template>
 
 <style scoped lang="scss">
+.todo-page__stale {
+  margin-bottom: 20rpx;
+  padding: 20rpx;
+  border-radius: 12rpx;
+  background: #fff3e0;
+  color: #8c4c00;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
 .todo-page {
   min-height: 100vh;
   background: var(--gb-color-background, #f4f7fa);

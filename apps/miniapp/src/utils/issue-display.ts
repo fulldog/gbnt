@@ -5,9 +5,12 @@ import type {
   QuizBool,
   QuizType,
 } from "@gbnt/api-client";
+import type { MiniappIssue } from "@/api/types";
+import { businessDateTime, businessToday, calendarDate, calendarDayDifference } from "./business-date";
 import {
   ISSUE_TYPE_OPTIONS as DOMAIN_ISSUE_TYPE_OPTIONS,
   quizDefinition,
+  QUIZ_DEFINITIONS,
   quizIndicatesIssue as definitionIndicatesIssue,
 } from "@/domain/issues/definitions";
 
@@ -41,7 +44,7 @@ export const ISSUE_STATUS_OPTIONS = [
 ] as const;
 
 export function issueStatusMeta(status: IssueStatus): DisplayMeta<IssueStatus> {
-  return ISSUE_STATUS_META[status];
+  return ISSUE_STATUS_META[status] ?? { label: "状态异常", tone: "danger", value: status };
 }
 
 export function quizLabel(type: QuizType): string {
@@ -54,52 +57,44 @@ export function quizIndicatesIssue(quiz: QuizBool): boolean {
 }
 
 export function issueAbnormalQuizzes(issue: Issue): QuizBool[] {
-  const checklist = issue.type_ext.checklist as readonly QuizBool[];
+  const checklist = Array.isArray(issue.type_ext?.checklist) ? issue.type_ext.checklist as readonly QuizBool[] : [];
   return checklist.filter(quizIndicatesIssue);
 }
 
 export function issueEditableRectifyQuizzes(issue: Issue): QuizBool[] {
   const abnormal = issueAbnormalQuizzes(issue);
-  const covered = new Set(issue.rectify_records.map((record) => record.quiz_type));
+  const records = Array.isArray(issue.rectify_records) ? issue.rectify_records : [];
+  const covered = new Set(records
+    .filter((record) => (record.round ?? 0) === (issue.rectify_round ?? 0))
+    .map((record) => record.quiz_type));
   const outstanding = abnormal.filter((quiz) => !covered.has(quiz.type));
 
   // 重新整改不会清除历史记录。此时历史已覆盖全部异常项，但仍需允许用户选择本轮整改项。
-  if (issue.status === "pending" && abnormal.length > 0 && outstanding.length === 0) {
+  if (issue.rectify_round === undefined && issue.status === "pending" && abnormal.length > 0 && outstanding.length === 0) {
     return abnormal;
   }
   return outstanding;
 }
 
 export function formatDateTime(value: string): string {
-  if (!value) return "—";
-  return value.replace("T", " ").replace(/\.\d{3,}Z?$/, "").replace(/Z$/, "").slice(0, 16);
+  return businessDateTime(value) ?? "—";
 }
 
 export function formatDate(value: string): string {
-  if (!value) return "—";
-  return value.slice(0, 10);
+  return calendarDate(value) ?? "—";
 }
 
-function currentLocalDate(): string {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function issuePlanHint(issue: Issue): DisplayMeta<"plan"> {
+export function issuePlanHint(issue: Issue, today = businessToday()): DisplayMeta<"plan"> {
   if (issue.status === "done") {
     return { label: "已完成", tone: "success", value: "plan" };
   }
   const planDate = formatDate(issue.plan_date);
   if (planDate === "—") {
-    return { label: "未设置计划日期", tone: "muted", value: "plan" };
+    return { label: issue.plan_date ? "计划日期异常" : "未设置计划日期", tone: "muted", value: "plan" };
   }
 
-  const today = currentLocalDate();
-  const diffMs = new Date(`${planDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime();
-  const diffDays = Math.round(diffMs / 86_400_000);
+  const diffDays = calendarDayDifference(planDate, today);
+  if (diffDays === null) return { label: "计划日期异常", tone: "muted", value: "plan" };
   if (diffDays < 0) {
     return { label: `逾期 ${Math.abs(diffDays)} 天`, tone: "danger", value: "plan" };
   }
@@ -110,11 +105,11 @@ export function issuePlanHint(issue: Issue): DisplayMeta<"plan"> {
 }
 
 function withUnit(value: number, unit: string): string {
-  return `${value} ${unit}`;
+  return typeof value === "number" && Number.isFinite(value) ? `${value} ${unit}` : "未填写";
 }
 
 function optionalText(value: string): string {
-  return value.trim() || "—";
+  return typeof value === "string" && value.trim() ? value.trim() : "未填写";
 }
 
 export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
@@ -124,7 +119,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
     case "well": {
       const ext = issue.type_ext;
       rows = [
-        { label: "建设类型", value: ext.build_kind === "new" ? "新建" : "配套" },
+        { label: "建设类型", value: { new: "新建", match: "配套" }[ext.build_kind] ?? "未填写" },
         { label: "出水口总数", value: withUnit(ext.outlet_total, "个") },
         { label: "出水口损坏", value: withUnit(ext.outlet_damaged, "个") },
         { label: "护筒总数", value: withUnit(ext.casing_total, "个") },
@@ -147,7 +142,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
       rows = [
         {
           label: "设施类型",
-          value: { bridge: "桥", culvert: "涵", gate: "闸" }[ext.kind],
+          value: { bridge: "桥", culvert: "涵", gate: "闸" }[ext.kind] ?? "未填写",
         },
         { label: "长度", value: withUnit(ext.length, "米") },
         { label: "宽度", value: withUnit(ext.width, "米") },
@@ -168,7 +163,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
       rows = [
         { label: "容量", value: withUnit(ext.capacity, "kVA") },
         { label: "型号", value: optionalText(ext.model) },
-        { label: "电压等级", value: ext.voltage === "10kv" ? "10 kV" : "0.4 kV" },
+        { label: "电压等级", value: { "10kv": "10 kV", "0.4kv": "0.4 kV" }[ext.voltage] ?? "未填写" },
       ];
       break;
     }
@@ -186,7 +181,7 @@ export function issueChecklistPhotos(issue: Issue): FileItem[] {
   const seen = new Set<string>();
   const photos: FileItem[] = [];
 
-  const checklist = issue.type_ext.checklist as readonly QuizBool[];
+  const checklist = Array.isArray(issue.type_ext?.checklist) ? issue.type_ext.checklist as readonly QuizBool[] : [];
   for (const quiz of checklist) {
     for (const photo of quiz.photos ?? []) {
       const key = photo.file_id || photo.url;
@@ -196,6 +191,25 @@ export function issueChecklistPhotos(issue: Issue): FileItem[] {
     }
   }
   return photos;
+}
+
+export function issueSummary(issue: Issue): string {
+  const checklist = issue.type_ext?.checklist;
+  if (!Array.isArray(checklist) || checklist.length !== QUIZ_DEFINITIONS[issue.type]?.length) return "巡查数据异常，请联系管理员核对";
+  const descriptions = issueAbnormalQuizzes(issue).map((quiz) => quiz.desc?.trim() || `${quizLabel(quiz.type)}：${quiz.value ? "是" : "否"}`);
+  if (issue.type === "well") {
+    if (issue.type_ext.outlet_damaged > 0) descriptions.push(`出水口损坏 ${issue.type_ext.outlet_damaged} 个`);
+    if (issue.type_ext.casing_damaged > 0) descriptions.push(`护筒损坏 ${issue.type_ext.casing_damaged} 个`);
+  }
+  return descriptions.join("；") || (issue.status === "done" ? "未记录异常题项" : "暂无问题摘要，请查看详情核对");
+}
+
+export function issueReporter(issue: Partial<MiniappIssue>): string {
+  return issue.report_user_name?.trim() || (issue.report_user_id ? "上报人资料暂缺" : "未填写上报人");
+}
+
+export function issueOrganization(issue: Partial<MiniappIssue>): string {
+  return issue.org_path?.trim() || issue.org_name?.trim() || "所属区域资料暂缺";
 }
 
 export function hasValidCoordinates(lat: number, lng: number): boolean {

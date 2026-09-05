@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Issue } from "@gbnt/api-client";
+import type { MiniappIssue } from "@/api/types";
 import { computed } from "vue";
 import { toAssetUrl } from "@/api/runtime";
 import IssuePhotoGrid from "@/components/issue/IssuePhotoGrid.vue";
@@ -10,10 +10,14 @@ import {
   issueChecklistPhotos,
   issuePlanHint,
   issueStatusMeta,
+  issueSummary,
+  issueReporter,
+  issueOrganization,
 } from "@/utils/issue-display";
 
 const props = defineProps<{
-  issue: Issue;
+  issue: MiniappIssue;
+  today?: string;
 }>();
 
 const emit = defineEmits<{
@@ -24,7 +28,8 @@ const emit = defineEmits<{
 
 const typeLabel = computed(() => issueTypeLabel(props.issue.type));
 const status = computed(() => issueStatusMeta(props.issue.status));
-const plan = computed(() => issuePlanHint(props.issue));
+const plan = computed(() => issuePlanHint(props.issue, props.today));
+const summary = computed(() => issueSummary(props.issue));
 const photoUrls = computed(() =>
   issueChecklistPhotos(props.issue).map((photo) => toAssetUrl(photo.url)),
 );
@@ -37,7 +42,7 @@ function preview(urls: readonly string[], index: number): void {
 </script>
 
 <template>
-  <view class="issue-card" hover-class="issue-card--pressed" @tap="emit('open', issue.id)">
+  <view class="issue-card" role="button" :aria-label="`查看${typeLabel}${displayCode}详情`" hover-class="issue-card--pressed" @tap="emit('open', issue.id)">
     <view class="issue-card__header">
       <view class="issue-card__title-wrap">
         <text class="issue-card__type">{{ typeLabel }}</text>
@@ -45,6 +50,13 @@ function preview(urls: readonly string[], index: number): void {
       </view>
       <text class="issue-card__status" :class="`tone-${status.tone}`">{{ status.label }}</text>
     </view>
+
+    <view class="issue-card__reporter">
+      <text class="issue-card__avatar" aria-hidden="true">{{ issue.report_user_name?.slice(0, 1) || '—' }}</text>
+      <text>{{ issueReporter(issue) }}</text>
+      <text class="issue-card__org">{{ issueOrganization(issue) }}</text>
+    </view>
+    <text class="issue-card__summary">{{ summary }}</text>
 
     <view class="issue-card__meta">
       <text>{{ issue.project_year }} 年</text>
@@ -77,6 +89,46 @@ function preview(urls: readonly string[], index: number): void {
 </template>
 
 <style scoped lang="scss">
+.issue-card__reporter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 24rpx;
+  color: var(--gb-color-text-secondary, #566176);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+
+.issue-card__avatar {
+  display: flex;
+  width: 48rpx;
+  height: 48rpx;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: #e8f1fb;
+  color: var(--gb-color-primary, #015cbb);
+}
+
+.issue-card__org {
+  flex: 1 1 180rpx;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.issue-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 18rpx;
+  color: var(--gb-color-text-primary, #172033);
+  font-size: 28rpx;
+  line-height: 1.6;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
 .issue-card {
   padding: 28rpx 28rpx 24rpx;
   border: 1rpx solid var(--gb-color-border, #e5eaf0);
@@ -175,14 +227,14 @@ function preview(urls: readonly string[], index: number): void {
 .issue-card__map-button {
   flex-shrink: 0;
   min-width: 88rpx;
-  min-height: 64rpx;
+  min-height: 88rpx;
   margin: -8rpx -8rpx -8rpx 0;
   padding: 0 12rpx;
   border: 0;
   background: transparent;
   color: var(--gb-color-primary, #015cbb);
   font-size: 26rpx;
-  line-height: 64rpx;
+  line-height: 88rpx;
 }
 
 .issue-card__map-button::after {

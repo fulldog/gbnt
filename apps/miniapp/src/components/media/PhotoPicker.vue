@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef, toRefs } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, toRefs, watch } from "vue";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import type { UploadedPhoto } from "@/domain/issues/form";
+import RecoverableImage from "@/components/common/RecoverableImage.vue";
+import { usePhotoUploads } from "@/composables/report/usePhotoUploads";
+import { hasValidCoordinates } from "@/utils/issue-display";
+import { showDeviceFailure } from "@/utils/device-permissions";
 
 interface LocationInput {
   lat: number | null;
@@ -42,11 +46,32 @@ const {
 );
 
 const model = defineModel<UploadedPhoto[]>({ required: true });
-const uploading = shallowRef(false);
+const emit = defineEmits<{ pending: [value: boolean] }>();
+const selecting = shallowRef(false);
+let active = true;
+const uploads = usePhotoUploads(async (job) => {
+  const point = location.value;
+  if (watermark.value && (!hasValidCoordinates(point.lat!, point.lng!) || !point.address.trim())) {
+    throw new Error("请先选择有效现场位置，不能使用缺失坐标生成水印");
+  }
+  const result = await miniappApi.attachments.uploadImages({
+    files: [{ filePath: job.path, fileType: "image" }],
+    watermark: watermark.value,
+    lat: point.lat === null ? undefined : String(point.lat),
+    lng: point.lng === null ? undefined : String(point.lng),
+    address: point.address.trim() || undefined,
+  });
+  const file = result.list[0]!;
+  return { fileId: file.file_id, url: toAssetUrl(file.url), localPath: job.path, capturedAt: job.capturedAt, source: job.source };
+}, (photo) => {
+  model.value = [...model.value, photo];
+});
+const uploading = computed(() => selecting.value || uploads.running.value);
+watch(() => selecting.value || uploads.pending.value, (value) => emit("pending", value), { flush: "sync" });
 const now = shallowRef(Date.now());
 let clock: ReturnType<typeof setInterval> | null = null;
 
-const remaining = computed(() => Math.max(0, maximum.value - model.value.length));
+const remaining = computed(() => Math.max(0, maximum.value - model.value.length - uploads.jobs.value.length));
 const cooldownRemaining = computed(() => {
   if (!cooldownSeconds.value || model.value.length === 0) {
     return 0;
@@ -84,65 +109,46 @@ function chooseMedia(options: {
   api(options);
 }
 
-async function uploadFiles(files: ChooseMediaFile[]): Promise<void> {
-  if (files.length === 0) {
+function addPhoto(): void {
+  if (uploading.value || uploads.pending.value || remaining.value === 0) {
     return;
   }
-  uploading.value = true;
-  const capturedAt = Date.now();
-  try {
-    const result = await miniappApi.attachments.uploadImages({
-      files: files.map((file) => ({
-        filePath: file.tempFilePath,
-        fileType: "image" as const,
-      })),
-      watermark: watermark.value,
-      lat: location.value.lat === null ? undefined : String(location.value.lat),
-      lng: location.value.lng === null ? undefined : String(location.value.lng),
-      address: location.value.address.trim() || undefined,
-    });
-    const additions = result.list.map((file, index) => ({
-      fileId: file.file_id,
-      url: toAssetUrl(file.url),
-      localPath: files[index]?.tempFilePath,
-      capturedAt,
-    }));
-    model.value = [...model.value, ...additions].slice(0, maximum.value);
-  } catch (error) {
-    uni.showToast({
-      title: error instanceof Error ? error.message : "照片上传失败",
-      icon: "none",
-    });
-  } finally {
-    uploading.value = false;
-  }
-}
-
-function addPhoto(): void {
-  if (uploading.value || remaining.value === 0) {
+  if (watermark.value && (!hasValidCoordinates(location.value.lat!, location.value.lng!) || !location.value.address.trim())) {
+    uni.showToast({ title: "请先选择有效现场位置，再拍摄上传照片", icon: "none" });
     return;
   }
   if (cooldownRemaining.value > 0) {
     uni.showToast({ title: "请等待倒计时结束后再拍摄", icon: "none" });
     return;
   }
-  chooseMedia({
-    count: cameraOnly.value ? 1 : remaining.value,
-    mediaType: ["image"],
-    sourceType: cameraOnly.value ? ["camera"] : ["camera", "album"],
-    success: (result) => {
-      void uploadFiles(result.tempFiles);
-    },
-    fail: (error) => {
-      if (!error.errMsg?.includes("cancel")) {
-        uni.showToast({ title: error.errMsg || "无法选择照片", icon: "none" });
-      }
-    },
-  });
+  selecting.value = true;
+  const camera = cameraOnly.value;
+  try {
+    chooseMedia({
+      count: cameraOnly.value ? 1 : remaining.value,
+      mediaType: ["image"],
+      sourceType: cameraOnly.value ? ["camera"] : ["camera", "album"],
+      success: (result) => {
+        if (!active) return;
+        const paths = result.tempFiles.map((file) => file.tempFilePath).filter(Boolean).slice(0, remaining.value);
+        uploads.enqueue(paths, camera ? "camera" : "unknown");
+        selecting.value = false;
+      },
+      fail: (error) => {
+        if (!active) return;
+        selecting.value = false;
+        showDeviceFailure(error, "选择照片");
+      },
+    });
+  } catch {
+    selecting.value = false;
+    showDeviceFailure({}, "选择照片");
+  }
 }
 
-function preview(index: number): void {
+function preview(index: number, loadedUrl?: string): void {
   const urls = model.value.map((photo) => photo.url || photo.localPath || "");
+  if (loadedUrl) urls[index] = loadedUrl;
   const current = urls[index];
   if (!current) {
     return;
@@ -151,6 +157,7 @@ function preview(index: number): void {
 }
 
 function remove(index: number): void {
+  if (uploading.value) return;
   model.value = model.value.filter((_, itemIndex) => itemIndex !== index);
 }
 
@@ -161,6 +168,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  active = false;
+  uploads.dispose();
+  emit("pending", false);
   if (clock) {
     clearInterval(clock);
   }
@@ -175,15 +185,17 @@ onUnmounted(() => {
         :key="photo.fileId"
         class="photo-item"
       >
-        <image
+        <RecoverableImage
           class="photo-image"
-          :src="photo.url || photo.localPath"
+          :src="photo.url"
+          :fallback-src="photo.localPath"
           mode="aspectFill"
-          :aria-label="`现场照片 ${index + 1}`"
-          @tap="preview(index)"
+          :alt="`现场照片 ${index + 1}`"
+          @preview="preview(index, $event)"
         />
         <button
           class="photo-remove"
+          :disabled="uploading"
           :aria-label="`删除第 ${index + 1} 张照片`"
           @tap.stop="remove(index)"
         >
@@ -191,10 +203,18 @@ onUnmounted(() => {
         </button>
       </view>
 
+      <view v-for="job in uploads.jobs.value" :key="job.id" class="photo-job" role="status">
+        <text>{{ job.status === 'failed' ? job.error : '照片上传中…' }}</text>
+        <view v-if="job.status === 'failed'" class="photo-job__actions">
+          <button @tap="uploads.retry(job.id)">重试</button>
+          <button @tap="uploads.remove(job.id)">移除</button>
+        </view>
+      </view>
+
       <button
         v-if="remaining > 0"
         class="photo-add"
-        :disabled="uploading || cooldownRemaining > 0"
+        :disabled="uploading || uploads.pending.value || cooldownRemaining > 0"
         :aria-label="addLabel"
         @tap="addPhoto"
       >
@@ -209,6 +229,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
+.photo-job { display: flex; flex-direction: column; justify-content: center; padding: 12rpx; min-height: 160rpx; color: #9a3412; background: #fff7ed; font-size: 24rpx; word-break: break-all; }
+.photo-job__actions { display: flex; flex-wrap: wrap; }
+.photo-job__actions button { min-height: 44px; padding: 0 10px; font-size: 13px; }
 .photo-picker {
   display: flex;
   flex-direction: column;
@@ -225,7 +248,7 @@ onUnmounted(() => {
 .photo-add {
   position: relative;
   width: 100%;
-  aspect-ratio: 1;
+  height: 180rpx;
   overflow: hidden;
   border-radius: var(--radius-md);
 }
@@ -235,6 +258,7 @@ onUnmounted(() => {
 }
 
 .photo-image {
+  display: block;
   width: 100%;
   height: 100%;
 }
@@ -245,9 +269,9 @@ onUnmounted(() => {
   right: 6rpx;
   display: grid;
   width: 48rpx;
-  min-width: 48rpx;
+  min-width: 44px;
   height: 48rpx;
-  min-height: 48rpx;
+  min-height: 44px;
   padding: 0;
   color: #fff;
   font-size: 34rpx;

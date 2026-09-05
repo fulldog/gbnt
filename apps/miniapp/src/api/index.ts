@@ -44,3 +44,4 @@ export * from "./mine";
 export * from "./regions";
 export * from "./todos";
 export * from "./transport";
+export * from "./types";

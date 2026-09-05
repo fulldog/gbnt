@@ -1,6 +1,4 @@
 import type {
-  Issue,
-  IssueListResult,
   IssueStatus,
   IssueType,
   MiniappTodoQuery,
@@ -8,6 +6,7 @@ import type {
 } from "@gbnt/api-client";
 import { computed, readonly, ref, shallowReadonly, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
+import type { MiniappIssue, MiniappIssueListResult } from "@/api/types";
 import { errorMessage } from "@/utils/issue-display";
 
 export interface TodoIssueFilters {
@@ -18,7 +17,7 @@ export interface TodoIssueFilters {
   projectYear?: ProjectYear;
 }
 
-export type IssueListLoader = (query: MiniappTodoQuery) => Promise<IssueListResult>;
+export type IssueListLoader = (query: MiniappTodoQuery) => Promise<MiniappIssueListResult>;
 
 type LoadingMode = "refresh" | "more" | null;
 
@@ -39,8 +38,8 @@ function toQuery(filters: TodoIssueFilters, page: number, size: number): Miniapp
   return query;
 }
 
-function mergeUniqueIssues(previous: readonly Issue[], next: readonly Issue[]): Issue[] {
-  const merged = new Map<number, Issue>();
+function mergeUniqueIssues(previous: readonly MiniappIssue[], next: readonly MiniappIssue[]): MiniappIssue[] {
+  const merged = new Map<number, MiniappIssue>();
   for (const item of previous) merged.set(item.id, item);
   for (const item of next) merged.set(item.id, item);
   return [...merged.values()];
@@ -50,12 +49,14 @@ export function usePagedIssues(
   loader: IssueListLoader = miniappApi.todos.list,
   pageSize = 10,
 ) {
-  const items = shallowRef<Issue[]>([]);
+  const items = shallowRef<MiniappIssue[]>([]);
   const filters = ref<TodoIssueFilters>({ ...DEFAULT_FILTERS });
   const page = shallowRef(0);
   const total = shallowRef(0);
   const loadingMode = shallowRef<LoadingMode>(null);
   const error = shallowRef("");
+  const isStale = shallowRef(false);
+  let failedRequest: { page: number; replace: boolean } | null = null;
   let requestSequence = 0;
 
   const hasMore = computed(() => items.value.length < total.value);
@@ -75,10 +76,14 @@ export function usePagedIssues(
       items.value = replace ? result.list : mergeUniqueIssues(items.value, result.list);
       page.value = result.page || targetPage;
       total.value = result.total;
+      failedRequest = null;
+      isStale.value = false;
       return true;
     } catch (cause) {
       if (requestId !== requestSequence) return false;
       error.value = errorMessage(cause, "待办加载失败，请稍后重试");
+      failedRequest = { page: targetPage, replace };
+      isStale.value = replace && items.value.length > 0;
       return false;
     } finally {
       if (requestId === requestSequence) loadingMode.value = null;
@@ -90,21 +95,32 @@ export function usePagedIssues(
       filters.value = { ...filters.value, ...patch };
       // 新筛选失败时不能继续展示上一个筛选条件下的旧记录。
       items.value = [];
+      page.value = 0;
+      total.value = 0;
+      isStale.value = false;
     }
-    page.value = 0;
-    total.value = 0;
+    failedRequest = null;
     return requestPage(1, true);
   }
 
   function resetFilters(): Promise<boolean> {
     filters.value = { ...DEFAULT_FILTERS };
     items.value = [];
+    page.value = 0;
+    total.value = 0;
+    isStale.value = false;
     return reload();
   }
 
   function loadMore(): Promise<boolean> {
-    if (loadingMode.value !== null || !hasMore.value) return Promise.resolve(false);
+    if (loadingMode.value !== null || !hasMore.value || failedRequest) return Promise.resolve(false);
     return requestPage(page.value + 1, false);
+  }
+
+  function retry(): Promise<boolean> {
+    if (loadingMode.value !== null) return Promise.resolve(false);
+    if (!failedRequest) return reload();
+    return requestPage(failedRequest.page, failedRequest.replace);
   }
 
   function invalidate(): void {
@@ -118,6 +134,7 @@ export function usePagedIssues(
     page: readonly(page),
     total: readonly(total),
     error: readonly(error),
+    isStale: readonly(isStale),
     hasMore,
     isLoading,
     isRefreshing,
@@ -125,6 +142,7 @@ export function usePagedIssues(
     reload,
     resetFilters,
     loadMore,
+    retry,
     invalidate,
   } as const;
 }

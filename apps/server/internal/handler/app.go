@@ -8,6 +8,7 @@ import (
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
+	"gorm.io/gorm"
 )
 
 // RegisterApp 注册小程序端独立 API（前缀 /api/app，与管理端 /api 分离）。
@@ -119,18 +120,58 @@ func (d *Deps) AppLogin(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), service.UserInfoFromModel(user)))
+	info := service.UserInfoFromModel(user)
+	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), info))
+	payload, err := d.appUserPayload(c, info)
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, "用户资料加载失败")
+		return
+	}
 	d.OpLog.Mark(c, "登录", user.Username)
 	response.OK(c, gin.H{
 		"token":      token,
 		"expires_at": exp,
-		"user":       d.userPayload(user),
+		"user":       payload,
 	})
 }
 
-// AppMe 小程序当前用户。
+// AppMe 小程序当前用户，含本人组织和角色名称；关联查询故障不伪装成空名称。
 func (d *Deps) AppMe(c *gin.Context) {
-	d.Me(c)
+	info, err := database.UserFromContext(c.Request.Context())
+	if err != nil {
+		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	payload, err := d.appUserPayload(c, info)
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, "用户资料加载失败")
+		return
+	}
+	response.OK(c, payload)
+}
+
+func (d *Deps) appUserPayload(c *gin.Context, info *database.UserInfo) (gin.H, error) {
+	names, err := d.Auth.MiniappUserNames(c.Request.Context(), info)
+	if err != nil {
+		return nil, err
+	}
+	payload := d.userInfoPayload(info)
+	payload["org_name"], payload["org_path"], payload["role_name"] = names.OrgName, names.OrgPath, names.RoleName
+	return payload, nil
+}
+
+func (d *Deps) appIssuePayload(c *gin.Context, item *service.IssueVO) {
+	list, err := d.Issue.MiniappIssueViews(c.Request.Context(), []service.IssueVO{*item})
+	if err != nil {
+		// 写入已成功；明确提示刷新，不把关联查询失败误报为写入失败导致重复提交。
+		fallback := service.MiniappIssueVO{
+			AdminIssueVO:   service.AdminIssueVO{IssueVO: *item},
+			DisplayWarning: "操作已成功，关联资料暂时无法读取，请刷新",
+		}
+		response.OK(c, fallback)
+		return
+	}
+	response.OK(c, list[0])
 }
 
 // AppListTodos 小程序待办：筛选 type/status/org_id/project_year/keyword/page/size。
@@ -155,7 +196,13 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size})
+	items, err := d.Issue.MiniappIssueViews(c.Request.Context(), list)
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, "关联资料加载失败")
+		return
+	}
+	q.Page, q.Size = service.NormalizePagination(q.Page, q.Size, 0)
+	response.OK(c, gin.H{"list": items, "total": total, "page": q.Page, "size": q.Size})
 }
 
 // AppRegions 小程序组织树：按 sys_orgs.parent_id 返回嵌套 children。
@@ -170,14 +217,17 @@ func (d *Deps) AppRegions(c *gin.Context) {
 
 // AppGetIssue 小程序问题详情。
 func (d *Deps) AppGetIssue(c *gin.Context) {
-	// 管理端读取会增加展示名称；小程序继续读取基础视图，不改变既有契约和访问规则。
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	item, err := d.Issue.Get(id)
+	item, err := d.Issue.GetMiniapp(c.Request.Context(), id)
 	if err != nil {
-		response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+		} else {
+			response.Fail(c, 500, response.CodeServer, "问题资料加载失败")
+		}
 		return
 	}
 	response.OK(c, item)
@@ -203,7 +253,7 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		return
 	}
 	d.OpLog.Mark(c, "小程序上报", item.Type+" · "+item.Code)
-	response.OK(c, item)
+	d.appIssuePayload(c, item)
 }
 
 // AppRectifyIssue 小程序页内提交整改。
@@ -227,7 +277,7 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 		return
 	}
 	d.OpLog.Mark(c, "小程序整改", item.Type+" · "+item.Code)
-	response.OK(c, item)
+	d.appIssuePayload(c, item)
 }
 
 // AppReRectifyIssue 小程序重新整改（done → pending）。
@@ -246,7 +296,7 @@ func (d *Deps) AppReRectifyIssue(c *gin.Context) {
 		return
 	}
 	d.OpLog.Mark(c, "小程序重新整改", item.Type+" · "+item.Code)
-	response.OK(c, item)
+	d.appIssuePayload(c, item)
 }
 
 // AppMineStats 我的概览数量。
@@ -279,5 +329,11 @@ func (d *Deps) AppMineIssues(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, gin.H{"list": list, "total": total, "page": page, "size": size, "scope": scope})
+	items, err := d.Issue.MiniappIssueViews(c.Request.Context(), list)
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, "关联资料加载失败")
+		return
+	}
+	page, size = service.NormalizePagination(page, size, 0)
+	response.OK(c, gin.H{"list": items, "total": total, "page": page, "size": size, "scope": scope})
 }

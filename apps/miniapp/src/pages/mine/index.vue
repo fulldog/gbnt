@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MineScope, MineStats } from "@gbnt/api-client";
-import { computed, shallowRef } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { onPullDownRefresh, onShow } from "@dcloudio/uni-app";
 import { miniappApi } from "@/api/runtime";
 import { useAuthStore } from "@/stores/auth";
@@ -19,7 +19,19 @@ const avatarText = computed(() => {
 const roleText = computed(() => {
   if (!authStore.user) return "";
   if (authStore.user.is_super_admin) return "超级管理员";
-  return authStore.user.role_id ? `角色 #${authStore.user.role_id}` : "工作人员";
+  return authStore.user.role_name || (authStore.user.role_id ? "角色信息不可用" : "未分配角色");
+});
+
+const orgText = computed(() => {
+  const user = authStore.user;
+  if (!user) return "个人信息未加载，请下拉刷新";
+  return user.org_path || user.org_name || (user.org_id ? "所属组织信息不可用，请下拉刷新" : "未分配组织");
+});
+
+watch(() => authStore.token, () => {
+  // 防止同设备切换账号后短暂展示上一位用户的统计。
+  stats.value = null;
+  errorMessage.value = "";
 });
 
 function errorText(error: unknown): string {
@@ -38,6 +50,7 @@ async function loadMineData(): Promise<void> {
   if (loading.value) return;
   loading.value = true;
   errorMessage.value = "";
+  let sessionToken: string | null = null;
   try {
     await authStore.restore();
     if (!authStore.token) {
@@ -45,13 +58,14 @@ async function loadMineData(): Promise<void> {
       return;
     }
 
+    sessionToken = authStore.token;
     const [nextStats] = await Promise.all([
       miniappApi.mine.getStats(),
-      authStore.user ? Promise.resolve() : authStore.refreshUser(),
+      authStore.refreshUser(),
     ]);
-    stats.value = nextStats;
+    if (sessionToken === authStore.token) stats.value = nextStats;
   } catch (error) {
-    errorMessage.value = errorText(error);
+    if (sessionToken === authStore.token) errorMessage.value = errorText(error);
   } finally {
     loading.value = false;
     uni.stopPullDownRefresh();
@@ -104,9 +118,7 @@ onPullDownRefresh(() => {
             <text v-if="roleText" class="mine-page__role">{{ roleText }}</text>
           </view>
           <text v-if="authStore.user?.phone" class="mine-page__meta">{{ authStore.user.phone }}</text>
-          <text v-if="authStore.user?.org_id" class="mine-page__meta">
-            所属组织 #{{ authStore.user.org_id }}
-          </text>
+          <text class="mine-page__meta">{{ orgText }}</text>
         </view>
       </view>
     </view>
@@ -116,6 +128,7 @@ onPullDownRefresh(() => {
         <view class="mine-error__content">
           <text class="mine-error__title">数据加载失败</text>
           <text class="mine-error__message">{{ errorMessage }}</text>
+          <text v-if="stats" class="mine-error__message">当前显示上次成功加载的统计，下拉刷新或点击重试更新。</text>
         </view>
         <button class="mine-error__retry" @tap="loadMineData">重试</button>
       </view>
@@ -148,7 +161,7 @@ onPullDownRefresh(() => {
           class="mine-menu-row"
           @tap="openPage('/pages-sub/account/change-password')"
         >
-          <text class="mine-menu-row__icon" aria-hidden="true">密</text>
+          <image class="mine-menu-row__icon" src="/static/icons/lock-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">修改密码</text>
           <text class="mine-menu-row__caret" aria-hidden="true">›</text>
         </button>
@@ -160,7 +173,7 @@ onPullDownRefresh(() => {
           class="mine-menu-row"
           @tap="openPage('/pages-sub/legal/agreement')"
         >
-          <text class="mine-menu-row__icon" aria-hidden="true">约</text>
+          <image class="mine-menu-row__icon" src="/static/icons/ledger-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">用户协议</text>
           <text class="mine-menu-row__tag">开发占位</text>
           <text class="mine-menu-row__caret" aria-hidden="true">›</text>
@@ -169,7 +182,7 @@ onPullDownRefresh(() => {
           class="mine-menu-row"
           @tap="openPage('/pages-sub/legal/privacy')"
         >
-          <text class="mine-menu-row__icon" aria-hidden="true">隐</text>
+          <image class="mine-menu-row__icon" src="/static/icons/shield-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">隐私政策</text>
           <text class="mine-menu-row__tag">开发占位</text>
           <text class="mine-menu-row__caret" aria-hidden="true">›</text>
@@ -231,29 +244,29 @@ onPullDownRefresh(() => {
 .mine-page__name-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .mine-page__name {
-  overflow: hidden;
   font-size: 21px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
 }
 
 .mine-page__role {
-  flex: none;
+  max-width: 100%;
   padding: 3px 7px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.18);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .mine-page__meta {
   margin-top: 5px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  word-break: break-all;
 }
 
 .mine-page__body {
@@ -373,16 +386,13 @@ onPullDownRefresh(() => {
 }
 
 .mine-menu-row__icon {
-  display: flex;
+  display: block;
+  flex: none;
   width: 30px;
   height: 30px;
-  align-items: center;
-  justify-content: center;
+  padding: 5px;
   border-radius: 5px;
   background: var(--gbnt-primary-soft, #e8f1fb);
-  color: var(--gbnt-primary, #015cbb);
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .mine-menu-row__label {

@@ -125,6 +125,7 @@ type Issue struct {
 	Lng                     float64 `gorm:"comment:经度" json:"lng"`
 	PlanDate                string  `gorm:"size:16;index;comment:计划完成日 YYYY-MM-DD" json:"plan_date"`
 	Status                  string  `gorm:"size:16;index;comment:状态 new待整改 pending整改中 done已整改" json:"status"`
+	RectifyRound            uint64  `gorm:"not null;default:0;comment:当前整改轮次 初次及历史数据为0 重新整改递增" json:"rectify_round"` // 当前整改轮次，历史数据默认 0
 	ReporterSignatureFileID string  `gorm:"size:36;comment:排查电子签名附件file_id" json:"reporter_signature_file_id"`
 	ReportUserID            uint64  `gorm:"column:report_user_id;index;default:0;comment:上报人用户ID app端为登录用户 后台创建需显式传入" json:"report_user_id"`
 	AssigneeUser            uint64  `gorm:"column:assignee_user;default:0;comment:整改责任人用户ID" json:"assignee_user"`
@@ -137,6 +138,7 @@ func (Issue) TableName() string { return "issues" }
 // IssueRectifyRecord 整改记录（每次提交的每一项一条；同一 quiz_type 可重复）。
 type IssueRectifyRecord struct {
 	IssueID      uint64 `gorm:"index;not null;comment:问题主键ID" json:"issue_id"`
+	Round        uint64 `gorm:"not null;default:0;comment:整改所属轮次 初次及历史数据为0" json:"round"` // 整改所属轮次；旧记录保留在第 0 轮
 	QuizType     string `gorm:"size:32;index;comment:整改项类型 QuizType" json:"quiz_type"`
 	Note         string `gorm:"type:text;comment:整改说明" json:"note"`
 	PhotoFileIDs string `gorm:"type:json;comment:整改照片file_id数组JSON" json:"-"`

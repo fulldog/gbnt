@@ -16,7 +16,18 @@ function normalizeAdminIssue(value: unknown): AdminIssue {
   const row = responseRecord(value, "排查整改");
   responseInteger(row.id, "问题 ID", 1);
   checkDisplayFields(row, ["report_user_name", "assignee_user_name", "org_name", "org_path"]);
-  return row as unknown as AdminIssue;
+  // 兼容升级前服务，明确轮次后历史记录只能归属其返回的轮次。
+  const normalized: Record<string, unknown> = {
+    ...row,
+    rectify_round: responseInteger(row.rectify_round === undefined ? 0 : row.rectify_round, "整改轮次"),
+  };
+  if (Array.isArray(row.rectify_records)) {
+    normalized.rectify_records = row.rectify_records.map((value) => {
+      const record = responseRecord(value, "整改记录");
+      return { ...record, round: responseInteger(record.round === undefined ? 0 : record.round, "历史整改轮次") };
+    });
+  }
+  return normalized as unknown as AdminIssue;
 }
 
 export function createIssuesApi(client: ApiClient) {

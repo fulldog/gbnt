@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { QuizBool } from "@gbnt/api-client";
-import { ref, watch } from "vue";
+import { computed, onUnmounted, ref, shallowRef, watch } from "vue";
 import type { RectifyDraftSubmitItem } from "@/components/issue/rectify-types";
 import { quizLabel } from "@/utils/issue-display";
+import { showDeviceFailure } from "@/utils/device-permissions";
+import { readRectifyNotes, saveRectifyNotes } from "@/utils/rectify-draft";
+import RecoverableImage from "@/components/common/RecoverableImage.vue";
 
 interface RectifyDraft extends RectifyDraftSubmitItem {
   selected: boolean;
@@ -11,6 +14,7 @@ interface RectifyDraft extends RectifyDraftSubmitItem {
 const props = defineProps<{
   items: readonly QuizBool[];
   submitting: boolean;
+  storageKey: string;
 }>();
 
 const emit = defineEmits<{
@@ -18,23 +22,44 @@ const emit = defineEmits<{
 }>();
 
 const drafts = ref<RectifyDraft[]>([]);
+const saveFailed = shallowRef(false);
+const choosingPhotos = shallowRef(false);
+let active = true;
+const hasChanges = computed(() => drafts.value.some((draft) => draft.note.trim() || draft.photoPaths.length));
+const busy = computed(() => props.submitting || choosingPhotos.value);
 
 watch(
   () => props.items.map((item) => item.type),
   (items) => {
-    const existing = new Map(drafts.value.map((draft) => [draft.type, draft]));
+    const saved = readRectifyNotes(props.storageKey, items);
+    const existing = new Map<QuizBool["type"], RectifyDraft>([
+      ...saved.map((draft) => [draft.type, { ...draft, photoPaths: [] as string[] }] as const),
+      ...drafts.value.map((draft) => [draft.type, draft] as const),
+    ]);
     drafts.value = items.map(
       (type) =>
         existing.get(type) ?? {
           type,
           note: "",
           photoPaths: [],
-          selected: true,
+          selected: false,
         },
     );
   },
   { immediate: true },
 );
+
+function persist(): void {
+  saveFailed.value = !saveRectifyNotes(props.storageKey, drafts.value);
+}
+watch(drafts, persist, { deep: true, flush: "sync" });
+function discardSubmitted(types: readonly string[]): void {
+  drafts.value = drafts.value.map((draft) => types.includes(draft.type)
+    ? { ...draft, note: "", photoPaths: [], selected: false } : draft);
+  persist();
+}
+defineExpose({ hasChanges, discardSubmitted });
+onUnmounted(() => { active = false; });
 
 function setSelected(
   index: number,
@@ -47,27 +72,31 @@ function setSelected(
 
 function choosePhotos(index: number): void {
   const draft = drafts.value[index];
-  if (!draft || props.submitting) return;
+  if (!draft || busy.value) return;
   const remaining = 6 - draft.photoPaths.length;
   if (remaining <= 0) {
     uni.showToast({ title: "每项最多上传 6 张照片", icon: "none" });
     return;
   }
 
+  choosingPhotos.value = true;
   uni.chooseMedia({
     count: remaining,
     mediaType: ["image"],
     sourceType: ["album", "camera"],
     sizeType: ["compressed"],
     success: (result) => {
+      if (!active) return;
       const paths = result.tempFiles.map((file) => file.tempFilePath).filter(Boolean);
-      draft.photoPaths.push(...paths);
+      draft.photoPaths.push(...paths.slice(0, remaining));
     },
+    fail: (error) => { if (active) showDeviceFailure(error, "选择整改照片"); },
+    complete: () => { choosingPhotos.value = false; },
   });
 }
 
 function removePhoto(draftIndex: number, photoIndex: number): void {
-  if (props.submitting) return;
+  if (busy.value) return;
   drafts.value[draftIndex]?.photoPaths.splice(photoIndex, 1);
 }
 
@@ -76,7 +105,7 @@ function previewPhotos(draft: RectifyDraft, index: number): void {
 }
 
 function submit(): void {
-  if (props.submitting) return;
+  if (busy.value) return;
   const selected = drafts.value.filter((draft) => draft.selected);
   if (selected.length === 0) {
     uni.showToast({ title: "请至少选择一项整改内容", icon: "none" });
@@ -108,6 +137,9 @@ function submit(): void {
 
 <template>
   <view class="rectify-form">
+    <text class="rectify-form__hint" :class="{ 'rectify-form__save-error': saveFailed }" @tap="persist">
+      {{ saveFailed ? '整改说明保存失败，请勿退出，点击重试保存' : '整改说明保存在本机；照片提交时上传，离开页面后需重新选择' }}
+    </text>
     <view v-for="(draft, index) in drafts" :key="draft.type" class="rectify-form__item">
       <view class="rectify-form__item-header">
         <view class="rectify-form__item-title-wrap">
@@ -118,7 +150,7 @@ function submit(): void {
           <text>本次提交</text>
           <switch
             :checked="draft.selected"
-            :disabled="submitting"
+            :disabled="busy"
             color="#015cbb"
             @change="setSelected(index, $event)"
           />
@@ -129,7 +161,7 @@ function submit(): void {
         <textarea
           v-model="draft.note"
           class="rectify-form__textarea"
-          :disabled="submitting"
+          :disabled="busy"
           :maxlength="500"
           auto-height
           placeholder="请填写整改措施和结果"
@@ -142,16 +174,14 @@ function submit(): void {
             :key="`${path}-${photoIndex}`"
             class="rectify-form__photo-wrap"
           >
-            <button
+            <view
               class="rectify-form__photo-button"
-              :aria-label="`预览第 ${photoIndex + 1} 张整改照片`"
-              @tap="previewPhotos(draft, photoIndex)"
             >
-              <image class="rectify-form__photo" :src="path" mode="aspectFill" />
-            </button>
+              <RecoverableImage class="rectify-form__photo" :src="path" mode="aspectFill" :alt="`第 ${photoIndex + 1} 张整改照片`" @preview="previewPhotos(draft, photoIndex)" />
+            </view>
             <button
               class="rectify-form__remove"
-              :disabled="submitting"
+              :disabled="busy"
               aria-label="删除照片"
               @tap.stop="removePhoto(index, photoIndex)"
             >
@@ -161,7 +191,7 @@ function submit(): void {
           <button
             v-if="draft.photoPaths.length < 6"
             class="rectify-form__add-photo"
-            :disabled="submitting"
+            :disabled="busy"
             @tap="choosePhotos(index)"
           >
             <text class="rectify-form__add-icon">＋</text>
@@ -174,7 +204,7 @@ function submit(): void {
     <text class="rectify-form__hint">可以分批提交；全部异常项完成后，记录将变为“已整改”。</text>
     <button
       class="rectify-form__submit"
-      :disabled="submitting"
+      :disabled="busy"
       @tap="submit"
     >
       {{ submitting ? "正在提交" : "提交本次整改" }}
@@ -183,6 +213,7 @@ function submit(): void {
 </template>
 
 <style scoped lang="scss">
+.rectify-form__save-error { color: #b42318; }
 .rectify-form__item {
   padding: 28rpx 0;
   border-bottom: 1rpx solid var(--gb-color-border, #edf0f4);
@@ -300,16 +331,16 @@ function submit(): void {
   right: -14rpx;
   z-index: 2;
   width: 44rpx;
-  min-width: 44rpx;
+  min-width: 44px;
   height: 44rpx;
-  min-height: 44rpx;
+  min-height: 44px;
   padding: 0;
   border: 3rpx solid #fff;
   border-radius: 50%;
   background: rgba(23, 32, 51, 0.86);
   color: #fff;
   font-size: 30rpx;
-  line-height: 38rpx;
+  line-height: 40px;
 }
 
 .rectify-form__add-photo {

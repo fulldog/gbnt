@@ -3,7 +3,14 @@ import { computed, defineComponent, h, inject, provide, type Component, type Com
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StreetLedgerView from "@/views/ledger/StreetLedgerView.vue";
 import SurveyLedgerView from "@/views/ledger/SurveyLedgerView.vue";
-import LedgerSummary from "@/views/ledger/LedgerSummary.vue";
+import StreetLedgerSheet from "@/components/ledger/StreetLedgerSheet.vue";
+import SurveyLedgerSheet from "@/components/ledger/SurveyLedgerSheet.vue";
+import LedgerFilters from "@/components/ledger/LedgerFilters.vue";
+import LedgerReportFrame from "@/components/ledger/LedgerReportFrame.vue";
+import { exportLedgerTable } from "@/utils/ledger-export";
+import { streetReportRow, surveyReportRow } from "./fixtures/ledger-report";
+import { allLedgerQuery, streetParts, surveyParts } from "./fixtures/ledger-report-parts";
+import type { LedgerAppliedQuery } from "@/api/ledger-report-types";
 import UserView from "@/views/system/UserView.vue";
 import UserFormDialog from "@/views/system/UserFormDialog.vue";
 import OrgView from "@/views/system/OrgView.vue";
@@ -12,14 +19,20 @@ import OpLogView from "@/views/system/OpLogView.vue";
 import WorkbenchView from "@/views/workbench/WorkbenchView.vue";
 
 const api = vi.hoisted(() => ({
-  ledger: { getStreet: vi.fn(), getSurvey: vi.fn(), listStreetOrgOptions: vi.fn(), listSurveyOrgOptions: vi.fn() },
+  ledger: { getStreetReport: vi.fn(), getSurveyReport: vi.fn(), getStreetRows: vi.fn(), getStreetStatistics: vi.fn(),
+    getSurveyRows: vi.fn(), getSurveyStatistics: vi.fn(), listStreetOrgOptions: vi.fn(), listSurveyOrgOptions: vi.fn() },
   users: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), update: vi.fn() },
   orgs: { list: vi.fn() },
   roles: { list: vi.fn(), listApis: vi.fn(), getPermissions: vi.fn(), updatePermissions: vi.fn() },
   opLogs: { list: vi.fn() },
-  workbench: { getStats: vi.fn() },
+  workbench: {
+    getStats: vi.fn(),
+    getTrend: vi.fn().mockResolvedValue({ points: [], undated_completed: 0 }),
+    getTodos: vi.fn().mockResolvedValue({ list: [], total: 0, page: 1, size: 20, today: "2026-09-05" }),
+  },
 }));
 vi.mock("@/api/runtime", () => ({ useAdminApi: () => api }));
+vi.mock("@/utils/ledger-export", () => ({ exportLedgerTable: vi.fn() }));
 vi.mock("@/stores/permission", () => ({ usePermissionStore: () => ({ can: () => true }) }));
 vi.mock("@/stores/auth", () => ({ useAuthStore: () => ({ user: null }) }));
 vi.mock("@/components/TypeDistributionChart.vue", () => ({ default: { template: "<div />" } }));
@@ -75,6 +88,7 @@ function render(component: Component) {
       ElSelect: true, ElOption: true, ElDatePicker: true, ElInput: true, ElRadioGroup: true, ElRadio: true,
       ElTag: passthrough, ElIcon: passthrough, ElUpload: true, ElPagination: true, ElTree: true,
       ElInputNumber: true, ElSkeleton: true, ElAlert: AlertStub, OrgTreeSelect: true,
+      WorkbenchTrendChart: true,
     } },
   });
   wrappers.push(wrapper);
@@ -103,8 +117,11 @@ beforeEach(() => {
   for (const group of Object.values(api)) for (const method of Object.values(group)) method.mockReset();
   api.ledger.listStreetOrgOptions.mockResolvedValue([]);
   api.ledger.listSurveyOrgOptions.mockResolvedValue([]);
-  api.ledger.getStreet.mockResolvedValue({ rows: [] });
-  api.ledger.getSurvey.mockResolvedValue({ rows: [] });
+  api.ledger.getStreetReport.mockResolvedValue({ street_org_id: 0, rows: [], notes: [] });
+  api.ledger.getSurveyReport.mockResolvedValue({ street_org_id: 0, rows: [], notes: [] });
+  for (const request of [api.ledger.getStreetRows, api.ledger.getStreetStatistics, api.ledger.getSurveyRows, api.ledger.getSurveyStatistics]) {
+    request.mockImplementation(async (query: LedgerAppliedQuery) => ({ query, rows: [], notes: [] }));
+  }
   api.users.list.mockResolvedValue({ list: [], total: 0, page: 1, size: 20 });
   api.users.remove.mockResolvedValue(null);
   api.orgs.list.mockResolvedValue([]);
@@ -117,30 +134,36 @@ afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); }
 
 describe("汇总表真实状态", () => {
   it.each([
-    ["街道台账", StreetLedgerView, api.ledger.getStreet],
-    ["排查汇总", SurveyLedgerView, api.ledger.getSurvey],
-  ] as const)("%s 的成功空数据才显示零统计，刷新和失败不保留统计", async (_, component, request) => {
+    ["街道台账", StreetLedgerView, api.ledger.getStreetRows],
+    ["排查汇总", SurveyLedgerView, api.ledger.getSurveyRows],
+  ] as const)("%s 的加载、成功空结果和失败分别展示，不将失败伪造为零", async (_, component, request) => {
     const wrapper = render(component);
-    expect(wrapper.findComponent(LedgerSummary).exists()).toBe(false);
+    expect(wrapper.get("tbody").text()).toContain("正在加载");
     await flushPromises();
-    expect(wrapper.getComponent(LedgerSummary).props()).toEqual({ total: 0, pending: 0, done: 0 });
+    expect(wrapper.get("tbody").text()).toContain("当前筛选条件下暂无");
+    expect(wrapper.findComponent(TableStub).exists()).toBe(false);
     const pending = deferred<{ rows: [] }>();
     request.mockReturnValueOnce(pending.promise);
     await click(wrapper, "查询");
-    expect(wrapper.findComponent(LedgerSummary).exists()).toBe(false);
+    expect(wrapper.get("tbody").text()).toContain("正在加载");
     pending.reject(new Error("服务暂不可用"));
     await flushPromises();
     expect(wrapper.text()).toContain("服务暂不可用");
-    expect(wrapper.findComponent(LedgerSummary).exists()).toBe(false);
-    expect(wrapper.getComponent(TableStub).props("data")).toEqual([]);
+    expect(wrapper.get("tbody").text()).toContain("加载失败");
+    expect(wrapper.get("tbody").text()).not.toContain("暂无");
+    expect(wrapper.findAll("button").find((button) => button.text() === "导出 Excel")!.attributes("disabled")).toBeDefined();
   });
 
   it("街道台账直接展示行名称且候选失败可重试，不调用系统组织接口", async () => {
-    api.ledger.getStreet.mockResolvedValue({ rows: [{ org_id: 3, type: "well", total: 4, pending: 1, done: 3, org_path: "区 / 北城街道" }] });
+    const parts = streetParts([streetReportRow()], allLedgerQuery, ["缺少资产基表"]);
+    api.ledger.getStreetRows.mockResolvedValue(parts.base);
+    api.ledger.getStreetStatistics.mockResolvedValue(parts.statistics);
     api.ledger.listStreetOrgOptions.mockRejectedValueOnce(new Error("无候选权限"));
     const wrapper = render(StreetLedgerView);
     await flushPromises();
-    expect(wrapper.text()).toContain("区 / 北城街道");
+    expect(wrapper.text()).toContain("北城街道");
+    expect(wrapper.getComponent(StreetLedgerSheet).props("rows")).toHaveLength(1);
+    expect(wrapper.get("tfoot").text()).toContain("缺少资产基表");
     expect(wrapper.text()).toContain("无候选权限");
     expect(api.orgs.list).not.toHaveBeenCalled();
     await click(wrapper, "重新加载");
@@ -151,14 +174,95 @@ describe("汇总表真实状态", () => {
 
   it("连续查询仅保留最新响应，旧失败不能清空新结果", async () => {
     const old = deferred<{ rows: Row[] }>();
-    api.ledger.getSurvey.mockReturnValueOnce(old.promise).mockResolvedValueOnce({ rows: [{ type: "well", total: 7, pending: 2, done: 5 }] });
+    const parts = surveyParts([surveyReportRow()]);
+    api.ledger.getSurveyRows.mockReturnValueOnce(old.promise).mockResolvedValueOnce(parts.base);
+    api.ledger.getSurveyStatistics.mockResolvedValue(parts.statistics);
     const wrapper = render(SurveyLedgerView);
     await click(wrapper, "查询");
     await flushPromises();
     old.reject(new Error("旧请求失败"));
     await flushPromises();
-    expect(wrapper.getComponent(LedgerSummary).props()).toEqual({ total: 7, pending: 2, done: 5 });
+    expect(wrapper.getComponent(SurveyLedgerSheet).props("rows")).toEqual([surveyReportRow()]);
     expect(wrapper.text()).not.toContain("旧请求失败");
+  });
+
+  it("查询日期快照随结果写入报表，修改未查询条件不污染当前导出口径", async () => {
+    const wrapper = render(StreetLedgerView);
+    await flushPromises();
+    const filters = wrapper.getComponent(LedgerFilters);
+    filters.vm.$emit("update:streetOrgId", 2);
+    filters.vm.$emit("update:dateRange", ["2026-01-01", "2026-08-31"]);
+    await flushPromises();
+    const parts = streetParts([streetReportRow()], { street_org_id: 2, date_from: "2026-01-01", date_to: "2026-08-31" }, ["非去重资产总量"]);
+    const pending = deferred<typeof parts.base>();
+    api.ledger.getStreetRows.mockReturnValueOnce(pending.promise);
+    api.ledger.getStreetStatistics.mockResolvedValueOnce(parts.statistics);
+    await click(wrapper, "查询");
+    expect(api.ledger.getStreetRows).toHaveBeenLastCalledWith({ street_org_id: 2, date_from: "2026-01-01", date_to: "2026-08-31" });
+    expect(api.ledger.getStreetStatistics).toHaveBeenLastCalledWith({ street_org_id: 2, date_from: "2026-01-01", date_to: "2026-08-31" });
+    filters.vm.$emit("update:dateRange", ["2025-01-01", "2025-12-31"]);
+    pending.resolve(parts.base);
+    await flushPromises();
+    expect(wrapper.get("tfoot").text()).toContain("2026-01-01 至 2026-08-31");
+    expect(wrapper.get("tfoot").text()).not.toContain("2025-01-01");
+    expect(wrapper.get("thead").text()).toContain("北城街道台账");
+  });
+
+  it.each(["street", "survey"] as const)("%s 两页导出 handler 二次保护，并只使用已提交的筛选与完整表格", async (kind) => {
+    const component = kind === "street" ? StreetLedgerView : SurveyLedgerView;
+    const readRows = kind === "street" ? api.ledger.getStreetRows : api.ledger.getSurveyRows;
+    const readStatistics = kind === "street" ? api.ledger.getStreetStatistics : api.ledger.getSurveyStatistics;
+    const makeParts = (query: LedgerAppliedQuery) => kind === "street"
+      ? streetParts([streetReportRow()], query) : surveyParts([surveyReportRow()], query);
+    const parts = makeParts(allLedgerQuery);
+    const pending = deferred<typeof parts.base>();
+    readRows.mockReturnValueOnce(pending.promise);
+    readStatistics.mockResolvedValueOnce(parts.statistics);
+    const wrapper = render(component);
+    const frame = wrapper.getComponent(LedgerReportFrame);
+    const emitExport = () => frame.vm.$emit("export", wrapper.get("table").element);
+    emitExport(); expect(exportLedgerTable).not.toHaveBeenCalled();
+    pending.resolve(parts.base); await flushPromises();
+    expect(frame.props("exportDisabled")).toBe(false);
+    emitExport();
+    const label = kind === "street" ? "街道台账" : "街道排查汇总";
+    expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, `${label}_全部街道_全部日期`);
+
+    const query = { street_org_id: 2, date_from: "2026-01-01", date_to: "2026-08-31" };
+    const filters = wrapper.getComponent(LedgerFilters);
+    filters.vm.$emit("update:streetOrgId", query.street_org_id);
+    filters.vm.$emit("update:dateRange", [query.date_from, query.date_to]);
+    await flushPromises();
+    emitExport();
+    expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, `${label}_全部街道_全部日期`);
+    expect(wrapper.get("tfoot").text()).toContain("全部日期");
+
+    const selectedParts = makeParts(query);
+    readRows.mockResolvedValueOnce(selectedParts.base); readStatistics.mockResolvedValueOnce(selectedParts.statistics);
+    await click(wrapper, "查询"); await flushPromises(); emitExport();
+    expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, `${label}_街道2_2026-01-01至2026-08-31`);
+    expect(wrapper.get("thead").text()).toContain("北城街道");
+    expect(wrapper.get("tfoot").text()).toContain("2026-01-01 至 2026-08-31");
+    const exportsBeforeFailure = vi.mocked(exportLedgerTable).mock.calls.length;
+    readRows.mockRejectedValueOnce(new Error("基础行失败"));
+    readStatistics.mockResolvedValueOnce(selectedParts.statistics);
+    frame.vm.$emit("refresh"); emitExport();
+    expect(exportLedgerTable).toHaveBeenCalledTimes(exportsBeforeFailure);
+    await flushPromises(); emitExport();
+    expect(exportLedgerTable).toHaveBeenCalledTimes(exportsBeforeFailure);
+    expect(frame.props("exportDisabled")).toBe(true);
+    expect(wrapper.get("tbody").text()).toContain("加载失败");
+    expect(api.ledger.getStreetReport).not.toHaveBeenCalled();
+    expect(api.ledger.getSurveyReport).not.toHaveBeenCalled();
+  });
+
+  it.each(["street", "survey"] as const)("%s 合法空态同样不能通过直接事件导出", async (kind) => {
+    const wrapper = render(kind === "street" ? StreetLedgerView : SurveyLedgerView);
+    await flushPromises();
+    const frame = wrapper.getComponent(LedgerReportFrame);
+    frame.vm.$emit("export", wrapper.get("table").element);
+    expect(exportLedgerTable).not.toHaveBeenCalled();
+    expect(frame.props("exportDisabled")).toBe(true);
   });
 });
 

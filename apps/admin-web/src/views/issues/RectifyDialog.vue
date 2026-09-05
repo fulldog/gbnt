@@ -26,7 +26,13 @@ let session = 0;
 onScopeDispose(() => { session += 1; });
 const selectedDrafts = computed(() => drafts.value.filter((draft) => draft.selected));
 const hasUploads = computed(() => uploadingTypes.value.size > 0);
-const historicalTypes = computed(() => new Set(issue?.rectify_records.map((record) => record.quiz_type) ?? []));
+const currentRound = computed(() => issue?.rectify_round ?? 0);
+const currentRoundTypes = computed(() => new Set(issue?.rectify_records
+  .filter((record) => (record.round ?? 0) === currentRound.value)
+  .map((record) => record.quiz_type) ?? []));
+const historicalTypes = computed(() => new Set(issue?.rectify_records
+  .filter((record) => (record.round ?? 0) < currentRound.value)
+  .map((record) => record.quiz_type) ?? []));
 
 const neededTypes = computed(() => {
   if (!issue) return [];
@@ -39,7 +45,7 @@ const neededTypes = computed(() => {
     .map((item) => item.type);
 });
 
-watch(() => [visible.value, issue?.id] as const, ([open]) => {
+watch(() => [visible.value, issue?.id, currentRound.value] as const, ([open]) => {
   session += 1;
   submitting.value = false;
   uploadingTypes.value = new Set();
@@ -82,6 +88,7 @@ async function submit(): Promise<void> {
   const issueId = issue.id;
   try {
     await api.issues.rectify(issueId, {
+      expected_round: currentRound.value,
       rectify_list: selectedDrafts.value.map((item) => ({
         type: item.type,
         note: item.note.trim(),
@@ -124,7 +131,7 @@ async function submit(): Promise<void> {
         show-icon
         :closable="false"
         title="请选择本次处理的异常项，可分次提交。历史已反馈项仍可再次选择，完成状态以后端结果为准。"
-        description="历史记录不区分整改轮次；重新整改会保留原记录，因此“历史已反馈”不表示本轮已经完成。"
+        :description="`当前为第 ${currentRound + 1} 轮整改，仅本轮反馈参与完成判断；历史轮已反馈不表示本轮已经完成。`"
       />
       <p class="m-0 text-sm text-slate-600">
         照片水印使用当前记录的地址和坐标；若定位缺失，请先关闭弹窗，在基础编辑中补齐后再上传。
@@ -134,7 +141,10 @@ async function submit(): Promise<void> {
           <ElCheckbox :model-value="draft.selected" :disabled="submitting || hasUploads" @update:model-value="draft.selected = $event === true">
             本次处理：{{ index + 1 }}. {{ quizLabel(draft.type) }}
           </ElCheckbox>
-          <ElTag v-if="historicalTypes.has(draft.type)" type="info" effect="plain">历史已反馈</ElTag>
+          <div class="flex flex-wrap gap-2">
+            <ElTag v-if="currentRoundTypes.has(draft.type)" type="success" effect="plain">本轮已反馈</ElTag>
+            <ElTag v-if="historicalTypes.has(draft.type)" type="info" effect="plain">历史轮已反馈</ElTag>
+          </div>
         </div>
         <div v-show="draft.selected" class="mt-4">
           <ElFormItem label="整改说明" :required="draft.selected">

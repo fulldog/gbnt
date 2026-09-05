@@ -17,7 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestAdminAndAppDetailHTTPContractsStaySeparate(t *testing.T) {
+func TestAdminAndAppDetailHTTPIncludeNames(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, admin := range []bool{false, true} {
 		name, path := "小程序", "/api/app/issues/1"
@@ -29,12 +29,10 @@ func TestAdminAndAppDetailHTTPContractsStaySeparate(t *testing.T) {
 				{Contains: "FROM `issues`", Columns: []string{"id", "issue_key", "type", "type_ext", "report_user_id", "org_id"}, Rows: [][]driver.Value{{int64(1), "ISS-1", "well", `{"checklist":[]}`, int64(4), int64(3)}}},
 				{Contains: "FROM `issue_rectify_records`", Columns: []string{"id"}},
 			}
-			if admin {
-				steps = append(steps,
-					testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}, Rows: [][]driver.Value{{int64(4), "用户", "user"}}},
-					testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id"}, Rows: [][]driver.Value{{int64(3), "街道", int64(0)}}},
-				)
-			}
+			steps = append(steps,
+				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}, Rows: [][]driver.Value{{int64(4), "用户", "user"}}},
+				testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id"}, Rows: [][]driver.Value{{int64(3), "街道", int64(0)}}},
+			)
 			db := testutil.NewQueryDB(t, steps...)
 			d := &Deps{Issue: &service.IssueService{DB: db}}
 			r := gin.New()
@@ -54,12 +52,8 @@ func TestAdminAndAppDetailHTTPContractsStaySeparate(t *testing.T) {
 			if string(body.Data["rectify_records"]) != "[]" || !strings.Contains(string(body.Data["type_ext"]), "checklist") {
 				t.Fatalf("基础契约变化：%s", w.Body.String())
 			}
-			_, hasName := body.Data["report_user_name"]
-			if hasName != admin {
-				t.Fatalf("两端名称契约混用：%s", w.Body.String())
-			}
-			if admin && (string(body.Data["report_user_name"]) != `"用户"` || string(body.Data["assignee_user_name"]) != "null" || string(body.Data["org_path"]) != `"街道"`) {
-				t.Fatalf("管理端名称丢失：%s", w.Body.String())
+			if string(body.Data["report_user_name"]) != `"用户"` || string(body.Data["assignee_user_name"]) != "null" || string(body.Data["org_path"]) != `"街道"` {
+				t.Fatalf("名称丢失：%s", w.Body.String())
 			}
 		})
 	}

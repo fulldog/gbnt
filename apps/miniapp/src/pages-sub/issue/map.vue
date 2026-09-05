@@ -3,6 +3,7 @@ import { onLoad, onUnload } from "@dcloudio/uni-app";
 import { computed, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
 import { errorMessage, hasValidCoordinates } from "@/utils/issue-display";
+import { deviceFailureMessage, showDeviceFailure } from "@/utils/device-permissions";
 
 interface PageQuery {
   id?: string;
@@ -20,6 +21,8 @@ const currentLng = shallowRef<number>();
 const loading = shallowRef(false);
 const error = shallowRef("");
 const locationError = shallowRef("");
+const locating = shallowRef(false);
+let active = true;
 let requestSequence = 0;
 
 const hasTarget = computed(() => hasValidCoordinates(targetLat.value, targetLng.value));
@@ -88,21 +91,27 @@ function formatDistance(meters: number): string {
 }
 
 function locateCurrent(): void {
+  if (!active || locating.value) return;
+  locating.value = true;
   locationError.value = "";
   uni.getLocation({
     type: "gcj02",
     isHighAccuracy: true,
     highAccuracyExpireTime: 5000,
     success: (result) => {
+      if (!active) return;
       currentLat.value = Number(result.latitude);
       currentLng.value = Number(result.longitude);
       if (!hasCurrent.value) locationError.value = "当前位置坐标无效";
     },
     fail: (cause) => {
+      if (!active) return;
       currentLat.value = undefined;
       currentLng.value = undefined;
-      locationError.value = cause.errMsg || "无法获取当前位置，请检查定位权限";
+      locationError.value = deviceFailureMessage(cause, "获取当前位置");
+      showDeviceFailure(cause, "获取当前位置");
     },
+    complete: () => { locating.value = false; },
   });
 }
 
@@ -143,7 +152,7 @@ function openInMap(): void {
     address: address.value,
     scale: 16,
     fail: (cause) => {
-      uni.showToast({ title: cause.errMsg || "无法打开地图导航", icon: "none" });
+      if (active) showDeviceFailure(cause, "打开地图导航");
     },
   });
 }
@@ -153,7 +162,10 @@ onLoad((rawQuery) => {
   issueId.value = Number(query.id) || 0;
   const lat = Number(query.lat);
   const lng = Number(query.lng);
-  if (query.address) address.value = decodeURIComponent(query.address);
+  if (query.address) {
+    try { address.value = decodeURIComponent(query.address); }
+    catch { address.value = query.address; }
+  }
 
   if (hasValidCoordinates(lat, lng)) {
     targetLat.value = lat;
@@ -165,6 +177,7 @@ onLoad((rawQuery) => {
 });
 
 onUnload(() => {
+  active = false;
   requestSequence += 1;
 });
 </script>
@@ -211,7 +224,7 @@ onUnload(() => {
         </text>
 
         <view class="map-page__actions">
-          <button class="map-page__secondary" @tap="locateCurrent">重新定位</button>
+          <button class="map-page__secondary" :disabled="locating" @tap="locateCurrent">{{ locating ? "定位中…" : "重新定位" }}</button>
           <button class="map-page__primary" @tap="openInMap">打开地图导航</button>
         </view>
       </view>

@@ -1,20 +1,21 @@
 import type {
   ApiClient,
-  MineIssueListResult,
   MineIssueQuery,
   MineStats,
 } from "@gbnt/api-client";
+import { parseMineIssuePage, parseMineStats } from "./response";
+import type { MiniappMineIssueListResult } from "./types";
 
 export function createMineApi(client: ApiClient) {
   return {
-    getStats(): Promise<MineStats> {
-      return client.request<MineStats>("/api/app/mine/stats");
+    async getStats(): Promise<MineStats> {
+      return parseMineStats(await client.request<unknown>("/api/app/mine/stats"));
     },
 
-    listIssues(query: MineIssueQuery = {}): Promise<MineIssueListResult> {
-      return client.request<MineIssueListResult>("/api/app/mine/issues", {
+    async listIssues(query: MineIssueQuery = {}): Promise<MiniappMineIssueListResult> {
+      return parseMineIssuePage(await client.request<unknown>("/api/app/mine/issues", {
         query: { ...query },
-      });
+      }), query.scope ?? "reported");
     },
   } as const;
 }

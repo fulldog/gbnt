@@ -16,12 +16,13 @@ interface LocationInput {
   address: string;
 }
 
-const { item, definition, issueType, location } = toRefs(
+const { item, definition, issueType, location, disabled } = toRefs(
   defineProps<{
     item: QuizFormItem;
     definition: QuizDefinition;
     issueType: IssueType;
     location: LocationInput;
+    disabled?: boolean;
   }>(),
 );
 
@@ -29,6 +30,7 @@ const emit = defineEmits<{
   answer: [value: boolean];
   description: [value: string];
   photos: [value: UploadedPhoto[]];
+  pending: [value: boolean];
 }>();
 
 const indicatesIssue = computed(() =>
@@ -40,7 +42,7 @@ const minimumPhotos = computed(() =>
     : quizMinimumPhotos(item.value.type, item.value.value),
 );
 const showPhotos = computed(
-  () => item.value.value !== null && minimumPhotos.value > 0,
+  () => item.value.value !== null,
 );
 
 function updateDescription(event: Event | InputEventLike): void {
@@ -63,6 +65,7 @@ function updateDescription(event: Event | InputEventLike): void {
         class="answer-button"
         :class="{ 'answer-button--selected': item.value === true }"
         :aria-checked="item.value === true"
+        :disabled="disabled"
         @tap="emit('answer', true)"
       >
         是
@@ -71,28 +74,30 @@ function updateDescription(event: Event | InputEventLike): void {
         class="answer-button"
         :class="{ 'answer-button--selected': item.value === false }"
         :aria-checked="item.value === false"
+        :disabled="disabled"
         @tap="emit('answer', false)"
       >
         否
       </button>
     </view>
 
-    <view v-if="indicatesIssue" class="quiz-field">
-      <text class="quiz-field__label"><text class="required">*</text>问题说明</text>
+    <view v-if="item.value !== null" class="quiz-field">
+      <text class="quiz-field__label"><text v-if="indicatesIssue" class="required">*</text>{{ indicatesIssue ? '问题说明' : '现场备注（选填）' }}</text>
       <textarea
         class="quiz-field__textarea"
         :value="item.desc"
         maxlength="500"
         auto-height
-        placeholder="请描述现场问题，便于整改人员处理"
+        :disabled="disabled"
+        :placeholder="indicatesIssue ? '请描述现场问题，便于整改人员处理' : '可补充现场情况'"
         @input="updateDescription"
       />
     </view>
 
     <view v-if="showPhotos" class="quiz-field">
       <text class="quiz-field__label">
-        <text class="required">*</text>现场照片
-        <text class="quiz-field__aside">至少 {{ minimumPhotos }} 张</text>
+        <text v-if="minimumPhotos" class="required">*</text>现场照片
+        <text class="quiz-field__aside">{{ minimumPhotos ? `至少 ${minimumPhotos} 张` : '选填，可补充照片' }}</text>
       </text>
       <PhotoPicker
         :model-value="item.photos"
@@ -100,6 +105,7 @@ function updateDescription(event: Event | InputEventLike): void {
         :cooldown-seconds="item.type === 'water_out' && item.value === true ? 60 : 0"
         :location="location"
         @update:model-value="emit('photos', $event)"
+        @pending="emit('pending', $event)"
       />
     </view>
   </view>

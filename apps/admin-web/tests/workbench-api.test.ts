@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWorkbenchApi } from "@/api/workbench";
 import WorkbenchView from "@/views/workbench/WorkbenchView.vue";
 
-const runtime = vi.hoisted(() => ({ workbench: { getStats: vi.fn() } }));
+const runtime = vi.hoisted(() => ({ workbench: {
+  getStats: vi.fn(),
+  getTrend: vi.fn().mockResolvedValue({ points: [], undated_completed: 0 }),
+  getTodos: vi.fn().mockResolvedValue({ list: [], total: 0, page: 1, size: 20, today: "2026-09-05" }),
+} }));
 vi.mock("@/api/runtime", () => ({ useAdminApi: () => runtime }));
 
 const zero: WorkbenchStats = {
@@ -79,7 +83,7 @@ function render() {
   const wrapper = mount(WorkbenchView, { global: { stubs: {
     ElButton: Button, ElAlert: Alert, ElIcon: { template: "<span />" }, ElSkeleton: true,
     ElEmpty: { props: ["description"], template: "<div>{{ description }}</div>" },
-    TypeDistributionChart: { template: '<div data-testid="chart" />' },
+    WorkbenchTrendChart: true, WorkbenchTodos: true,
   } } });
   wrappers.push(wrapper);
   return wrapper;
@@ -104,12 +108,12 @@ describe("工作台真实请求边界到页面的失败状态", () => {
     expect(wrapper.text()).toContain("统计查询失败");
     expect(wrapper.text()).toContain("stats-failed");
     expect(wrapper.find('[aria-label="核心指标"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="chart"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="类型排行列表"]').exists()).toBe(false);
     request.mockResolvedValue(envelope(zero));
     await click(wrapper, "重新加载");
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
     expect(wrapper.findAll('[aria-label="核心指标"] article')).toHaveLength(5);
-    expect(wrapper.find('[data-testid="chart"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="类型排行列表"]').exists()).toBe(true);
   });
 
   it("成功后刷新遇到数据库失败，旧指标及图表一并隐藏", async () => {
@@ -121,7 +125,7 @@ describe("工作台真实请求边界到页面的失败状态", () => {
     request.mockResolvedValue(failure);
     await click(wrapper, "刷新数据");
     expect(wrapper.find('[aria-label="核心指标"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="chart"]').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="类型排行列表"]').exists()).toBe(false);
     expect(wrapper.text()).toContain("统计查询失败");
   });
 });

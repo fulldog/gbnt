@@ -18,6 +18,7 @@ defineEmits<{ retry: [] }>();
 
 const visible = defineModel<boolean>({ required: true });
 const fields = computed(() => (issue ? issueExtensionFields(issue) : []));
+const currentRound = computed(() => issue?.rectify_round ?? 0);
 
 function quizIsIssue(type: string, value: boolean): boolean {
   if (!issue) return false;
@@ -47,6 +48,7 @@ function quizIsIssue(type: string, value: boolean): boolean {
           <ElDescriptionsItem label="计划完成">{{ formatDate(issue.plan_date) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="上报人">{{ displayUser(issue.report_user_id, issue.report_user_name) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="整改人">{{ displayUser(issue.assignee_user, issue.assignee_user_name) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="当前整改轮次" :span="2">第 {{ currentRound + 1 }} 轮</ElDescriptionsItem>
           <ElDescriptionsItem label="创建时间">{{ formatDateTime(issue.created_at) }}</ElDescriptionsItem>
           <ElDescriptionsItem label="更新时间">{{ formatDateTime(issue.updated_at) }}</ElDescriptionsItem>
         </ElDescriptions>
@@ -110,7 +112,12 @@ function quizIsIssue(type: string, value: boolean): boolean {
             placement="top"
           >
             <article class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <strong>{{ quizLabel(record.quiz_type) }}</strong>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <strong>{{ quizLabel(record.quiz_type) }}</strong>
+                <ElTag :type="(record.round ?? 0) === currentRound ? 'success' : 'info'" effect="plain">
+                  第 {{ (record.round ?? 0) + 1 }} 轮 · {{ (record.round ?? 0) === currentRound ? '本轮' : '历史' }}
+                </ElTag>
+              </div>
               <p class="mt-2 whitespace-pre-wrap text-sm text-slate-600">{{ record.note }}</p>
               <div v-if="record.photos.length" class="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
                 <ElImage

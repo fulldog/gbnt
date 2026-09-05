@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref, shallowRef } from "vue";
-import { onHide, onLoad } from "@dcloudio/uni-app";
+import { computed, reactive, ref, shallowRef, watch } from "vue";
+import { onHide, onLoad, onUnload } from "@dcloudio/uni-app";
 import type { IssueType } from "@gbnt/api-client";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import SignaturePad from "@/components/media/SignaturePad.vue";
+import RecoverableImage from "@/components/common/RecoverableImage.vue";
 import IssueTypeFields from "@/components/report/IssueTypeFields.vue";
 import QuizCard from "@/components/report/QuizCard.vue";
 import { useLocation } from "@/composables/report/useLocation";
@@ -17,6 +18,7 @@ import {
 } from "@/domain/issues/definitions";
 import {
   createReportForm,
+  changeQuizAnswer,
   replaceIssueType,
   type QuizFormItem,
   type ReportDetailsForm,
@@ -27,7 +29,7 @@ import { buildCreateIssueInput } from "@/domain/issues/mapper";
 import {
   reportNeedsRectify,
   validateBasicStep,
-  validateQuizStep,
+  validateQuizItem,
   validateSubmitStep,
 } from "@/domain/issues/validation";
 import { inputEventValue, type InputEventLike } from "@/utils/events";
@@ -45,24 +47,35 @@ const errors = ref<string[]>([]);
 const submitting = shallowRef(false);
 const uploadingSignature = shallowRef(false);
 const signatureRef = ref<SignaturePadInstance | null>(null);
+const pendingPhotos = shallowRef<ReadonlySet<string>>(new Set());
+const hasPendingPhotos = computed(() => pendingPhotos.value.size > 0);
+const draftReady = shallowRef(false);
+const draftOwnerId = shallowRef<number | null>(null);
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+let active = true;
 let latestSignatureUploadToken = 0;
 let activeSignatureUploadToken: number | null = null;
 const authStore = useAuthStore();
 const { options: regionOptions, loading: regionsLoading, error: regionsError, load } =
   useRegions();
 const { choosing: choosingLocation, choose } = useLocation();
-const { loadDraft, saveDraft, clearDraft } = useReportDraft(
-  () => authStore.user?.id ?? null,
+const { loadDraft, saveDraft, clearDraft, saveState } = useReportDraft(
+  () => draftOwnerId.value,
 );
 
 const definitions = computed(() => QUIZ_DEFINITIONS[form.type]);
 const needsRectify = computed(() => reportNeedsRectify(form));
-const progress = computed(() => `${Math.round((step.value / 3) * 100)}%`);
+const totalSteps = computed(() => definitions.value.length + 2);
+const currentQuiz = computed(() => form.quizzes[step.value - 2]);
+const currentDefinition = computed(() => definitions.value[step.value - 2]);
+const progress = computed(() => `${Math.round((step.value / totalSteps.value) * 100)}%`);
 const stepTitle = computed(() => {
   if (step.value === 1) return "填写设施信息";
-  if (step.value === 2) return "完成现场排查";
+  if (step.value < totalSteps.value) return currentDefinition.value?.label || "完成现场排查";
   return "确认并提交";
 });
+const draftHint = computed(() => saveState.value === "failed" ? "草稿保存失败，请勿退出，可点击重试" :
+  saveState.value === "saved" ? "草稿已保存到本机" : "填写内容将自动保存到本机");
 const locationInput = computed(() => ({
   lat: form.lat,
   lng: form.lng,
@@ -90,9 +103,23 @@ function showFirstError(nextErrors: string[]): void {
   if (nextErrors[0]) {
     uni.showToast({ title: nextErrors[0], icon: "none", duration: 2800 });
   }
+  uni.pageScrollTo({ scrollTop: 0, duration: 180 });
+}
+
+function setPhotosPending(type: string, value: boolean): void {
+  const next = new Set(pendingPhotos.value);
+  if (value) next.add(type); else next.delete(type);
+  pendingPhotos.value = next;
+}
+
+function blockForPhotos(): boolean {
+  if (!hasPendingPhotos.value) return false;
+  uni.showToast({ title: "请等待照片上传完成，失败照片请重试或移除", icon: "none" });
+  return true;
 }
 
 function selectType(event: PickerEventLike): void {
+  if (blockForPhotos() || submitting.value) return;
   const option = ISSUE_TYPE_OPTIONS[Number(event.detail.value)];
   if (!option || option.value === form.type) {
     return;
@@ -163,13 +190,14 @@ function currentStepErrors(): string[] {
   if (step.value === 1) {
     return validateBasicStep(form);
   }
-  if (step.value === 2) {
-    return validateQuizStep(form);
+  if (step.value < totalSteps.value && currentQuiz.value) {
+    return validateQuizItem(form.type, currentQuiz.value);
   }
   return [];
 }
 
 function nextStep(): void {
+  if (blockForPhotos() || submitting.value || uploadingSignature.value) return;
   const nextErrors = currentStepErrors();
   if (nextErrors.length > 0) {
     showFirstError(nextErrors);
@@ -177,11 +205,12 @@ function nextStep(): void {
   }
   errors.value = [];
   saveDraft(form);
-  step.value = Math.min(3, step.value + 1);
+  step.value = Math.min(totalSteps.value, step.value + 1);
   uni.pageScrollTo({ scrollTop: 0, duration: 180 });
 }
 
 function previousStep(): void {
+  if (blockForPhotos() || submitting.value || uploadingSignature.value) return;
   errors.value = [];
   saveDraft(form);
   step.value = Math.max(1, step.value - 1);
@@ -192,18 +221,18 @@ function resetSignatureUpload(): void {
   latestSignatureUploadToken += 1;
   form.signatureFileId = "";
   form.signaturePreviewUrl = "";
-  saveDraft(form);
+  if (draftReady.value && !submitting.value) saveDraft(form);
 }
 
 function isCurrentSignatureUpload(token: number, revision: number): boolean {
   return (
-    token === latestSignatureUploadToken &&
+    active && token === latestSignatureUploadToken &&
     signatureRef.value?.getRevision() === revision
   );
 }
 
 async function uploadSignature(): Promise<boolean> {
-  if (uploadingSignature.value) {
+  if (!active || submitting.value || uploadingSignature.value) {
     return false;
   }
 
@@ -216,7 +245,7 @@ async function uploadSignature(): Promise<boolean> {
       throw new Error("签名板尚未准备完成");
     }
     if (!isCurrentSignatureUpload(uploadToken, signature.revision)) {
-      uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
+      if (active) uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
       return false;
     }
 
@@ -225,7 +254,7 @@ async function uploadSignature(): Promise<boolean> {
       watermark: false,
     });
     if (!isCurrentSignatureUpload(uploadToken, signature.revision)) {
-      uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
+      if (active) uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
       return false;
     }
 
@@ -239,7 +268,7 @@ async function uploadSignature(): Promise<boolean> {
     uni.showToast({ title: "签名已确认", icon: "success" });
     return true;
   } catch (error) {
-    uni.showToast({
+    if (active) uni.showToast({
       title: error instanceof Error ? error.message : "签名上传失败",
       icon: "none",
     });
@@ -253,7 +282,7 @@ async function uploadSignature(): Promise<boolean> {
 }
 
 async function submit(): Promise<void> {
-  if (submitting.value) {
+  if (submitting.value || uploadingSignature.value || blockForPhotos()) {
     return;
   }
   if (!form.signatureFileId && !(await uploadSignature())) {
@@ -268,17 +297,20 @@ async function submit(): Promise<void> {
   uni.showLoading({ title: "正在提交", mask: true });
   try {
     const issue = await miniappApi.issues.create(buildCreateIssueInput(form));
-    clearDraft();
+    const draftCleared = clearDraft();
+    if (!active) return;
     assignForm(createReportForm());
     step.value = 1;
     signatureRef.value?.clear();
     uni.hideLoading();
-    uni.showToast({ title: `上报成功：${issue.issue_key}`, icon: "success" });
+    const warning = issue.display_warning || (!draftCleared ? "上报已成功，本机草稿清理失败，请勿重复提交" : "");
+    uni.showToast({ title: warning || `上报成功：${issue.issue_key}`, icon: warning ? "none" : "success", duration: warning ? 3500 : 1500 });
     setTimeout(() => {
-      uni.switchTab({ url: "/pages/todo/index" });
+      if (active) uni.switchTab({ url: "/pages/todo/index" });
     }, 900);
   } catch (error) {
     uni.hideLoading();
+    if (!active) return;
     saveDraft(form);
     uni.showToast({
       title: error instanceof Error ? error.message : "上报失败，请稍后重试",
@@ -286,6 +318,7 @@ async function submit(): Promise<void> {
       duration: 3000,
     });
   } finally {
+    uni.hideLoading();
     submitting.value = false;
   }
 }
@@ -293,6 +326,7 @@ async function submit(): Promise<void> {
 function restoreDraft(): void {
   const draft = loadDraft();
   if (!draft) {
+    draftReady.value = true;
     return;
   }
   uni.showModal({
@@ -301,33 +335,62 @@ function restoreDraft(): void {
     confirmText: "继续填写",
     cancelText: "放弃草稿",
     success: (result) => {
+      if (!active) return;
       if (result.confirm) {
         assignForm(draft);
+        draftReady.value = true;
         return;
       }
       clearDraft();
+      draftReady.value = true;
     },
+    fail: () => { if (active) draftReady.value = true; },
   });
 }
 
-onLoad(() => {
+onLoad(async () => {
+  await authStore.restore();
+  if (!active) return;
+  if (!authStore.isAuthenticated) { uni.reLaunch({ url: "/pages/login/index" }); return; }
+  draftOwnerId.value = authStore.user?.id ?? null;
   void load();
   restoreDraft();
 });
 
+watch(form, () => {
+  if (!draftReady.value || submitting.value) return;
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => saveDraft(form), 500);
+}, { deep: true });
+
+watch(() => JSON.stringify({ type: form.type, year: form.projectYear, org: form.orgId,
+  address: form.address, lat: form.lat, lng: form.lng, code: form.code, details: form.details, quizzes: form.quizzes, planDate: form.planDate }),
+() => {
+  if (draftReady.value && form.signatureFileId) resetSignatureUpload();
+}, { flush: "sync" });
+
 onHide(() => {
-  if (!submitting.value) {
+  if (!submitting.value && draftReady.value) {
+    if (draftTimer) clearTimeout(draftTimer);
     saveDraft(form);
   }
+});
+onUnload(() => {
+  active = false;
+  latestSignatureUploadToken += 1;
+  if (draftTimer) clearTimeout(draftTimer);
 });
 </script>
 
 <template>
   <view class="report-page page-shell">
+    <view v-if="!draftReady" class="section-card">正在恢复登录状态与上报草稿…</view>
+    <template v-else>
     <view class="report-hero">
       <view class="report-hero__eyebrow">现场巡查</view>
       <text class="report-hero__title">{{ stepTitle }}</text>
-      <text class="report-hero__subtitle">第 {{ step }} 步，共 3 步 · 数据自动保存为本机草稿</text>
+      <text class="report-hero__subtitle">第 {{ step }} 步，共 {{ totalSteps }} 步</text>
+      <button class="draft-status" :class="{ 'draft-status--failed': saveState === 'failed' }" @tap="saveDraft(form)">{{ draftHint }}</button>
       <view class="progress" aria-label="上报进度">
         <view class="progress__value" :style="{ width: progress }" />
       </view>
@@ -396,7 +459,7 @@ onHide(() => {
               :value="form.address"
               maxlength="300"
               auto-height
-              placeholder="选择地图位置，或在无法定位时手工填写详细地址"
+              placeholder="先选择地图位置，再补充详细地址"
               @input="updateText('address', $event)"
             />
             <text v-if="form.lat !== null && form.lng !== null" class="coordinate">
@@ -415,24 +478,26 @@ onHide(() => {
       </view>
     </template>
 
-    <template v-else-if="step === 2">
+    <template v-else-if="step < totalSteps">
       <view class="section-intro">
         <text class="section-intro__title">{{ issueTypeLabel(form.type) }}排查清单</text>
         <text class="section-intro__desc">
-          逐项选择现场情况。存在问题时必须填写说明和上传照片。
+          当前第 {{ step - 1 }} 题，共 {{ definitions.length }} 题；完成本题后进入下一题。
         </text>
       </view>
       <view class="quiz-list">
         <QuizCard
-          v-for="(item, index) in form.quizzes"
-          :key="item.type"
-          :item="item"
-          :definition="definitions[index]!"
+          v-if="currentQuiz && currentDefinition"
+          :key="currentQuiz.type"
+          :item="currentQuiz"
+          :definition="currentDefinition"
+          :disabled="hasPendingPhotos"
           :issue-type="form.type"
           :location="locationInput"
-          @answer="item.value = $event"
-          @description="item.desc = $event"
-          @photos="updateQuizPhotos(item, $event)"
+          @answer="changeQuizAnswer(currentQuiz, $event)"
+          @description="currentQuiz.desc = $event"
+          @photos="updateQuizPhotos(currentQuiz, $event)"
+          @pending="setPhotosPending(currentQuiz.type, $event)"
         />
       </view>
     </template>
@@ -466,31 +531,35 @@ onHide(() => {
         </view>
       </view>
 
-      <SignaturePad ref="signatureRef" @changed="resetSignatureUpload" @cleared="resetSignatureUpload" />
+      <SignaturePad ref="signatureRef" :disabled="submitting" @changed="resetSignatureUpload" @cleared="resetSignatureUpload" />
       <view v-if="form.signaturePreviewUrl" class="signature-confirmed">
-        <image :src="form.signaturePreviewUrl" mode="aspectFit" aria-label="已确认的电子签名" />
+        <view class="signature-preview"><RecoverableImage :src="form.signaturePreviewUrl" mode="aspectFit" alt="已确认的电子签名" /></view>
         <text>签名已上传；重新书写后需要再次确认。</text>
       </view>
-      <button class="secondary-button signature-button" :disabled="uploadingSignature" @tap="uploadSignature">
+      <button class="secondary-button signature-button" :disabled="uploadingSignature || submitting" @tap="uploadSignature">
         {{ uploadingSignature ? "正在上传签名…" : form.signatureFileId ? "重新确认签名" : "确认并上传签名" }}
       </button>
     </template>
 
     <view class="sticky-actions safe-bottom">
-      <button v-if="step > 1" class="secondary-button" :disabled="submitting" @tap="previousStep">
+      <button v-if="step > 1" class="secondary-button" :disabled="submitting || uploadingSignature || hasPendingPhotos" @tap="previousStep">
         上一步
       </button>
-      <button v-if="step < 3" class="primary-button" @tap="nextStep">
+      <button v-if="step < totalSteps" class="primary-button" :disabled="hasPendingPhotos" @tap="nextStep">
         下一步
       </button>
-      <button v-else class="primary-button" :disabled="submitting || uploadingSignature" @tap="submit">
+      <button v-else class="primary-button" :disabled="submitting || uploadingSignature || hasPendingPhotos" @tap="submit">
         {{ submitting ? "正在提交…" : "提交巡查记录" }}
       </button>
     </view>
+    </template>
   </view>
 </template>
 
 <style scoped lang="scss">
+.draft-status { padding: 8rpx 0; margin: 8rpx 0 0; min-height: 44px; background: transparent; color: #e6efff; text-align: left; font-size: 24rpx; line-height: 1.5; }
+.draft-status::after { border: 0; }
+.draft-status--failed { color: #fff2b3; }
 .report-page {
   padding-bottom: calc(150rpx + env(safe-area-inset-bottom));
 }
@@ -768,9 +837,10 @@ onHide(() => {
   gap: 20rpx;
 }
 
-.signature-confirmed image {
+.signature-preview {
   width: 128rpx;
-  height: 72rpx;
+  height: 44px;
+  flex: none;
   background: #fff;
   border-radius: var(--radius-sm);
 }

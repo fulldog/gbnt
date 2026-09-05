@@ -6,6 +6,7 @@ import { formatDateTime, quizLabel } from "@/utils/issue-display";
 
 defineProps<{
   records: readonly RectifyRecord[];
+  currentRound?: number;
 }>();
 
 function photoUrls(record: RectifyRecord): string[] {
@@ -25,6 +26,7 @@ function preview(record: RectifyRecord, index: number): void {
         <text class="history__title">{{ quizLabel(record.quiz_type) }}</text>
         <text class="history__time">{{ formatDateTime(record.created_at) }}</text>
       </view>
+      <text class="history__time">第 {{ (record.round ?? 0) + 1 }} 轮{{ record.round === currentRound ? ' · 本轮反馈' : '' }}</text>
       <text class="history__note">{{ record.note }}</text>
       <IssuePhotoGrid
         v-if="record.photos.length"

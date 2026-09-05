@@ -1,37 +1,38 @@
 import type {
   ApiClient,
-  Issue,
   MiniappCreateIssueInput,
   RectifyInput,
 } from "@gbnt/api-client";
+import { parseIssue } from "./response";
+import type { MiniappIssue } from "./types";
 
 export function createIssuesApi(client: ApiClient) {
   return {
-    create(input: MiniappCreateIssueInput): Promise<Issue> {
-      return client.request<Issue, MiniappCreateIssueInput>("/api/app/issues", {
+    async create(input: MiniappCreateIssueInput): Promise<MiniappIssue> {
+      return parseIssue(await client.request<unknown, MiniappCreateIssueInput>("/api/app/issues", {
         method: "POST",
         body: input,
-      });
+      }));
     },
 
-    get(id: number): Promise<Issue> {
-      return client.request<Issue>(`/api/app/issues/${id}`);
+    async get(id: number): Promise<MiniappIssue> {
+      return parseIssue(await client.request<unknown>(`/api/app/issues/${id}`));
     },
 
-    rectify(id: number, input: RectifyInput): Promise<Issue> {
-      return client.request<Issue, RectifyInput>(
+    async rectify(id: number, input: RectifyInput): Promise<MiniappIssue> {
+      return parseIssue(await client.request<unknown, RectifyInput>(
         `/api/app/issues/${id}/rectify`,
         {
           method: "POST",
           body: input,
         },
-      );
+      ));
     },
 
-    reRectify(id: number): Promise<Issue> {
-      return client.request<Issue>(`/api/app/issues/${id}/re-rectify`, {
+    async reRectify(id: number): Promise<MiniappIssue> {
+      return parseIssue(await client.request<unknown>(`/api/app/issues/${id}/re-rectify`, {
         method: "POST",
-      });
+      }));
     },
   } as const;
 }

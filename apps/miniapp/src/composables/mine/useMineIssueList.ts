@@ -1,11 +1,10 @@
 import type {
-  Issue,
-  MineIssueListResult,
   MineIssueQuery,
   MineScope,
 } from "@gbnt/api-client";
 import { computed, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
+import type { MiniappIssue, MiniappMineIssueListResult } from "@/api/types";
 
 export interface MineScopeMeta {
   title: string;
@@ -28,14 +27,14 @@ function errorText(error: unknown): string {
 
 export type MineIssueListLoader = (
   query: MineIssueQuery,
-) => Promise<MineIssueListResult>;
+) => Promise<MiniappMineIssueListResult>;
 
 export function useMineIssueList(
   initialScope: MineScope = "reported",
   loader: MineIssueListLoader = miniappApi.mine.listIssues,
 ) {
   const scope = shallowRef(initialScope);
-  const items = shallowRef<Issue[]>([]);
+  const items = shallowRef<MiniappIssue[]>([]);
   const page = shallowRef(1);
   const total = shallowRef(0);
   const initialLoading = shallowRef(false);
@@ -43,6 +42,8 @@ export function useMineIssueList(
   const loadingMore = shallowRef(false);
   const errorMessage = shallowRef("");
   const requestVersion = shallowRef(0);
+  const isStale = shallowRef(false);
+  let failedRequest: "initial" | "refresh" | "more" | null = null;
 
   const scopeMeta = computed(() => MINE_SCOPE_META[scope.value]);
   const hasMore = computed(() => items.value.length < total.value);
@@ -54,8 +55,8 @@ export function useMineIssueList(
     const version = ++requestVersion.value;
     // 首屏/刷新会淘汰在途的加载更多请求，立即清理其 UI 状态。
     loadingMore.value = false;
-    if (mode === "initial") initialLoading.value = true;
-    else refreshing.value = true;
+    initialLoading.value = mode === "initial";
+    refreshing.value = mode === "refresh";
     errorMessage.value = "";
 
     try {
@@ -68,21 +69,29 @@ export function useMineIssueList(
       items.value = result.list;
       page.value = result.page;
       total.value = result.total;
+      isStale.value = false;
+      failedRequest = null;
     } catch (error) {
       if (version !== requestVersion.value) return;
-      if (mode === "initial") items.value = [];
+      if (mode === "initial") {
+        items.value = [];
+        total.value = 0;
+        page.value = 1;
+      }
+      isStale.value = items.value.length > 0;
+      failedRequest = mode;
       errorMessage.value = errorText(error);
     } finally {
       if (version === requestVersion.value) {
         initialLoading.value = false;
         refreshing.value = false;
       }
-      uni.stopPullDownRefresh();
+      if (version === requestVersion.value) uni.stopPullDownRefresh();
     }
   }
 
-  async function loadMore(): Promise<void> {
-    if (initialLoading.value || refreshing.value || loadingMore.value || !hasMore.value) return;
+  async function loadMore(retrying = false): Promise<void> {
+    if (initialLoading.value || refreshing.value || loadingMore.value || !hasMore.value || (!retrying && failedRequest)) return;
     const version = ++requestVersion.value;
     const nextPage = page.value + 1;
     loadingMore.value = true;
@@ -102,8 +111,12 @@ export function useMineIssueList(
       ];
       page.value = result.page;
       total.value = result.total;
+      failedRequest = null;
     } catch (error) {
-      if (version === requestVersion.value) errorMessage.value = errorText(error);
+      if (version === requestVersion.value) {
+        errorMessage.value = errorText(error);
+        failedRequest = "more";
+      }
     } finally {
       if (version === requestVersion.value) loadingMore.value = false;
     }
@@ -120,6 +133,20 @@ export function useMineIssueList(
     initialLoading.value = false;
     refreshing.value = false;
     loadingMore.value = false;
+    isStale.value = false;
+    failedRequest = null;
+  }
+
+  function retry(): Promise<void> {
+    if (initialLoading.value || refreshing.value || loadingMore.value) return Promise.resolve();
+    return failedRequest === "more" ? loadMore(true) : loadFirstPage(failedRequest ?? "refresh");
+  }
+
+  function invalidate(): void {
+    requestVersion.value += 1;
+    initialLoading.value = false;
+    refreshing.value = false;
+    loadingMore.value = false;
   }
 
   return {
@@ -127,6 +154,7 @@ export function useMineIssueList(
     hasMore,
     initialLoading,
     isEmpty,
+    isStale,
     items,
     loadingMore,
     refreshing,
@@ -136,5 +164,7 @@ export function useMineIssueList(
     loadFirstPage,
     loadMore,
     setScope,
+    retry,
+    invalidate,
   };
 }

@@ -110,6 +110,8 @@ func main() {
 	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, denyList, perm.PublicPaths))
 	r.Use(middleware.RBAC(permSvc, cfg.RBAC.Enabled, perm.PublicPaths))
 	handler.Register(r, deps)
+	// 未匹配 API 同样经过 JWT/RBAC，再由统一处理器保留 Trace ID 并返回标准 404。
+	r.NoRoute(handler.APINotFound)
 	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {
 		_ = deps.OpLog.Persist(c, req, resp)
 	})

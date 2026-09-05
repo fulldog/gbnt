@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onLoad, onPullDownRefresh, onReachBottom } from "@dcloudio/uni-app";
+import { onLoad, onPullDownRefresh, onReachBottom, onShow, onUnload } from "@dcloudio/uni-app";
 import MineIssueCard from "@/components/mine/MineIssueCard.vue";
+import { useBusinessToday } from "@/composables/useBusinessToday";
 import {
   normalizeMineScope,
   useMineIssueList,
@@ -11,6 +12,8 @@ interface MineListRouteQuery {
 }
 
 const listState = useMineIssueList();
+const today = useBusinessToday();
+let showCount = 0;
 
 function openDetail(id: number): void {
   const source = encodeURIComponent(listState.scope.value);
@@ -36,6 +39,13 @@ onPullDownRefresh(() => {
 onReachBottom(() => {
   void listState.loadMore();
 });
+
+// 返回清单时重取首屏，清除已完成整改的旧卡片，保留当前清单分类。
+onShow(() => {
+  showCount += 1;
+  if (showCount > 1) void listState.loadFirstPage("refresh");
+});
+onUnload(listState.invalidate);
 </script>
 
 <template>
@@ -52,7 +62,7 @@ onReachBottom(() => {
       <text class="mine-list-state__mark" aria-hidden="true">!</text>
       <text class="mine-list-state__title">加载失败</text>
       <text class="mine-list-state__message">{{ listState.errorMessage.value }}</text>
-      <button class="mine-list-state__button" @tap="listState.loadFirstPage()">
+      <button class="mine-list-state__button" @tap="listState.retry()">
         重新加载
       </button>
     </view>
@@ -68,25 +78,30 @@ onReachBottom(() => {
         <text>{{ listState.scopeMeta.value.title }}</text>
         <text>共 {{ listState.total.value }} 条</text>
       </view>
+      <view v-if="listState.isStale.value" class="mine-list-page__stale" role="alert">
+        刷新失败，当前显示上次加载的数据和总数。{{ listState.errorMessage.value }}
+      </view>
 
       <view class="mine-list-page__cards">
         <MineIssueCard
           v-for="item in listState.items.value"
           :key="item.id"
           :issue="item"
+          :today="today"
           @open="openDetail"
           @preview="previewImages"
         />
       </view>
 
       <view class="mine-list-page__footer">
-        <text v-if="listState.loadingMore.value">正在加载更多…</text>
+        <text v-if="listState.refreshing.value">正在刷新…</text>
+        <text v-else-if="listState.loadingMore.value">正在加载更多…</text>
         <button
           v-else-if="listState.errorMessage.value"
           class="mine-list-page__retry"
-          @tap="listState.loadMore()"
+          @tap="listState.retry()"
         >
-          加载失败，点击重试
+          {{ listState.isStale.value ? '刷新失败' : listState.errorMessage.value }}，点击重试
         </button>
         <text v-else-if="!listState.hasMore.value">没有更多了</text>
         <text v-else>上拉加载更多</text>
@@ -96,6 +111,16 @@ onReachBottom(() => {
 </template>
 
 <style scoped lang="scss">
+.mine-list-page__stale {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #fff3e0;
+  color: #8c4c00;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .mine-list-page {
   min-height: 100vh;
   background: var(--gbnt-bg, #eef3f8);

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Issue, OrgTreeNode } from "@gbnt/api-client";
+import type { OrgTreeNode } from "@gbnt/api-client";
+import type { MiniappIssue as Issue } from "@/api/types";
 import { onLoad, onPullDownRefresh, onUnload } from "@dcloudio/uni-app";
 import { computed, shallowRef } from "vue";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
@@ -7,6 +8,10 @@ import IssueChecklist from "@/components/issue/IssueChecklist.vue";
 import IssueInfoList from "@/components/issue/IssueInfoList.vue";
 import IssueRectifyHistory from "@/components/issue/IssueRectifyHistory.vue";
 import RectifyForm from "@/components/issue/RectifyForm.vue";
+import RecoverableImage from "@/components/common/RecoverableImage.vue";
+import { useAuthStore } from "@/stores/auth";
+import { rectifyDraftKey } from "@/utils/rectify-draft";
+import { useBusinessToday } from "@/composables/useBusinessToday";
 import type { RectifyDraftSubmitItem } from "@/components/issue/rectify-types";
 import { issueTypeLabel } from "@/domain/issues/definitions";
 import {
@@ -35,9 +40,14 @@ const submitting = shallowRef(false);
 const restarting = shallowRef(false);
 const uploadedFileIds = new Map<string, string>();
 let requestSequence = 0;
+let active = true;
+const auth = useAuthStore();
+const rectifyFormRef = shallowRef<InstanceType<typeof RectifyForm> | null>(null);
+const draftKey = computed(() => rectifyDraftKey(auth.user?.id, issueId.value, issue.value?.rectify_round ?? 0));
 
 const status = computed(() => (issue.value ? issueStatusMeta(issue.value.status) : null));
-const plan = computed(() => (issue.value ? issuePlanHint(issue.value) : null));
+const today = useBusinessToday();
+const plan = computed(() => (issue.value ? issuePlanHint(issue.value, today.value) : null));
 const abnormalQuizzes = computed(() => (issue.value ? issueAbnormalQuizzes(issue.value) : []));
 const editableQuizzes = computed(() =>
   issue.value ? issueEditableRectifyQuizzes(issue.value) : [],
@@ -69,13 +79,16 @@ const infoRows = computed<IssueInfoRow[]>(() => {
   return [
     {
       label: "所属区域",
-      value: organizationName.value || (item.org_id ? `组织 #${item.org_id}` : "—"),
+      value: item.org_path || item.org_name || organizationName.value || (item.org_id ? `组织 #${item.org_id}` : "—"),
     },
     { label: "项目年度", value: `${item.project_year} 年` },
     { label: "设施编号", value: item.code.trim() || "—" },
     { label: "业务编号", value: item.issue_key || `#${item.id}` },
     { label: "排查时间", value: formatDateTime(item.created_at) },
     { label: "计划完成日期", value: formatDate(item.plan_date) },
+    { label: "上报人", value: item.report_user_name || "未提供" },
+    { label: "整改责任人", value: item.assignee_user_name || "未指派或信息缺失" },
+    { label: "整改轮次", value: `第 ${(item.rectify_round ?? 0) + 1} 轮` },
     ...issueTypeInfoRows(item),
   ];
 });
@@ -105,7 +118,7 @@ async function loadOrganizationName(targetIssue: Issue, requestId: number): Prom
 }
 
 async function loadDetail(): Promise<void> {
-  if (!issueId.value) return;
+  if (!issueId.value || submitting.value || restarting.value) return;
   const requestId = ++requestSequence;
   loading.value = true;
   error.value = "";
@@ -116,10 +129,9 @@ async function loadDetail(): Promise<void> {
     if (requestId !== requestSequence) return;
     issue.value = result;
     uni.setNavigationBarTitle({ title: `${issueTypeLabel(result.type)}详情` });
-    void loadOrganizationName(result, requestId);
+    if (!result.org_path && !result.org_name) void loadOrganizationName(result, requestId);
   } catch (cause) {
     if (requestId !== requestSequence) return;
-    issue.value = undefined;
     error.value = errorMessage(cause, "问题详情加载失败");
   } finally {
     if (requestId === requestSequence) loading.value = false;
@@ -141,8 +153,12 @@ function previewSignature(): void {
 }
 
 async function uploadRectifyPhotos(paths: readonly string[], item: Issue): Promise<string[]> {
+  if (!hasValidCoordinates(item.lat, item.lng) || !item.address.trim()) {
+    throw new Error("原记录缺少有效定位，请先由后台补齐地址和坐标，不能生成虚假水印");
+  }
   const fileIds: string[] = [];
   for (const path of paths) {
+    if (!active) throw new Error("页面已离开，本次整改未提交");
     const cached = uploadedFileIds.get(path);
     if (cached) {
       fileIds.push(cached);
@@ -166,7 +182,7 @@ async function uploadRectifyPhotos(paths: readonly string[], item: Issue): Promi
 
 async function submitRectification(drafts: RectifyDraftSubmitItem[]): Promise<void> {
   const item = issue.value;
-  if (!item || submitting.value) return;
+  if (!item || submitting.value || loading.value || restarting.value) return;
   submitting.value = true;
 
   try {
@@ -178,12 +194,18 @@ async function submitRectification(drafts: RectifyDraftSubmitItem[]): Promise<vo
         file_uuids: await uploadRectifyPhotos(draft.photoPaths, item),
       });
     }
-    const updated = await miniappApi.issues.rectify(item.id, { rectify_list: rectifyList });
+    if (!active) return;
+    const updated = await miniappApi.issues.rectify(item.id, {
+      rectify_list: rectifyList,
+      expected_round: item.rectify_round ?? 0,
+    });
+    if (!active) return;
+    rectifyFormRef.value?.discardSubmitted(drafts.map((draft) => draft.type));
     issue.value = updated;
     uploadedFileIds.clear();
-    uni.showToast({ title: updated.status === "done" ? "整改已完成" : "本次整改已提交", icon: "success" });
+    uni.showToast({ title: updated.display_warning || (updated.status === "done" ? "整改已完成" : "本次整改已提交"), icon: updated.display_warning ? "none" : "success" });
   } catch (cause) {
-    uni.showToast({ title: errorMessage(cause, "整改提交失败"), icon: "none", duration: 3000 });
+    if (active) uni.showToast({ title: errorMessage(cause, "整改提交失败"), icon: "none", duration: 3000 });
   } finally {
     submitting.value = false;
   }
@@ -191,19 +213,21 @@ async function submitRectification(drafts: RectifyDraftSubmitItem[]): Promise<vo
 
 function requestReRectify(): void {
   const item = issue.value;
-  if (!item || restarting.value) return;
+  if (!item || restarting.value || submitting.value || loading.value) return;
   uni.showModal({
     title: "重新整改",
     content: "重新整改后状态将变为“整改中”，原整改记录会保留。是否继续？",
     confirmText: "继续",
     success: async (result) => {
-      if (!result.confirm || restarting.value) return;
+      if (!active || !result.confirm || restarting.value) return;
       restarting.value = true;
       try {
-        issue.value = await miniappApi.issues.reRectify(item.id);
-        uni.showToast({ title: "已进入重新整改", icon: "success" });
+        const updated = await miniappApi.issues.reRectify(item.id);
+        if (!active) return;
+        issue.value = updated;
+        uni.showToast({ title: updated.display_warning || "已进入重新整改", icon: updated.display_warning ? "none" : "success" });
       } catch (cause) {
-        uni.showToast({ title: errorMessage(cause, "重新整改失败"), icon: "none", duration: 3000 });
+        if (active) uni.showToast({ title: errorMessage(cause, "重新整改失败"), icon: "none", duration: 3000 });
       } finally {
         restarting.value = false;
       }
@@ -224,6 +248,13 @@ onLoad((rawQuery) => {
 
 onPullDownRefresh(async () => {
   try {
+    if (rectifyFormRef.value?.hasChanges) {
+      const confirmed = await new Promise<boolean>((resolve) => uni.showModal({
+        title: "确认刷新", content: "刷新可能更新可整改项。说明已尝试保存到本机，未提交照片请勿丢弃。是否继续？",
+        success: (result) => resolve(result.confirm), fail: () => resolve(false),
+      }));
+      if (!confirmed) return;
+    }
     await loadDetail();
   } finally {
     uni.stopPullDownRefresh();
@@ -231,6 +262,7 @@ onPullDownRefresh(async () => {
 });
 
 onUnload(() => {
+  active = false;
   requestSequence += 1;
   uploadedFileIds.clear();
 });
@@ -238,6 +270,10 @@ onUnload(() => {
 
 <template>
   <view class="detail-page">
+    <view v-if="issue && error" class="detail-page__warning" role="alert">
+      <text>更新失败，当前显示上次数据：{{ error }}</text>
+      <button @tap="loadDetail">重新加载</button>
+    </view>
     <view v-if="loading && !issue" class="detail-page__state">
       <view class="detail-page__spinner" />
       <text>正在加载详情…</text>
@@ -286,20 +322,18 @@ onUnload(() => {
 
       <view class="detail-page__section">
         <text class="detail-page__section-title">排查电子签名</text>
-        <button
+        <view
           v-if="signatureUrl"
           class="detail-page__signature-button"
-          aria-label="查看排查电子签名"
-          @tap="previewSignature"
         >
-          <image class="detail-page__signature" :src="signatureUrl" mode="aspectFit" />
-        </button>
+          <RecoverableImage class="detail-page__signature" :src="signatureUrl" mode="aspectFit" alt="排查电子签名" @preview="previewSignature" />
+        </view>
         <text v-else class="detail-page__empty-text">暂无签名图片</text>
       </view>
 
       <view v-if="issue.rectify_records.length" class="detail-page__section">
         <text class="detail-page__section-title">整改记录</text>
-        <IssueRectifyHistory :records="issue.rectify_records" />
+        <IssueRectifyHistory :records="issue.rectify_records" :current-round="issue.rectify_round" />
       </view>
 
       <view v-if="canRectify" class="detail-page__section detail-page__section--rectify">
@@ -308,9 +342,11 @@ onUnload(() => {
           <text class="detail-page__section-note">逐项填写，可分批提交</text>
         </view>
         <RectifyForm
-          :key="issue.id"
+          ref="rectifyFormRef"
+          :key="`${issue.id}:${issue.rectify_round ?? 0}`"
           :items="editableQuizzes"
-          :submitting="submitting"
+          :storage-key="draftKey"
+          :submitting="submitting || loading"
           @submit="submitRectification"
         />
       </view>
@@ -325,7 +361,7 @@ onUnload(() => {
       <view v-if="canReRectify" class="detail-page__actions">
         <button
           class="detail-page__secondary-button"
-          :disabled="restarting"
+          :disabled="restarting || loading"
           @tap="requestReRectify"
         >
           重新整改
@@ -474,7 +510,7 @@ onUnload(() => {
 
 .detail-page__signature-button {
   width: 100%;
-  min-height: 220rpx;
+  height: 220rpx;
   margin-top: 22rpx;
   padding: 0;
   overflow: hidden;

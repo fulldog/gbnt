@@ -4,6 +4,7 @@ import {
   type ReportFormState,
 } from "@/domain/issues/form";
 import { QUIZ_DEFINITIONS } from "@/domain/issues/definitions";
+import { shallowRef } from "vue";
 
 const LEGACY_REPORT_DRAFT_KEY = "gbnt:miniapp:report-draft:v1";
 
@@ -21,19 +22,21 @@ function readDraftStorage(key: string): unknown {
   }
 }
 
-function writeDraftStorage(key: string, value: StoredDraft): void {
+function writeDraftStorage(key: string, value: StoredDraft): boolean {
   try {
     uni.setStorageSync(key, value);
+    return true;
   } catch {
-    // 自动草稿是尽力保存；受限运行环境下不能让页面因此崩溃。
+    return false;
   }
 }
 
-function removeDraftStorage(key: string): void {
+function removeDraftStorage(key: string): boolean {
   try {
     uni.removeStorageSync(key);
+    return true;
   } catch {
-    // 存储不可用或条目已不存在时无需打断用户流程。
+    return false;
   }
 }
 
@@ -61,7 +64,8 @@ function isUploadedPhoto(value: unknown): boolean {
     typeof value.url === "string" &&
     (value.localPath === undefined || typeof value.localPath === "string") &&
     (value.capturedAt === undefined ||
-      (typeof value.capturedAt === "number" && Number.isFinite(value.capturedAt)))
+      (typeof value.capturedAt === "number" && Number.isFinite(value.capturedAt))) &&
+    (value.source === undefined || value.source === "camera" || value.source === "unknown")
   );
 }
 
@@ -141,6 +145,7 @@ function isStoredDraft(value: unknown, ownerUserId: number): value is StoredDraf
 }
 
 export function useReportDraft(ownerSource: DraftOwnerSource) {
+  const saveState = shallowRef<"idle" | "saved" | "failed">("idle");
   function ownerUserId(): number | null {
     const value = typeof ownerSource === "function" ? ownerSource() : ownerSource;
     return typeof value === "number" && Number.isInteger(value) && value > 0
@@ -163,12 +168,18 @@ export function useReportDraft(ownerSource: DraftOwnerSource) {
       }
       return null;
     }
-    return JSON.parse(JSON.stringify(value.form)) as ReportFormState;
+    const restored = JSON.parse(JSON.stringify(value.form)) as ReportFormState;
+    // 向导按当前后端题目顺序展示，旧草稿数组顺序不能决定题目与答案的配对。
+    restored.quizzes = QUIZ_DEFINITIONS[restored.type].map((definition) =>
+      restored.quizzes.find((quiz) => quiz.type === definition.type)!,
+    );
+    return restored;
   }
 
   function saveDraft(form: ReportFormState): void {
     const ownerId = ownerUserId();
     if (!ownerId) {
+      saveState.value = "failed";
       return;
     }
     if (!hasReportProgress(form)) {
@@ -181,16 +192,16 @@ export function useReportDraft(ownerSource: DraftOwnerSource) {
       savedAt: new Date().toISOString(),
       form: JSON.parse(JSON.stringify(form)) as ReportFormState,
     };
-    writeDraftStorage(reportDraftStorageKey(ownerId), draft);
+    saveState.value = writeDraftStorage(reportDraftStorageKey(ownerId), draft) ? "saved" : "failed";
   }
 
-  function clearDraft(): void {
+  function clearDraft(): boolean {
     removeDraftStorage(LEGACY_REPORT_DRAFT_KEY);
     const ownerId = ownerUserId();
-    if (ownerId) {
-      removeDraftStorage(reportDraftStorageKey(ownerId));
-    }
+    const cleared = !ownerId || removeDraftStorage(reportDraftStorageKey(ownerId));
+    saveState.value = cleared ? "idle" : "failed";
+    return cleared;
   }
 
-  return { loadDraft, saveDraft, clearDraft };
+  return { loadDraft, saveDraft, clearDraft, saveState };
 }

@@ -85,16 +85,12 @@ onLoad(async () => {
 
 <template>
   <view class="login-page">
-    <view class="login-page__decor login-page__decor--one" />
-    <view class="login-page__decor login-page__decor--two" />
+    <image class="login-page__background" src="/static/brand/login-background.jpg" mode="aspectFill" aria-hidden="true" />
 
     <view class="login-page__content">
       <view class="login-page__brand">
-        <view class="login-page__logo" aria-hidden="true">
-          <text class="login-page__logo-mark">田</text>
-        </view>
+        <image class="login-page__logo" src="/static/brand/logo.png" mode="aspectFit" aria-label="农田专项整治标志" />
         <text class="login-page__title">农田专项整治</text>
-        <text class="login-page__subtitle">现场巡查与整改工作平台</text>
       </view>
 
       <view v-if="checkingSession" class="login-page__checking">
@@ -109,7 +105,7 @@ onLoad(async () => {
         <view class="login-field">
           <text class="login-field__label">账号</text>
           <view class="login-field__control">
-            <text class="login-field__prefix" aria-hidden="true">人</text>
+            <image class="login-field__prefix" src="/static/icons/user-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="username"
               class="login-field__input"
@@ -117,6 +113,9 @@ onLoad(async () => {
               type="text"
               placeholder="请输入账号"
               :disabled="authStore.loading"
+              :cursor-spacing="96"
+              :adjust-position="true"
+              aria-label="账号"
               confirm-type="next"
             />
           </view>
@@ -125,7 +124,7 @@ onLoad(async () => {
         <view class="login-field">
           <text class="login-field__label">密码</text>
           <view class="login-field__control">
-            <text class="login-field__prefix" aria-hidden="true">锁</text>
+            <image class="login-field__prefix" src="/static/icons/lock-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="password"
               class="login-field__input login-field__input--password"
@@ -133,15 +132,20 @@ onLoad(async () => {
               :password="!showPassword"
               placeholder="请输入密码"
               :disabled="authStore.loading"
+              :cursor-spacing="96"
+              :adjust-position="true"
+              aria-label="密码"
               confirm-type="done"
               @confirm="submit"
             />
             <button
               class="login-field__toggle"
               :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :disabled="authStore.loading"
+              hover-class="login-field__toggle--pressed"
               @tap="showPassword = !showPassword"
             >
-              {{ showPassword ? "隐藏" : "显示" }}
+              <image :src="showPassword ? '/static/icons/eye-primary.png' : '/static/icons/eyeOff-primary.png'" class="login-field__eye" mode="aspectFit" aria-hidden="true" />
             </button>
           </view>
         </view>
@@ -157,18 +161,18 @@ onLoad(async () => {
         </view>
 
         <checkbox-group class="login-agreement" @change="onAgreementChange">
-          <label class="login-agreement__check">
+          <label class="login-agreement__check" aria-label="同意用户协议与隐私政策">
             <checkbox value="agree" :checked="agreed" color="#015cbb" />
           </label>
           <view class="login-agreement__text">
             <text>我已阅读并同意</text>
-            <text class="login-agreement__link" @tap.stop="openLegal('agreement')">
+            <button class="login-agreement__link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('agreement')">
               《用户协议》
-            </text>
+            </button>
             <text>和</text>
-            <text class="login-agreement__link" @tap.stop="openLegal('privacy')">
+            <button class="login-agreement__link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('privacy')">
               《隐私政策》
-            </text>
+            </button>
           </view>
         </checkbox-group>
 
@@ -194,80 +198,58 @@ onLoad(async () => {
 <style scoped lang="scss">
 .login-page {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  overflow: hidden;
-  background: linear-gradient(160deg, #015cbb 0%, #0b4d93 42%, #eef5fb 42.2%, #ffffff 76%);
+  background: var(--gb-color-background);
   color: var(--gbnt-text, #152033);
 }
 
-.login-page__decor {
-  position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 50%;
-}
-
-.login-page__decor--one {
-  top: -90px;
-  right: -110px;
-  width: 300px;
-  height: 300px;
-}
-
-.login-page__decor--two {
-  top: 82px;
-  left: -86px;
-  width: 210px;
-  height: 210px;
+.login-page__background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  pointer-events: none;
 }
 
 .login-page__content {
   position: relative;
   z-index: 1;
-  padding: calc(54px + env(safe-area-inset-top)) 24px 100px;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(68px + env(safe-area-inset-top)) 22px 20px;
 }
 
 .login-page__brand {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #ffffff;
+  color: var(--gb-color-text-primary);
 }
 
 .login-page__logo {
-  display: flex;
-  width: 68px;
-  height: 68px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  display: block;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.login-page__logo-mark {
-  font-size: 34px;
-  font-weight: 700;
+  background: var(--gb-color-surface);
 }
 
 .login-page__title {
   margin-top: 14px;
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 2px;
 }
 
-.login-page__subtitle {
-  margin-top: 7px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 13px;
-}
-
 .login-page__checking,
 .login-card {
-  margin-top: 34px;
-  border: 1px solid rgba(220, 228, 238, 0.9);
-  border-radius: 10px;
-  background: #ffffff;
+  margin-top: 42px;
+  border-radius: var(--gb-radius-lg);
+  background: var(--gb-color-surface);
 }
 
 .login-page__checking {
@@ -314,17 +296,18 @@ onLoad(async () => {
 }
 
 .login-field__prefix {
-  width: 46px;
-  color: var(--gbnt-text-secondary, #526277);
-  font-size: 13px;
-  text-align: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0 12px;
 }
 
 .login-field__input {
   flex: 1;
+  min-width: 0;
   height: 48px;
   padding-right: 12px;
-  font-size: 15px;
+  font-size: 16px;
   box-sizing: border-box;
 }
 
@@ -336,7 +319,10 @@ onLoad(async () => {
   position: absolute;
   top: 2px;
   right: 0;
-  width: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
   height: 44px;
   margin: 0;
   padding: 0;
@@ -351,16 +337,19 @@ onLoad(async () => {
   border: 0;
 }
 
+.login-field__eye { width: 22px; height: 22px; }
+.login-field__toggle--pressed { opacity: 0.65; }
+
 .login-field--slider {
   margin-bottom: 4px;
 }
 
 .login-agreement {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   margin-top: 14px;
   color: var(--gbnt-text-secondary, #526277);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.8;
 }
 
@@ -371,7 +360,6 @@ onLoad(async () => {
   flex: none;
   align-items: center;
   justify-content: flex-start;
-  margin-top: -7px;
 }
 
 .login-agreement__check checkbox {
@@ -380,12 +368,30 @@ onLoad(async () => {
 }
 
 .login-agreement__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
   flex: 1;
 }
 
 .login-agreement__link {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--gbnt-primary, #015cbb);
+  font-size: inherit;
+  line-height: 1.5;
 }
+
+.login-agreement__link::after { border: 0; }
+.login-agreement__link--pressed { opacity: 0.65; }
 
 .login-card__submit {
   display: flex;
@@ -396,6 +402,7 @@ onLoad(async () => {
   margin-top: 12px;
   border-radius: 6px;
   background: var(--gbnt-primary, #015cbb);
+  color: #ffffff;
   font-size: 16px;
   line-height: 48px;
 }
@@ -412,20 +419,24 @@ onLoad(async () => {
 .login-card__legal-note {
   display: block;
   margin-top: 12px;
-  color: #8a94a3;
-  font-size: 11px;
+  color: var(--gb-color-text-secondary);
+  font-size: 12px;
   line-height: 1.5;
   text-align: center;
 }
 
 .login-page__footer {
-  position: absolute;
-  right: 0;
-  bottom: calc(18px + env(safe-area-inset-bottom));
-  left: 0;
+  position: relative;
   z-index: 1;
-  color: #738196;
+  margin-top: auto;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  color: var(--gb-color-text-secondary);
   font-size: 12px;
   text-align: center;
+}
+
+@media (max-height: 600px) {
+  .login-page__content { padding-top: calc(32px + env(safe-area-inset-top)); }
+  .login-card, .login-page__checking { margin-top: 24px; }
 }
 </style>

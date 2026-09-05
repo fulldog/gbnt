@@ -108,12 +108,32 @@ function notifyIfUnauthorized(error: ApiError, hooks: ApiLifecycleHooks): void {
   hooks.onUnauthorized?.(context);
 }
 
+/** 网关和未匹配路由可能没有 JSON 信封，按 HTTP 状态提供可诊断的消息。 */
+function httpErrorMessage(status: number): string {
+  switch (status) {
+    case 401: return "未登录或凭证无效";
+    case 403: return "无权限访问该接口";
+    case 404: return "接口不存在，请检查请求路径或后端版本";
+    case 502: return "服务网关异常，请稍后重试";
+    case 503: return "服务暂不可用，请稍后重试";
+    case 504: return "服务响应超时，请稍后重试";
+    default: return `HTTP ${status}`;
+  }
+}
+
+function responseTraceId(response: TransportResponse<unknown>): string | null {
+  const traceId = isEnvelope(response.data) ? response.data.trace_id : null;
+  return typeof traceId === "string" && traceId
+    ? traceId
+    : getResponseHeader(response.headers, "X-Request-Id");
+}
+
 function errorFromResponse(response: TransportResponse<unknown>): ApiError {
   const envelope = isEnvelope(response.data) ? response.data : null;
-  return new ApiError(envelope?.message || `HTTP ${response.status}`, {
+  return new ApiError(envelope?.message || httpErrorMessage(response.status), {
     status: response.status,
     code: envelope?.code,
-    traceId: envelope?.trace_id || null,
+    traceId: responseTraceId(response),
   });
 }
 
@@ -137,19 +157,21 @@ export function handleApiResponse<TData>(
 ): TData {
   notifyTokenRenewal(response, hooks);
 
-  if (!isEnvelope(response.data)) {
-    const error = new ApiError("服务端响应不符合统一接口格式", {
-      status: response.status,
-    });
+  // 先识别 HTTP 失败；404 文本或 502 HTML 不应被误报为成功响应的格式错误。
+  if (response.status < 200 || response.status >= 300) {
+    const error = errorFromResponse(response);
     notifyIfUnauthorized(error, hooks);
     throw error;
   }
 
-  if (
-    response.status < 200 ||
-    response.status >= 300 ||
-    response.data.code !== 0
-  ) {
+  if (!isEnvelope(response.data)) {
+    throw new ApiError("服务端响应不符合统一接口格式", {
+      status: response.status,
+      traceId: responseTraceId(response),
+    });
+  }
+
+  if (response.data.code !== 0) {
     const error = errorFromResponse(response);
     notifyIfUnauthorized(error, hooks);
     throw error;

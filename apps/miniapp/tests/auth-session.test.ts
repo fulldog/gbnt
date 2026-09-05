@@ -62,7 +62,7 @@ describe("miniapp session storage", () => {
     writeSession(loginResult);
 
     expect(readAccessToken()).toBe("token-1");
-    expect(readStoredUser()).toEqual(loginResult.user);
+    expect(readStoredUser()).toEqual({ ...loginResult.user, org_name: null, org_path: null, role_name: null });
   });
 
   it("clears an expired session before returning a token", () => {

@@ -13,6 +13,8 @@ export interface UploadedPhoto {
   url: string;
   localPath?: string;
   capturedAt?: number;
+  /** 仅 cameraOnly 拍摄路径可标为 camera；旧草稿/普通选择不伪造来源。 */
+  source?: "camera" | "unknown";
 }
 
 export interface QuizFormItem {
@@ -145,4 +147,10 @@ export function replaceIssueType(form: ReportFormState, type: IssueType): void {
   form.planDate = "";
   form.signatureFileId = "";
   form.signaturePreviewUrl = "";
+}
+
+/** 切换到出水现场取证时，不能把普通相册照片当作取证照片复用。 */
+export function changeQuizAnswer(item: QuizFormItem, value: boolean): void {
+  if (item.type === "water_out" && item.value !== value && value) item.photos = [];
+  item.value = value;
 }

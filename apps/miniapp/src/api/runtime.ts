@@ -1,6 +1,7 @@
 import { createMiniappApi } from "./index";
 import {
   clearSession,
+  getSessionRevision,
   readAccessToken,
   writeAccessToken,
 } from "./session";
@@ -36,7 +37,18 @@ const request: UniRequest = (options) => {
     options.fail({ errMsg: "未配置 VITE_API_BASE_URL" });
     return undefined;
   }
-  return (uni.request as unknown as UniRequest)(options);
+  const revision = getSessionRevision();
+  return (uni.request as unknown as UniRequest)({
+    ...options,
+    success: (response) => {
+      // 旧账号的 401 或续期头不能清除、覆盖新账号会话。
+      if (revision !== getSessionRevision()) {
+        options.fail({ errMsg: "会话已变更，请重新加载" });
+        return;
+      }
+      options.success(response);
+    },
+  });
 };
 
 const uploadFile: UniUploadFile = (options) => {
@@ -44,7 +56,17 @@ const uploadFile: UniUploadFile = (options) => {
     options.fail({ errMsg: "未配置 VITE_API_BASE_URL" });
     return undefined;
   }
-  return (uni.uploadFile as unknown as UniUploadFile)(options);
+  const revision = getSessionRevision();
+  return (uni.uploadFile as unknown as UniUploadFile)({
+    ...options,
+    success: (response) => {
+      if (revision !== getSessionRevision()) {
+        options.fail({ errMsg: "会话已变更，请重新上传" });
+        return;
+      }
+      options.success(response);
+    },
+  });
 };
 
 export const miniappApi = createMiniappApi({

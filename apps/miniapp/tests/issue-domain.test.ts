@@ -14,7 +14,7 @@ import {
 } from "@/domain/issues/validation";
 
 function photo(fileId: string, capturedAt?: number) {
-  return { fileId, url: `/uploads/${fileId}.jpg`, capturedAt };
+  return { fileId, url: `/uploads/${fileId}.jpg`, capturedAt, source: "camera" as const };
 }
 
 function validWellForm(): ReportFormState {

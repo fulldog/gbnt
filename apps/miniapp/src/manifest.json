@@ -6,7 +6,7 @@
   "versionCode": "10",
   "transformPx": false,
   "mp-weixin": {
-    "appid": "",
+    "appid": "wxecb6c326a0937c24",
     "lazyCodeLoading": "requiredComponents",
     "permission": {
       "scope.userLocation": {

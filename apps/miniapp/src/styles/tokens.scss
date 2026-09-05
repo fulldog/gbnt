@@ -21,6 +21,15 @@ page {
   --gb-space-xl: 48rpx;
   --gb-safe-area-bottom: env(safe-area-inset-bottom);
 
+  /* 登录、个人中心沿用的前缀统一映射，避免回落到各页面的独立色值。 */
+  --gbnt-primary: var(--gb-color-primary);
+  --gbnt-primary-soft: var(--gb-color-primary-soft);
+  --gbnt-bg: var(--gb-color-background);
+  --gbnt-text: var(--gb-color-text-primary);
+  --gbnt-text-secondary: var(--gb-color-text-secondary);
+  --gbnt-border: var(--gb-color-border);
+  --gbnt-danger: var(--gb-color-danger);
+
   /* 领域组件使用的语义别名，值仍统一由 gb token 管理。 */
   --color-primary: var(--gb-color-primary);
   --color-primary-soft: var(--gb-color-primary-soft);

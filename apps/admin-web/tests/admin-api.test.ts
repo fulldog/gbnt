@@ -13,6 +13,7 @@ function setup(value: unknown) {
 const counts = { type: "well", total: 2, pending: 1, done: 1 };
 const issue = {
   id: 10, issue_key: "issue-readable", type: "well", report_user_id: 3, assignee_user: 4, org_id: 7,
+  rectify_round: 0,
   report_user_name: "上报人", assignee_user_name: "整改人", org_name: "社区", org_path: "街道 / 社区",
   type_ext: { checklist: [{ type: "transformer_ok", photos: [{ file_id: "photo", url: "/uploads/photo" }] }] },
   reporter_signature: { file_id: "signature", url: "/uploads/signature" }, rectify_records: [],
@@ -68,8 +69,8 @@ describe("管理端独立读取契约", () => {
   });
 
   it("兼容旧详情无名称字段及新详情关联缺失，拒绝异常名称类型", async () => {
-    expect(await setup({ id: 1 }).issues.get(1)).toEqual({ id: 1 });
-    expect(await setup({ id: 1, org_path: null }).issues.get(1)).toEqual({ id: 1, org_path: null });
+    expect(await setup({ id: 1 }).issues.get(1)).toEqual({ id: 1, rectify_round: 0 });
+    expect(await setup({ id: 1, org_path: null }).issues.get(1)).toEqual({ id: 1, org_path: null, rectify_round: 0 });
     await expect(setup({ id: 1, org_path: [] }).issues.get(1)).rejects.toThrow("关联名称格式异常");
   });
 

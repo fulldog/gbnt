@@ -1,12 +1,12 @@
 import {
   ApiError,
-  type AuthUser,
   type MiniappLoginInput,
   type PasswordInput,
 } from "@gbnt/api-client";
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
+import type { MiniappAuthUser } from "@/api/types";
 import {
   clearSession,
   readAccessToken,
@@ -27,34 +27,40 @@ export function isUnauthorizedSessionError(error: unknown): boolean {
 
 export const useAuthStore = defineStore("auth", () => {
   const token = shallowRef<string | null>(readAccessToken());
-  const user = shallowRef<AuthUser | null>(readStoredUser());
+  const user = shallowRef<MiniappAuthUser | null>(readStoredUser());
   const initialized = shallowRef(false);
   const loading = shallowRef(false);
   let restorePromise: Promise<void> | null = null;
+  let sessionVersion = 0;
 
   const isAuthenticated = computed(() => Boolean(token.value && user.value));
 
-  function applyUser(nextUser: AuthUser): void {
+  function applyUser(nextUser: MiniappAuthUser): void {
     user.value = nextUser;
     writeStoredUser(nextUser);
   }
 
   function reset(): void {
+    sessionVersion += 1;
+    restorePromise = null;
     clearSession();
     token.value = null;
     user.value = null;
+    loading.value = false;
   }
 
   async function signIn(input: MiniappLoginInput): Promise<void> {
+    const version = ++sessionVersion;
     loading.value = true;
     try {
       const result = await miniappApi.auth.login(input);
+      if (version !== sessionVersion) throw new Error("登录请求已失效，请重新登录");
       writeSession(result);
       token.value = result.token;
       user.value = result.user;
       initialized.value = true;
     } finally {
-      loading.value = false;
+      if (version === sessionVersion) loading.value = false;
     }
   }
 
@@ -69,19 +75,21 @@ export const useAuthStore = defineStore("auth", () => {
     if (initialized.value && user.value) return Promise.resolve();
     if (restorePromise) return restorePromise;
 
-    restorePromise = (async () => {
+    const version = sessionVersion;
+    const pendingRestore = (async () => {
       try {
-        applyUser(await miniappApi.auth.getMe());
+        const restoredUser = await miniappApi.auth.getMe();
+        if (version === sessionVersion && token.value === storedToken) applyUser(restoredUser);
       } catch (error) {
-        if (isUnauthorizedSessionError(error)) {
+        if (version === sessionVersion && isUnauthorizedSessionError(error)) {
           reset();
         }
       }
     })().finally(() => {
-      initialized.value = true;
-      restorePromise = null;
+      if (version === sessionVersion) initialized.value = true;
+      if (restorePromise === pendingRestore) restorePromise = null;
     });
-
+    restorePromise = pendingRestore;
     return restorePromise;
   }
 
@@ -90,19 +98,24 @@ export const useAuthStore = defineStore("auth", () => {
       reset();
       return;
     }
-    applyUser(await miniappApi.auth.getMe());
+    const version = sessionVersion;
+    const requestedToken = token.value;
+    const refreshedUser = await miniappApi.auth.getMe();
+    if (version === sessionVersion && token.value === requestedToken) applyUser(refreshedUser);
   }
 
   async function changePassword(input: PasswordInput): Promise<void> {
+    const version = sessionVersion;
     await miniappApi.auth.changePassword(input);
-    reset();
+    if (version === sessionVersion) reset();
   }
 
   async function signOut(): Promise<void> {
+    const version = sessionVersion;
     try {
       if (token.value) await miniappApi.auth.logout();
     } finally {
-      reset();
+      if (version === sessionVersion) reset();
     }
   }
 

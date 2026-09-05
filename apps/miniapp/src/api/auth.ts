@@ -1,44 +1,44 @@
 import type {
   ApiClient,
-  AuthUser,
-  LoginResult,
   MiniappLoginInput,
   PasswordInput,
   SliderFinishInput,
   SliderFinishResult,
   SliderStartResult,
 } from "@gbnt/api-client";
+import { parseAuthUser, parseLogin, parseSliderStart, parseSliderFinish } from "./response";
+import type { MiniappAuthUser, MiniappLoginResult } from "./types";
 
 export function createAuthApi(client: ApiClient) {
   return {
-    startSlider(): Promise<SliderStartResult> {
-      return client.request<SliderStartResult>("/api/app/auth/slider/start", {
+    async startSlider(): Promise<SliderStartResult> {
+      return parseSliderStart(await client.request<unknown>("/api/app/auth/slider/start", {
         method: "POST",
         auth: false,
-      });
+      }));
     },
 
-    finishSlider(input: SliderFinishInput): Promise<SliderFinishResult> {
-      return client.request<SliderFinishResult, SliderFinishInput>(
+    async finishSlider(input: SliderFinishInput): Promise<SliderFinishResult> {
+      return parseSliderFinish(await client.request<unknown, SliderFinishInput>(
         "/api/app/auth/slider/finish",
         {
           method: "POST",
           body: input,
           auth: false,
         },
-      );
+      ));
     },
 
-    login(input: MiniappLoginInput): Promise<LoginResult> {
-      return client.request<LoginResult, MiniappLoginInput>("/api/app/auth/login", {
+    async login(input: MiniappLoginInput): Promise<MiniappLoginResult> {
+      return parseLogin(await client.request<unknown, MiniappLoginInput>("/api/app/auth/login", {
         method: "POST",
         body: input,
         auth: false,
-      });
+      }));
     },
 
-    getMe(): Promise<AuthUser> {
-      return client.request<AuthUser>("/api/app/auth/me");
+    async getMe(): Promise<MiniappAuthUser> {
+      return parseAuthUser(await client.request<unknown>("/api/app/auth/me"));
     },
 
     changePassword(input: PasswordInput): Promise<null> {

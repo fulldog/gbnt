@@ -166,6 +166,8 @@ export type IssueTypeExt =
 
 export interface RectifyRecord extends BaseRecord {
   issue_id: number;
+  /** 所属整改轮次。旧服务未返回时按 0 读取。 */
+  round?: number;
   quiz_type: QuizType;
   note: string;
   photos: FileItem[];
@@ -181,6 +183,8 @@ interface IssueBase extends BaseRecord {
   lng: number;
   plan_date: string;
   status: IssueStatus;
+  /** 当前整改轮次；重新整改时递增。旧服务未返回时按 0 读取。 */
+  rectify_round?: number;
   reporter_signature_file_id: string;
   report_user_id: number;
   assignee_user: number;
@@ -264,6 +268,8 @@ export interface RectifyItemInput {
 
 export interface RectifyInput {
   rectify_list: RectifyItemInput[];
+  /** 新客户端传当前 rectify_round，过期时服务端拒绝；省略仅兼容旧客户端。 */
+  expected_round?: number;
 }
 
 export interface ReassignIssueInput {

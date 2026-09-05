@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import RecoverableImage from "@/components/common/RecoverableImage.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -22,18 +23,16 @@ const visibleUrls = computed(() => props.urls.slice(0, props.max));
 
 <template>
   <view v-if="visibleUrls.length" class="photo-grid" :class="{ 'photo-grid--compact': compact }">
-    <button
+    <view
       v-for="(url, index) in visibleUrls"
       :key="`${url}-${index}`"
       class="photo-grid__item"
-      :aria-label="`查看第 ${index + 1} 张照片`"
-      @tap.stop="emit('preview', index)"
     >
-      <image class="photo-grid__image" :src="url" mode="aspectFill" lazy-load />
+      <RecoverableImage :src="url" :alt="`第 ${index + 1} 张照片`" @preview="emit('preview', index)" />
       <text v-if="index === visibleUrls.length - 1 && urls.length > max" class="photo-grid__more">
         +{{ urls.length - max }}
       </text>
-    </button>
+    </view>
   </view>
 </template>
 
@@ -53,7 +52,8 @@ const visibleUrls = computed(() => props.urls.slice(0, props.max));
   position: relative;
   width: 100%;
   height: 188rpx;
-  min-height: 0;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -66,25 +66,16 @@ const visibleUrls = computed(() => props.urls.slice(0, props.max));
   height: 144rpx;
 }
 
-.photo-grid__item::after {
-  border: 0;
-}
-
-.photo-grid__image {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
 .photo-grid__more {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  right: 0;
+  bottom: 0;
+  padding: 4px 8px;
+  border-top-left-radius: var(--gb-radius-sm);
   background: rgba(0, 0, 0, 0.52);
   color: #fff;
-  font-size: 32rpx;
+  font-size: 14px;
   font-weight: 600;
+  pointer-events: none;
 }
 </style>

@@ -1,6 +1,7 @@
 import type { IssueType, QuizType } from "@gbnt/api-client";
 import { QUIZ_DEFINITIONS, quizIndicatesIssue } from "./definitions";
 import type { QuizFormItem, ReportFormState } from "./form";
+import { hasValidCoordinates } from "@/utils/issue-display";
 
 function parseNumber(value: string): number {
   return Number(value.trim());
@@ -11,6 +12,7 @@ function validateRequiredNumber(
   label: string,
   errors: string[],
   maximum?: number,
+  integer = false,
 ): void {
   if (!value.trim()) {
     errors.push(`请填写${label}`);
@@ -24,6 +26,7 @@ function validateRequiredNumber(
   if (maximum !== undefined && number > maximum) {
     errors.push(`${label}不能大于 ${maximum}`);
   }
+  if (integer && !Number.isSafeInteger(number)) errors.push(`${label}必须是非负整数`);
 }
 
 function validateKeeperPhone(value: string, errors: string[]): void {
@@ -37,10 +40,10 @@ function validateDetails(form: ReportFormState, errors: string[]): void {
   const details = form.details;
   switch (form.type) {
     case "well":
-      validateRequiredNumber(details.outletTotal, "出水口总数", errors);
-      validateRequiredNumber(details.outletDamaged, "出水口损坏数量", errors);
-      validateRequiredNumber(details.casingTotal, "护筒总数", errors);
-      validateRequiredNumber(details.casingDamaged, "护筒损坏数量", errors);
+      validateRequiredNumber(details.outletTotal, "出水口总数", errors, undefined, true);
+      validateRequiredNumber(details.outletDamaged, "出水口损坏数量", errors, undefined, true);
+      validateRequiredNumber(details.casingTotal, "护筒总数", errors, undefined, true);
+      validateRequiredNumber(details.casingDamaged, "护筒损坏数量", errors, undefined, true);
       if (
         details.outletTotal.trim() &&
         details.outletDamaged.trim() &&
@@ -86,8 +89,8 @@ export function validateBasicStep(form: ReportFormState): string[] {
   if (!form.address.trim()) {
     errors.push("请选择定位或填写详细地址");
   }
-  if ((form.lat === null) !== (form.lng === null)) {
-    errors.push("经纬度信息不完整，请重新选择位置");
+  if (!hasValidCoordinates(form.lat!, form.lng!)) {
+    errors.push("请在地图中选择有效现场位置，照片水印需要真实坐标");
   }
   validateDetails(form, errors);
   return errors;
@@ -145,7 +148,12 @@ function validateWaterOutInterval(item: QuizFormItem, errors: string[]): void {
   }
   const first = item.photos[0]?.capturedAt;
   const second = item.photos[1]?.capturedAt;
-  if (first && second && second - first < 60_000) {
+  if (item.photos.some((photo) => photo.source !== "camera")) {
+    errors.push("机井出水取证照片须重新使用现场拍摄，不支持相册或旧来源照片");
+  }
+  if (!first || !second || !Number.isFinite(first) || !Number.isFinite(second)) {
+    errors.push("机井出水照片缺少拍摄时间，请重新拍摄");
+  } else if (second - first < 60_000) {
     errors.push("机井出水第二张照片须在第一张拍摄至少 60 秒后获取");
   }
 }
@@ -159,6 +167,17 @@ export function validateQuizStep(form: ReportFormState): string[] {
       errors.push(`请选择“${definition.label}”`);
       continue;
     }
+    errors.push(...validateQuizItem(form.type, item));
+  }
+  return errors;
+}
+
+/** 逐题向导在离开当前题之前完成校验，不推迟到签名步骤。 */
+export function validateQuizItem(issueType: IssueType, item: QuizFormItem): string[] {
+    const errors: string[] = [];
+    const definition = QUIZ_DEFINITIONS[issueType].find((candidate) => candidate.type === item.type);
+    if (!definition) return ["排查项数据异常，请重新填写"];
+    if (item.value === null) return [`请选择“${definition.label}”`];
     const indicatesIssue = quizIndicatesIssue(definition, item.value);
     if (indicatesIssue && !item.desc.trim()) {
       errors.push(`请填写“${definition.label}”的问题说明`);
@@ -173,7 +192,6 @@ export function validateQuizStep(form: ReportFormState): string[] {
     if (item.type === "water_out") {
       validateWaterOutInterval(item, errors);
     }
-  }
   return errors;
 }
 
@@ -181,6 +199,11 @@ export function validateSubmitStep(form: ReportFormState): string[] {
   const errors = [...validateBasicStep(form), ...validateQuizStep(form)];
   if (reportNeedsRectify(form) && !form.planDate) {
     errors.push("存在待整改问题时必须选择计划完成日期");
+  }
+  if (form.planDate && (!/^\d{4}-\d{2}-\d{2}$/.test(form.planDate) ||
+      Number.isNaN(Date.parse(`${form.planDate}T00:00:00Z`)) ||
+      new Date(`${form.planDate}T00:00:00Z`).toISOString().slice(0, 10) !== form.planDate)) {
+    errors.push("计划完成日期无效，请重新选择");
   }
   if (!form.signatureFileId) {
     errors.push("请完成排查人电子签名并上传");

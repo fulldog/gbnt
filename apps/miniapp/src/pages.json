@@ -4,7 +4,6 @@
       "path": "pages/login/index",
       "style": {
         "navigationStyle": "custom",
-        "disableScroll": true,
         "backgroundColor": "#f4f7fb"
       }
     },
@@ -93,15 +92,21 @@
     "list": [
       {
         "pagePath": "pages/todo/index",
-        "text": "待办"
+        "text": "待办",
+        "iconPath": "static/icons/list-muted.png",
+        "selectedIconPath": "static/icons/list-primary.png"
       },
       {
         "pagePath": "pages/report/index",
-        "text": "巡查"
+        "text": "巡查",
+        "iconPath": "static/icons/patrol-muted.png",
+        "selectedIconPath": "static/icons/patrol-primary.png"
       },
       {
         "pagePath": "pages/mine/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "static/icons/user-muted.png",
+        "selectedIconPath": "static/icons/user-primary.png"
       }
     ]
   }

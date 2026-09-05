@@ -8,6 +8,9 @@ import (
 
 func (d *Deps) registerLedgerStreet(api *gin.RouterGroup) {
 	api.GET("/ledger/street", d.LedgerStreet)
+	api.GET("/ledger/street/report", d.LedgerStreetReport)
+	api.GET("/ledger/street/rows", d.LedgerStreetRows)
+	api.GET("/ledger/street/statistics", d.LedgerStreetStatistics)
 	api.GET("/ledger/street/options/orgs", d.LedgerStreetOrgOptions)
 }
 

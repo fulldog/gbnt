@@ -1,9 +1,10 @@
 import type { ApiClient, MiniappRegionsResult } from "@gbnt/api-client";
+import { parseRegions } from "./response";
 
 export function createRegionsApi(client: ApiClient) {
   return {
-    list(): Promise<MiniappRegionsResult> {
-      return client.request<MiniappRegionsResult>("/api/app/regions");
+    async list(): Promise<MiniappRegionsResult> {
+      return parseRegions(await client.request<unknown>("/api/app/regions"));
     },
   } as const;
 }
