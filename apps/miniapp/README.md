@@ -28,7 +28,9 @@ pnpm dev:mp
 
 编译产物位于 `apps/miniapp/dist/dev/mp-weixin`，把这个目录导入微信开发者工具。项目 `AppID` 需要在 `src/manifest.json` 或微信开发者工具项目设置中配置。
 
-小程序不能使用管理后台的 Vite 代理。连接现有 HTTP 测试服务时，在不提交的 `.env.development.local` 中显式设置 `VITE_API_BASE_URL=http://www.weilone.com`，该文件只参与开发编译，不参与生产构建。仅本地开发调试期间，可在开发者工具的项目「本地设置」中临时关闭合法域名/HTTPS 校验（写入开发产物下的 `project.private.config.json`）；不要修改 `src/manifest.json` 的正式 `urlCheck: true`。真机和发布环境必须改用可正常连接、已加入合法域名的 HTTPS 地址。
+小程序不能使用管理后台的 Vite 代理。当前测试服务使用 `https://www.weilone.com`，将 `.env.example` 复制到不提交的 `.env.local` 后即可连接；发布到其他环境时替换为对应的 HTTPS Origin。若本机已有 `.env.development.local`，也需要更新其中的 `VITE_API_BASE_URL`，避免开发模式仍覆盖成旧的 HTTP 地址。微信公众平台需配置 request、uploadFile、downloadFile 合法域名；`src/manifest.json` 的正式 `urlCheck: true` 保持不变，开发者工具默认开启域名/HTTPS 校验。
+
+HTTPS 证书可用不代表微信合法域名已配置。若开发者工具报 `request:fail url not in domain list`，先配置或刷新合法域名；仅在用户明确授权的本机联调期间，可在开发者工具项目「本地设置」临时关闭域名/HTTPS 校验，对应开发产物下不提交的 `project.private.config.json`。接口仍使用 HTTPS，不修改正式配置；合法域名配置并验证完成后，再恢复本机校验。
 
 修改环境变量后重新运行 `pnpm dev:mp`，确认开发者工具导入的是 `dist/dev/mp-weixin`，不要混用旧的 `dist/build/mp-weixin`。安全验证提示连接失败时，先检查 Network 中的实际请求 Origin，以及开发者工具的本地设置。接口失败不会自动放行安全验证。
 
@@ -48,7 +50,7 @@ pnpm --filter @gbnt/miniapp build:mp-weixin
 
 ## 代码边界
 
-- 页面通过 `src/api/runtime.ts` 导出的 `miniappApi` 调用后端，通过 `toAssetUrl` 补全相对附件地址；
+- 页面通过 `src/api/runtime.ts` 导出的 `miniappApi` 调用后端；`toAssetUrl` 复用共享解析器，将相对照片、签名地址拼接为 HTTPS，并兼容当前服务同主机的旧 HTTP 地址（包括历史草稿），保留微信本地临时路径及外部域名原值；
 - API Origin 仅通过 `VITE_API_BASE_URL` 注入，生产构建不会回退到测试地址；
 - 不从 `prototypes/static-demo/` 导入源码，原型只用于核对界面和业务流程；
 - 不在小程序中引入 Axios、Element Plus 或管理后台源码。

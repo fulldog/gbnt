@@ -1,4 +1,5 @@
 import { createMiniappApi } from "./index";
+import { resolveAssetUrl } from "@gbnt/api-client";
 import {
   clearSession,
   getSessionRevision,
@@ -83,12 +84,5 @@ export const miniappApi = createMiniappApi({
 });
 
 export function toAssetUrl(path: string | null | undefined): string {
-  const value = path?.trim() ?? "";
-  if (!value) return "";
-  if (/^(?:https?:|data:|wxfile:|blob:)/i.test(value) || value.startsWith("//")) {
-    return value;
-  }
-
-  const normalizedPath = value.startsWith("/") ? value : `/${value}`;
-  return `${apiBaseUrl.replace(/\/+$/, "")}${normalizedPath}`;
+  return resolveAssetUrl(path, apiBaseUrl);
 }

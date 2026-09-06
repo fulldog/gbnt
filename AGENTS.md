@@ -32,7 +32,7 @@ pnpm dev:admin
 ```
 
 - 访问地址以 Vite 终端实际输出为准，默认通常为 `http://localhost:5173`；
-- 默认将同源 `/api` 和 `/uploads` 代理到测试服务 `http://www.weilone.com`；
+- 默认将同源 `/api` 和 `/uploads` 代理到测试服务 `https://www.weilone.com`；
 - 连接本机后端时，在不提交的 `apps/admin-web/.env.local` 中设置 `VITE_API_PROXY_TARGET=http://127.0.0.1:8080`，并保持 `VITE_API_BASE_URL` 为空以继续使用同源代理；
 - 前后端分别部署或不使用开发代理时，通过 `VITE_API_BASE_URL` 注入完整后端 Origin；
 - 不得在源码或共享包中硬编码本机、测试或生产地址，也不得提交 `.env.local` 和任何密钥。

@@ -137,7 +137,7 @@ function addPhoto(): void {
 }
 
 function preview(index: number, loadedUrl?: string): void {
-  const urls = model.value.map((photo) => photo.url || photo.localPath || "");
+  const urls = model.value.map((photo) => toAssetUrl(photo.url) || photo.localPath || "");
   if (loadedUrl) urls[index] = loadedUrl;
   const current = urls[index];
   if (!current) {
@@ -177,7 +177,7 @@ onUnmounted(() => {
       >
         <RecoverableImage
           class="photo-image"
-          :src="photo.url"
+          :src="toAssetUrl(photo.url)"
           :fallback-src="photo.localPath"
           mode="aspectFill"
           :alt="`现场照片 ${index + 1}`"

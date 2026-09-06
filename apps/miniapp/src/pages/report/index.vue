@@ -513,7 +513,7 @@ onUnload(() => {
 
       <SignaturePad ref="signatureRef" :disabled="submitting" @changed="resetSignatureUpload" @cleared="resetSignatureUpload" />
       <view v-if="form.signaturePreviewUrl" class="signature-confirmed">
-        <view class="signature-preview"><RecoverableImage :src="form.signaturePreviewUrl" mode="aspectFit" alt="已确认的电子签名" /></view>
+        <view class="signature-preview"><RecoverableImage :src="toAssetUrl(form.signaturePreviewUrl)" mode="aspectFit" alt="已确认的电子签名" /></view>
         <text>签名已上传；重新书写后需要再次确认。</text>
       </view>
       <button class="secondary-button signature-button" :disabled="uploadingSignature || submitting" @tap="uploadSignature">

@@ -9,13 +9,15 @@ pnpm dev:admin
 ```
 
 开发服务器默认把同源 `/api` 和 `/uploads` 请求代理到远程测试服务
-`http://www.weilone.com`。如需切换到本机后端，在 `.env.local` 中覆盖：
+`https://www.weilone.com`。如需切换到本机后端，在 `.env.local` 中覆盖：
 
 ```dotenv
 VITE_API_PROXY_TARGET=http://127.0.0.1:8080
 ```
 
-如果前端与后端分别部署，可设置 `VITE_API_BASE_URL` 为后端地址。
+如果前端与后端分别部署，可设置 `VITE_API_BASE_URL` 为后端 HTTPS 地址。旧的本地配置如果仍使用公网 HTTP 地址，也需同步切换为 HTTPS，并重启开发服务器。
+
+图片与签名共用资源地址解析：相对路径沿用同源代理或配置的 API 地址；历史 HTTP 绝对地址仅在与 HTTPS API 地址或当前 HTTPS 页面同主机时升级协议，不改写第三方地址和本地预览路径。
 
 ## 验证
 

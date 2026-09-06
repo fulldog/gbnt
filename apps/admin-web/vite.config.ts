@@ -5,7 +5,7 @@ import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
-const defaultProxyTarget = "http://www.weilone.com";
+const defaultProxyTarget = "https://www.weilone.com";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
