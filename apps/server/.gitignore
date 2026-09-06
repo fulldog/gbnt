@@ -1,5 +1,8 @@
 logs/
-storage/uploads/
+# 用户上传全部忽略；保留随仓库发布的模板目录
+storage/uploads/*
+!storage/uploads/template/
+!storage/uploads/template/**
 *.log
 .env
 .idea/

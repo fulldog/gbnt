@@ -15,7 +15,9 @@ coverage/
 .demand
 
 apps/server/logs/
-apps/server/storage/uploads/
+apps/server/storage/uploads/*
+!apps/server/storage/uploads/template/
+!apps/server/storage/uploads/template/**
 apps/server/configs/config.yaml
 apps/server/gbnt.service
 prototypes/static-demo/.logs/
