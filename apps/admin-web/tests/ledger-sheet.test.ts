@@ -31,13 +31,13 @@ function verifyGrid(table: HTMLTableElement, columnCount: number): void {
 }
 
 describe("Excel 式台账结构", () => {
-  it("G1 黄金报表在两页与实际导出 XML 中保留人工预期和日期口径", () => {
+  it("G1 黄金报表在两页与实际导出 XML 中保留人工预期，仅删除动态数据口径行", () => {
     const street = goldenStreetParts();
     const survey = goldenSurveyParts();
     const streetReport = mergeLedgerParts(goldenQuery, street.base, street.statistics, composeStreetRow);
     const surveyReport = mergeLedgerParts(goldenQuery, survey.base, survey.statistics, composeSurveyRow);
-    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账", notes: [ledgerDateNote(goldenQuery), ...streetReport.notes] } });
-    const surveyWrapper = mount(SurveyLedgerSheet, { props: { rows: surveyReport.rows, title: "测试街道排查", notes: [ledgerDateNote(goldenQuery), ...surveyReport.notes] } });
+    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账" } });
+    const surveyWrapper = mount(SurveyLedgerSheet, { props: { rows: surveyReport.rows, title: "测试街道排查" } });
     expect(streetWrapper.findAll("tbody tr")).toHaveLength(2);
     expect(surveyWrapper.findAll("tbody tr")).toHaveLength(1);
     const streetCells = streetWrapper.findAll("tbody tr").map((row) => row.findAll("td").map((cell) => cell.text()));
@@ -46,14 +46,27 @@ describe("Excel 式台账结构", () => {
     const surveyCells = surveyWrapper.findAll("tbody td").map((cell) => cell.text());
     expect(surveyCells[6]).toBe("2"); expect(surveyCells[12]).toBe("1");
     expect(surveyCells[4]).toBe("—");
-    for (const [wrapper, columns] of [[streetWrapper, 16], [surveyWrapper, 22]] as const) {
+    for (const [wrapper, columns, title, notes] of [
+      [streetWrapper, 16, "测试街道台账", streetReport.notes],
+      [surveyWrapper, 22, "测试街道排查", surveyReport.notes],
+    ] as const) {
       verifyGrid(wrapper.get("table").element, columns);
+      expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
       const xml = new DOMParser().parseFromString(buildLedgerSpreadsheet(wrapper.get("table").element, "黄金报表"), "application/xml");
       expect(xml.querySelector("parsererror")).toBeNull();
       const ns = "urn:schemas-microsoft-com:office:spreadsheet";
       expect(xml.getElementsByTagNameNS(ns, "Column")).toHaveLength(columns);
-      expect(xml.documentElement.textContent).toContain("2026-09-01 至 2026-09-05");
+      for (const text of [wrapper.text(), xml.documentElement.textContent ?? ""]) {
+        expect(text).toContain(title);
+        expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
+        if (columns === 22) expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
+        for (const note of ["数据口径", "上报日期", ledgerDateNote(goldenQuery), ...notes]) {
+          expect(text).not.toContain(note);
+        }
+      }
       const rows = Array.from(xml.getElementsByTagNameNS(ns, "Row"));
+      expect(rows[0]!.getElementsByTagNameNS(ns, "Cell")[0]!.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
+      expect(rows.at(-1)!.getElementsByTagNameNS(ns, "Cell")[0]!.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
       const firstBody = rows[columns === 16 ? 4 : 5]!;
       const values = Array.from(firstBody.getElementsByTagNameNS(ns, "Data")).map((cell) => cell.textContent);
       if (columns === 16) {
@@ -71,15 +84,16 @@ describe("Excel 式台账结构", () => {
       streetReportRow({ row_key: "2023:4", org_id: 4 }),
       streetReportRow({ row_key: "2024:3", project_year: 2024 }),
     ];
-    const wrapper = mount(StreetLedgerSheet, { props: { rows, title: "建设项目北城街道台账", notes: ["移交字段尚未采集，不代表零。"] } });
+    const wrapper = mount(StreetLedgerSheet, { props: { rows, title: "建设项目北城街道台账" } });
     expect(wrapper.findAll("col")).toHaveLength(16);
     expect(wrapper.findAll("thead tr")).toHaveLength(4);
     expect(wrapper.get("thead tr:first-child th").attributes("colspan")).toBe("16");
     expect(wrapper.get("tbody tr:first-child td:nth-child(2)").attributes("rowspan")).toBe("2");
     expect(wrapper.get("tbody tr:first-child td:nth-child(3)").attributes("rowspan")).toBe("2");
     expect(wrapper.get("tbody tr:first-child td:nth-child(4)").attributes("rowspan")).toBe("2");
-    expect(wrapper.get("tfoot").text()).toContain("公章");
-    expect(wrapper.get("tfoot").text()).toContain("移交字段尚未采集，不代表零");
+    expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
+    expect(wrapper.get("tfoot").text()).toBe("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
+    expect(wrapper.text()).not.toContain("数据口径");
     expect(wrapper.text()).toContain("1.25");
     expect(wrapper.find("input").exists()).toBe(false);
     verifyGrid(wrapper.get("table").element, 16);

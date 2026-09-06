@@ -11,7 +11,7 @@ import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useLedgerReport } from "@/composables/useLedgerReport";
 import { exportLedgerTable } from "@/utils/ledger-export";
 import { composeSurveyRow } from "@/utils/ledger-report-merge";
-import { ledgerDateNote, ledgerExportName } from "@/utils/ledger-report-query";
+import { ledgerExportName } from "@/utils/ledger-report-query";
 import { errorMessage } from "@/utils/error";
 
 const api = useAdminApi();
@@ -30,7 +30,6 @@ const { data: report, loading, loadError, hasLoaded, run: load } = useLedgerRepo
   errorMessage: "排查汇总加载失败",
 });
 const rows = computed(() => report.value?.rows ?? []);
-const notes = computed(() => report.value ? [ledgerDateNote(report.value.query), ...report.value.notes] : undefined);
 const canExport = computed(() => hasLoaded.value && !loading.value && !loadError.value && rows.value.length > 0);
 const title = computed(() => {
   const selectedId = report.value?.query.street_org_id;
@@ -65,6 +64,6 @@ onMounted(() => { void Promise.all([loadOrgs(), load()]); });
     <template #notice>
       <p class="ledger-report-notice">按上报日期筛选。问题、整改数量来自有效上报记录，不是设施总量；— 表示尚未采集或无法核验，不代表 0。</p>
     </template>
-    <SurveyLedgerSheet :rows="rows" :title="title" :notes="notes" :empty-text="emptyText" />
+    <SurveyLedgerSheet :rows="rows" :title="title" :empty-text="emptyText" />
   </LedgerReportFrame>
 </template>

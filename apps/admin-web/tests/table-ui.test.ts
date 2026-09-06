@@ -8,6 +8,7 @@ import SurveyLedgerSheet from "@/components/ledger/SurveyLedgerSheet.vue";
 import LedgerFilters from "@/components/ledger/LedgerFilters.vue";
 import LedgerReportFrame from "@/components/ledger/LedgerReportFrame.vue";
 import { exportLedgerTable } from "@/utils/ledger-export";
+import { downloadBlob } from "@/utils/download";
 import { streetReportRow, surveyReportRow } from "./fixtures/ledger-report";
 import { allLedgerQuery, streetParts, surveyParts } from "./fixtures/ledger-report-parts";
 import type { LedgerAppliedQuery } from "@/api/ledger-report-types";
@@ -32,7 +33,11 @@ const api = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/api/runtime", () => ({ useAdminApi: () => api }));
-vi.mock("@/utils/ledger-export", () => ({ exportLedgerTable: vi.fn() }));
+vi.mock("@/utils/ledger-export", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/ledger-export")>();
+  return { ...actual, exportLedgerTable: vi.fn(actual.exportLedgerTable) };
+});
+vi.mock("@/utils/download", () => ({ downloadBlob: vi.fn() }));
 vi.mock("@/stores/permission", () => ({ usePermissionStore: () => ({ can: () => true }) }));
 vi.mock("@/stores/auth", () => ({ useAuthStore: () => ({ user: null }) }));
 vi.mock("@/components/TypeDistributionChart.vue", () => ({ default: { template: "<div />" } }));
@@ -105,6 +110,14 @@ async function click(wrapper: VueWrapper, text: string) {
   expect(button, `找不到按钮 ${text}`).toBeDefined();
   await button!.trigger("click");
 }
+function readBlobText(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
 const user = {
   id: 2, username: "worker", name: "张三", phone: "", org_id: 3, role_id: 2,
   is_super_admin: false, status: 1, created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:00Z",
@@ -163,7 +176,8 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("北城街道");
     expect(wrapper.getComponent(StreetLedgerSheet).props("rows")).toHaveLength(1);
-    expect(wrapper.get("tfoot").text()).toContain("缺少资产基表");
+    expect(wrapper.text()).not.toContain("缺少资产基表");
+    expect(wrapper.text()).not.toContain("数据口径");
     expect(wrapper.text()).toContain("无候选权限");
     expect(api.orgs.list).not.toHaveBeenCalled();
     await click(wrapper, "重新加载");
@@ -186,7 +200,7 @@ describe("汇总表真实状态", () => {
     expect(wrapper.text()).not.toContain("旧请求失败");
   });
 
-  it("查询日期快照随结果写入报表，修改未查询条件不污染当前导出口径", async () => {
+  it("保留查询日期快照，修改未查询条件不污染结果且不再生成日期脚注", async () => {
     const wrapper = render(StreetLedgerView);
     await flushPromises();
     const filters = wrapper.getComponent(LedgerFilters);
@@ -203,9 +217,56 @@ describe("汇总表真实状态", () => {
     filters.vm.$emit("update:dateRange", ["2025-01-01", "2025-12-31"]);
     pending.resolve(parts.base);
     await flushPromises();
-    expect(wrapper.get("tfoot").text()).toContain("2026-01-01 至 2026-08-31");
+    expect(wrapper.get("tfoot").text()).not.toContain("2026-01-01");
     expect(wrapper.get("tfoot").text()).not.toContain("2025-01-01");
+    expect(wrapper.text()).not.toContain("上报日期范围");
+    expect(wrapper.text()).not.toContain("非去重资产总量");
     expect(wrapper.get("thead").text()).toContain("北城街道台账");
+    await click(wrapper, "导出 Excel");
+    expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, "街道台账_街道2_2026-01-01至2026-08-31");
+  });
+
+  it.each(["street", "survey"] as const)("%s 页面与实际导出 XML 均不含动态口径行，保留原始备注、标题和数据", async (kind) => {
+    const component = kind === "street" ? StreetLedgerView : SurveyLedgerView;
+    const readRows = kind === "street" ? api.ledger.getStreetRows : api.ledger.getSurveyRows;
+    const readStatistics = kind === "street" ? api.ledger.getStreetStatistics : api.ledger.getSurveyStatistics;
+    const notes = ["基础资料未采集，不代表零。", "统计只按上报记录，不代表去重资产。", "上报日期：服务端动态备注。"];
+    const makeParts = (query: LedgerAppliedQuery) => {
+      const parts = kind === "street" ? streetParts([streetReportRow()], query, [notes[0]!]) : surveyParts([surveyReportRow()], query, [notes[0]!]);
+      return { ...parts, statistics: { ...parts.statistics, notes: notes.slice(1) } };
+    };
+    readRows.mockImplementation(async (query: LedgerAppliedQuery) => makeParts(query).base);
+    readStatistics.mockImplementation(async (query: LedgerAppliedQuery) => makeParts(query).statistics);
+    const wrapper = render(component);
+    await flushPromises();
+    const filters = wrapper.getComponent(LedgerFilters);
+    filters.vm.$emit("update:streetOrgId", 2);
+    filters.vm.$emit("update:dateRange", ["2026-01-01", "2026-08-31"]);
+    await flushPromises();
+    await click(wrapper, "查询");
+    await flushPromises();
+    expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
+    await click(wrapper, "导出 Excel");
+    const label = kind === "street" ? "街道台账" : "街道排查汇总";
+    expect(downloadBlob).toHaveBeenLastCalledWith(expect.any(Blob), `${label}_街道2_2026-01-01至2026-08-31.xml`);
+    const [blob] = vi.mocked(downloadBlob).mock.calls.at(-1)!;
+    const xml = new DOMParser().parseFromString(await readBlobText(blob), "application/xml");
+    expect(xml.querySelector("parsererror")).toBeNull();
+    expect(wrapper.text()).toContain("按上报日期筛选");
+    for (const note of ["数据口径", "上报日期范围", ...notes]) expect(wrapper.text()).not.toContain(note);
+    for (const text of [wrapper.get("table").text(), xml.documentElement.textContent ?? ""]) {
+      expect(text).toContain("北城街道");
+      expect(text).toContain(wrapper.get("thead tr:first-child th").text());
+      expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
+      if (kind === "survey") expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
+      else expect(text).toContain("1.25");
+      for (const note of ["数据口径", "上报日期", ...notes]) expect(text).not.toContain(note);
+    }
+    const ns = "urn:schemas-microsoft-com:office:spreadsheet";
+    const columns = kind === "street" ? 16 : 22;
+    expect(xml.getElementsByTagNameNS(ns, "Column")).toHaveLength(columns);
+    const firstCell = xml.getElementsByTagNameNS(ns, "Row")[0]!.getElementsByTagNameNS(ns, "Cell")[0]!;
+    expect(firstCell.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
   });
 
   it.each(["street", "survey"] as const)("%s 两页导出 handler 二次保护，并只使用已提交的筛选与完整表格", async (kind) => {
@@ -235,14 +296,15 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     emitExport();
     expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, `${label}_全部街道_全部日期`);
-    expect(wrapper.get("tfoot").text()).toContain("全部日期");
+    expect(wrapper.get("tfoot").text()).not.toContain("全部日期");
 
     const selectedParts = makeParts(query);
     readRows.mockResolvedValueOnce(selectedParts.base); readStatistics.mockResolvedValueOnce(selectedParts.statistics);
     await click(wrapper, "查询"); await flushPromises(); emitExport();
     expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, `${label}_街道2_2026-01-01至2026-08-31`);
     expect(wrapper.get("thead").text()).toContain("北城街道");
-    expect(wrapper.get("tfoot").text()).toContain("2026-01-01 至 2026-08-31");
+    expect(wrapper.get("tfoot").text()).not.toContain("2026-01-01 至 2026-08-31");
+    expect(wrapper.get("tfoot").text()).not.toContain("数据口径");
     const exportsBeforeFailure = vi.mocked(exportLedgerTable).mock.calls.length;
     readRows.mockRejectedValueOnce(new Error("基础行失败"));
     readStatistics.mockResolvedValueOnce(selectedParts.statistics);

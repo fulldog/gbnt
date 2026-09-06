@@ -4,7 +4,7 @@ import { computed } from "vue";
 import { ledgerCell, STREET_COLUMN_WIDTHS, streetRowSpans } from "@/utils/ledger-sheet";
 import "./ledger-sheet.css";
 
-const { rows, title, notes = [], emptyText = "当前筛选条件下暂无台账数据" } = defineProps<{ rows: StreetLedgerReportRow[]; title: string; notes?: string[]; emptyText?: string }>();
+const { rows, title, emptyText = "当前筛选条件下暂无台账数据" } = defineProps<{ rows: StreetLedgerReportRow[]; title: string; emptyText?: string }>();
 const spans = computed(() => streetRowSpans(rows));
 const quantityFields = ["well_handover", "well_existing", "bridge_handover", "bridge_existing", "road_km", "forest_handover", "forest_existing", "transformer_handover", "transformer_existing", "signer", "phone"] as const;
 </script>
@@ -37,7 +37,6 @@ const quantityFields = ["well_handover", "well_existing", "bridge_handover", "br
     </tbody>
     <tfoot>
       <tr class="ledger-foot-row"><td colspan="16">上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。</td></tr>
-      <tr v-for="note in notes" :key="note" class="ledger-foot-row"><td colspan="16">数据口径：{{ note }}</td></tr>
     </tfoot>
   </table>
 </template>

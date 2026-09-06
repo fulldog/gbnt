@@ -34,7 +34,7 @@ const { data: stats, loading, loadError, run: load } = useLatestQuery<WorkbenchS
   errorMessage: "工作台数据加载失败",
 });
 const { data: trend, loading: trendLoading, loadError: trendError, run: loadTrend } = useLatestQuery<WorkbenchTrendResult | null>({
-  initial: () => null, load: () => api.workbench.getTrend(range.value), errorMessage: "整改趋势加载失败",
+  initial: () => null, load: () => api.workbench.getTrend(range.value), errorMessage: "整改趋势暂时无法加载，请稍后重试",
 });
 const { data: todos, loading: todoLoading, loadError: todoError, run: loadTodos } = useLatestQuery<WorkbenchTodoResult | null>({
   initial: () => null, load: () => api.workbench.getTodos({ page: todoPage.value, size: 20 }), errorMessage: "待办列表加载失败",
@@ -118,7 +118,10 @@ onMounted(refreshAll);
       <div class="trend-grid">
         <div class="min-w-0 p-5">
           <div class="mb-3 flex items-center justify-between gap-3"><h3 class="m-0 text-sm font-semibold">整改趋势</h3><div class="flex gap-4 text-xs text-slate-600"><span><i class="legend-dot bg-blue-700" />上报</span><span><i class="legend-dot legend-dot--completed bg-green-700" />完成整改</span></div></div>
-          <AsyncError v-if="trendError" :message="trendError" @retry="loadTrend" />
+          <ElEmpty v-if="trendError" description="暂无可展示数据" :image-size="96">
+            <p role="status" class="mt-0 text-center text-sm text-slate-500">{{ trendError }}</p>
+            <ElButton :icon="Refresh" @click="loadTrend">重新加载</ElButton>
+          </ElEmpty>
           <ElSkeleton v-else-if="trendLoading" :rows="6" animated />
           <template v-else-if="trend">
             <WorkbenchTrendChart :data="trend" />

@@ -3,7 +3,7 @@ import type { SurveyLedgerReportRow } from "@/api/ledger-report-types";
 import { ledgerCell, SURVEY_COLUMN_WIDTHS } from "@/utils/ledger-sheet";
 import "./ledger-sheet.css";
 
-const { rows, title, notes = [], emptyText = "当前筛选条件下暂无排查汇总数据" } = defineProps<{ rows: SurveyLedgerReportRow[]; title: string; notes?: string[]; emptyText?: string }>();
+const { rows, title, emptyText = "当前筛选条件下暂无排查汇总数据" } = defineProps<{ rows: SurveyLedgerReportRow[]; title: string; emptyText?: string }>();
 const stickyFields = ["street_name", "village_name", "natural_village", "survey_done"] as const;
 const stickyOffsets = [0, 140, 280, 380];
 const quantityFields = ["well_inspected", "well_normal", "well_problem_count", "bridge_inspected", "bridge_problem_count", "road_inspected", "road_problem_count", "well_problem_count", "well_rectified_count", "bridge_problem_count", "bridge_rectified_count", "road_problem_count", "road_rectified_count"] as const;
@@ -39,7 +39,6 @@ const quantityFields = ["well_inspected", "well_normal", "well_problem_count", "
     </tbody>
     <tfoot>
       <tr class="ledger-foot-row"><td colspan="22">注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。</td></tr>
-      <tr v-for="note in notes" :key="note" class="ledger-foot-row"><td colspan="22">数据口径：{{ note }}</td></tr>
     </tfoot>
   </table>
 </template>

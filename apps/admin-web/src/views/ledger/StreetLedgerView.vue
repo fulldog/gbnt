@@ -11,7 +11,7 @@ import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useLedgerReport } from "@/composables/useLedgerReport";
 import { exportLedgerTable } from "@/utils/ledger-export";
 import { composeStreetRow } from "@/utils/ledger-report-merge";
-import { ledgerDateNote, ledgerExportName } from "@/utils/ledger-report-query";
+import { ledgerExportName } from "@/utils/ledger-report-query";
 import { errorMessage } from "@/utils/error";
 
 const api = useAdminApi();
@@ -30,7 +30,6 @@ const { data: report, loading, loadError, hasLoaded, run: load } = useLedgerRepo
   errorMessage: "街道台账加载失败",
 });
 const rows = computed(() => report.value?.rows ?? []);
-const notes = computed(() => report.value ? [ledgerDateNote(report.value.query), ...report.value.notes] : undefined);
 const canExport = computed(() => hasLoaded.value && !loading.value && !loadError.value && rows.value.length > 0);
 const title = computed(() => {
   const selectedId = report.value?.query.street_org_id;
@@ -65,6 +64,6 @@ onMounted(() => { void Promise.all([loadOrgs(), load()]); });
     <template #notice>
       <p class="ledger-report-notice">按上报日期筛选，按建设年份、街道、新村/社区分组。— 表示暂无可核验数据，不代表 0；当前报表只读。</p>
     </template>
-    <StreetLedgerSheet :rows="rows" :title="title" :notes="notes" :empty-text="emptyText" />
+    <StreetLedgerSheet :rows="rows" :title="title" :empty-text="emptyText" />
   </LedgerReportFrame>
 </template>

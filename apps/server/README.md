@@ -19,7 +19,7 @@ go run .
 
 默认监听 `:8080`。健康检查：`GET /api/health`
 
-默认管理员：`admin` / `admin`（种子：超级管理员，`is_super_admin=true`，org/role=0；生产务必修改）。
+`admin` / `admin` 仅为种子初始化时创建的超级管理员（`is_super_admin=true`，org/role=0；生产务必修改）。当前示例配置在 `release` 模式下使用 `migrate.seed=false`，不会自动创建该账号；不要把示例账号视为现有数据库的真实凭据。
 
 ## 目录
 
@@ -119,6 +119,48 @@ upload:
 ## MySQL 8 安装与备份
 
 Linux 上安装 MySQL 8、每天凌晨 2 点全量（保留 5 天）、每小时 binlog 增量：见 [`../../docs/operations/linux-mysql.md`](../../docs/operations/linux-mysql.md)，脚本在 `../../deploy/mysql/`。
+
+## 整改轮次字段专项检查与增量修复
+
+当整改趋势等查询提示缺少 `round` / `rectify_round` 时，可使用独立 CLI `cmd/repair-rectify-rounds`。它只处理下列两列，目标定义均为 `BIGINT UNSIGNED NOT NULL DEFAULT 0`：
+
+- `issues.rectify_round`：问题当前整改轮次。
+- `issue_rectify_records.round`：整改记录所属轮次。
+
+历史数据以第 `0` 轮兼容；已有列定义合规时保持不变。工具不清表、不删除字段、不写种子、不修改历史轮次，也不同步权限/API 目录。它不会启动主服务，不调用启动迁移；`server.mode`、`migrate.enabled` / `migrate.seed` 及其环境变量开关不会改变此 CLI 的检查/修复行为。不要通过启动 `debug` / `dev` 服务来修复现有数据库，这些模式的启动迁移可能清表重建，`seed=false` 不能阻止。
+
+所有以下命令从仓库根目录执行，需要 Go 1.27 或更高版本且 `go` 在 `PATH` 中。真实连接配置应放在已被 Git 忽略的 `apps/server/configs/config.yaml`，不要把真实凭据写入 `config.example.yaml`、命令示例或提交记录。CLI 的配置优先级为显式 `--config`、`GBNT_CONFIG`、`configs/config.yaml`；Make 的可选 `CONFIG` 会转为 `--config`。由于命令使用 `go -C apps/server`，相对配置路径以 `apps/server/` 为基准，外部配置建议使用绝对路径。
+
+```bash
+# 默认只读检查；缺列时返回非零状态并输出 SQL 计划，不执行修改
+make server-db-check
+
+# 使用指定配置（或通过 GBNT_CONFIG 指定）
+make server-db-check CONFIG=/absolute/path/config.yaml
+
+# 等价的直接 CLI 命令
+go -C apps/server run ./cmd/repair-rectify-rounds --config configs/config.yaml
+```
+
+应用前先核对输出的目标数据库名，完成可恢复的数据库备份，并暂停该测试库所有业务写入（包括后台、小程序及定时任务）。MySQL DDL 不是这两步操作之间的原子事务，可能持有表锁；请在维护窗口操作，不要并行运行修复。`BACKUP_CONFIRMED=yes` / `--backup-confirmed` 仅代表操作者已完成备份确认，工具不会代为备份或暂停业务。
+
+```bash
+# 必须把 DATABASE 替换为已核对的准确库名；缺少任一确认时 Make 会拒绝执行
+make server-db-repair DATABASE=已核对的实际库名 BACKUP_CONFIRMED=yes
+
+# 指定配置时，检查与修复必须使用同一配置
+make server-db-repair CONFIG=/absolute/path/config.yaml DATABASE=已核对的实际库名 BACKUP_CONFIRMED=yes
+
+# 直接 CLI 同样需要全部确认参数
+go -C apps/server run ./cmd/repair-rectify-rounds --apply --database 已核对的实际库名 --backup-confirmed
+
+# 修复后重新只读检查；若用了 CONFIG / GBNT_CONFIG，保持一致
+make server-db-check
+```
+
+工具只新增缺失列，不自动纠正异常定义。若已有字段类型、可空性或默认值不合规，或者只缺一列但另一列已存在非零轮次，必须停止并人工核对，不能直接把历史数据补为 `0`。分步失败不会自动回滚或删除已新增的列；排除故障后先重新检查，安全条件仍满足时可以重跑，已合规的列不会重复修改。
+
+两列已合规后会继续校验整改趋势 SQL 的结构兼容性；检查通过只说明该结构检查通过，不等同于完整接口、权限、趋势统计口径或前端功能验收。恢复业务写入前仍需对目标环境完成接口与页面验证。若数据库返回 `1045` 认证失败，应先由维护者核对连接配置和账号授权，不能据此声称真实库已完成修复。
 
 ## 文档与接口
 

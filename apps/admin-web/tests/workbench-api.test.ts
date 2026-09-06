@@ -105,8 +105,9 @@ describe("工作台真实请求边界到页面的失败状态", () => {
     runtime.workbench.getStats.mockImplementation(api.getStats);
     const wrapper = render();
     await flushPromises();
-    expect(wrapper.text()).toContain("统计查询失败");
-    expect(wrapper.text()).toContain("stats-failed");
+    expect(wrapper.text()).toContain("工作台数据加载失败");
+    expect(wrapper.text()).not.toContain("统计查询失败");
+    expect(wrapper.text()).not.toContain("stats-failed");
     expect(wrapper.find('[aria-label="核心指标"]').exists()).toBe(false);
     expect(wrapper.find('[aria-label="类型排行列表"]').exists()).toBe(false);
     request.mockResolvedValue(envelope(zero));
@@ -126,6 +127,6 @@ describe("工作台真实请求边界到页面的失败状态", () => {
     await click(wrapper, "刷新数据");
     expect(wrapper.find('[aria-label="核心指标"]').exists()).toBe(false);
     expect(wrapper.find('[aria-label="类型排行列表"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain("统计查询失败");
+    expect(wrapper.text()).toContain("工作台数据加载失败");
   });
 });
