@@ -35,6 +35,10 @@ export default defineConfig(({ mode }) => {
         "/uploads": proxyOptions,
       },
     },
+    build: {
+      // echarts、element-plus 单包压缩后本就超过默认 500kB，抬高阈值只影响提示
+      chunkSizeWarningLimit: 2000,
+    },
     test: {
       environment: "jsdom",
       setupFiles: ["./tests/setup.ts"],
