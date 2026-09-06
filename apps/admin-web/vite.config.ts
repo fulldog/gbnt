@@ -38,6 +38,12 @@ export default defineConfig(({ mode }) => {
     build: {
       // echarts、element-plus 单包压缩后本就超过默认 500kB，抬高阈值只影响提示
       chunkSizeWarningLimit: 2000,
+      rolldownOptions: {
+        output: {
+          // 保证跨分包模块先初始化再使用，避免循环依赖中的运行时辅助函数尚未赋值。
+          strictExecutionOrder: true,
+        },
+      },
     },
     test: {
       environment: "jsdom",
