@@ -13,12 +13,11 @@ interface PickerEventLike {
   detail: { value: string | number };
 }
 
-const { type, details } = toRefs(
-  defineProps<{
-    type: IssueType;
-    details: ReportDetailsForm;
-  }>(),
-);
+const props = defineProps<{
+  type: IssueType;
+  details: ReportDetailsForm;
+}>();
+const { type, details } = toRefs(props);
 
 const emit = defineEmits<{
   updateField: [key: keyof ReportDetailsForm, value: string];

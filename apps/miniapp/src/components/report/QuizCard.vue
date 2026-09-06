@@ -16,15 +16,14 @@ interface LocationInput {
   address: string;
 }
 
-const { item, definition, issueType, location, disabled } = toRefs(
-  defineProps<{
-    item: QuizFormItem;
-    definition: QuizDefinition;
-    issueType: IssueType;
-    location: LocationInput;
-    disabled?: boolean;
-  }>(),
-);
+const props = defineProps<{
+  item: QuizFormItem;
+  definition: QuizDefinition;
+  issueType: IssueType;
+  location: LocationInput;
+  disabled?: boolean;
+}>();
+const { item, definition, issueType, location, disabled } = toRefs(props);
 
 const emit = defineEmits<{
   answer: [value: boolean];

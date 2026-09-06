@@ -10,6 +10,7 @@ import {
 import { computed, shallowRef } from "vue";
 import { miniappApi } from "@/api/runtime";
 import IssueCard from "@/components/issue/IssueCard.vue";
+import RegionPicker from "@/components/region/RegionPicker.vue";
 import { usePagedIssues } from "@/composables/usePagedIssues";
 import { useBusinessToday } from "@/composables/useBusinessToday";
 import {
@@ -26,8 +27,6 @@ interface FilterOption<TValue> {
   label: string;
   value: TValue;
 }
-
-interface RegionOption extends FilterOption<number | undefined> {}
 
 const YEAR_OPTIONS: FilterOption<ProjectYear | undefined>[] = [
   { label: "全部年度", value: undefined },
@@ -55,7 +54,8 @@ const {
 
 const searchKeyword = shallowRef("");
 const today = useBusinessToday();
-const regionOptions = shallowRef<RegionOption[]>([{ label: "全部区域", value: undefined }]);
+const regionTree = shallowRef<OrgTreeNode[]>([]);
+const regionLoading = shallowRef(false);
 const regionError = shallowRef("");
 let showCount = 0;
 let regionRequestSequence = 0;
@@ -69,9 +69,6 @@ const statusIndex = computed(() =>
 const yearIndex = computed(() =>
   Math.max(0, YEAR_OPTIONS.findIndex((option) => option.value === filters.value.projectYear)),
 );
-const regionIndex = computed(() =>
-  Math.max(0, regionOptions.value.findIndex((option) => option.value === filters.value.orgId)),
-);
 const isInitialLoading = computed(() => isRefreshing.value && items.value.length === 0);
 const hasActiveFilters = computed(
   () =>
@@ -82,31 +79,18 @@ const hasActiveFilters = computed(
     filters.value.keyword !== "",
 );
 
-function flattenRegions(
-  nodes: readonly OrgTreeNode[],
-  parentNames: readonly string[] = [],
-): RegionOption[] {
-  const options: RegionOption[] = [];
-  for (const node of nodes) {
-    const names = [...parentNames, node.name];
-    options.push({ label: names.join(" / "), value: node.id });
-    options.push(...flattenRegions(node.children, names));
-  }
-  return options;
-}
-
 async function loadRegions(): Promise<void> {
   const requestId = ++regionRequestSequence;
+  regionLoading.value = true;
   regionError.value = "";
   try {
     const result = await miniappApi.regions.list();
     if (requestId !== regionRequestSequence) return;
-    regionOptions.value = [
-      { label: "全部区域", value: undefined },
-      ...flattenRegions(result.list),
-    ];
+    regionTree.value = result.list;
   } catch (cause) {
     if (requestId === regionRequestSequence) regionError.value = errorMessage(cause, "区域加载失败");
+  } finally {
+    if (requestId === regionRequestSequence) regionLoading.value = false;
   }
 }
 
@@ -130,9 +114,9 @@ function changeYear(event: PickerChangeEvent): void {
   if (option) void reload({ projectYear: option.value });
 }
 
-function changeRegion(event: PickerChangeEvent): void {
-  const option = regionOptions.value[optionIndex(event)];
-  if (option) void reload({ orgId: option.value });
+function changeRegion(option: { id: number | null; label: string }): void {
+  // 全部区域不发送 org_id；上级区域由后端按子树查询，并保留其他筛选条件。
+  void reload({ orgId: option.id ?? undefined });
 }
 
 function applySearch(): void {
@@ -246,22 +230,18 @@ onUnload(() => {
             <text>{{ YEAR_OPTIONS[yearIndex]?.label }}</text><text class="todo-page__chevron">⌄</text>
           </view>
         </picker>
-        <picker
-          mode="selector"
-          :range="regionOptions"
-          range-key="label"
-          :value="regionIndex"
-          @change="changeRegion"
-        >
-          <view class="todo-page__filter todo-page__filter--region">
-            <text class="todo-page__filter-text">{{ regionOptions[regionIndex]?.label }}</text>
-            <text class="todo-page__chevron">⌄</text>
-          </view>
-        </picker>
+        <view class="todo-page__region-filter">
+          <RegionPicker
+            mode="filter"
+            :tree="regionTree"
+            :value="filters.orgId ?? null"
+            :loading="regionLoading"
+            :error="regionError"
+            @select="changeRegion"
+            @retry="loadRegions"
+          />
+        </view>
       </view>
-      <text v-if="regionError" class="todo-page__region-error" @tap="loadRegions">
-        {{ regionError }}，点击重试
-      </text>
     </view>
 
     <view class="todo-page__content">
@@ -419,7 +399,7 @@ onUnload(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10rpx;
-  min-height: 64rpx;
+  min-height: 44px;
   padding: 0 18rpx;
   border-radius: var(--gb-radius-sm, 12rpx);
   background: #f2f5f8;
@@ -427,23 +407,11 @@ onUnload(() => {
   font-size: 25rpx;
 }
 
-.todo-page__filter-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.todo-page__region-filter { min-width: 0; }
 
 .todo-page__chevron {
   flex-shrink: 0;
   color: var(--gb-color-text-muted, #8490a3);
-}
-
-.todo-page__region-error {
-  display: block;
-  margin-top: 12rpx;
-  color: var(--gb-color-danger, #cf1322);
-  font-size: 23rpx;
-  text-align: center;
 }
 
 .todo-page__content {

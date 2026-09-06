@@ -184,8 +184,6 @@ onLoad(async () => {
         >
           {{ authStore.loading ? "正在登录" : "登录" }}
         </button>
-
-        <text class="login-card__legal-note">协议页面当前为开发占位，上线前必须替换为正式法务文本</text>
       </form>
     </view>
 
@@ -259,7 +257,10 @@ onLoad(async () => {
 }
 
 .login-card {
+  display: block;
+  width: 100%;
   padding: 22px 20px 20px;
+  box-sizing: border-box;
 }
 
 .login-card__error {
@@ -290,9 +291,10 @@ onLoad(async () => {
   display: flex;
   height: 48px;
   align-items: center;
+  overflow: hidden;
   border: 1px solid var(--gbnt-border, #dce4ee);
   border-radius: 6px;
-  background: #ffffff;
+  background: #f0f4f8;
 }
 
 .login-field__prefix {
@@ -305,8 +307,13 @@ onLoad(async () => {
 .login-field__input {
   flex: 1;
   min-width: 0;
-  height: 48px;
-  padding-right: 12px;
+  height: 100%;
+  margin: 0;
+  padding: 0 12px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
   font-size: 16px;
   box-sizing: border-box;
 }
@@ -414,15 +421,6 @@ onLoad(async () => {
 
 .login-card__submit::after {
   border: 0;
-}
-
-.login-card__legal-note {
-  display: block;
-  margin-top: 12px;
-  color: var(--gb-color-text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-  text-align: center;
 }
 
 .login-page__footer {

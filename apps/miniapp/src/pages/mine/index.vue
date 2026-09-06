@@ -175,7 +175,7 @@ onPullDownRefresh(() => {
         >
           <image class="mine-menu-row__icon" src="/static/icons/ledger-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">用户协议</text>
-          <text class="mine-menu-row__tag">开发占位</text>
+          <text class="mine-menu-row__tag">点击查看</text>
           <text class="mine-menu-row__caret" aria-hidden="true">›</text>
         </button>
         <button
@@ -184,7 +184,7 @@ onPullDownRefresh(() => {
         >
           <image class="mine-menu-row__icon" src="/static/icons/shield-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">隐私政策</text>
-          <text class="mine-menu-row__tag">开发占位</text>
+          <text class="mine-menu-row__tag">点击查看</text>
           <text class="mine-menu-row__caret" aria-hidden="true">›</text>
         </button>
       </view>

@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, watch } from "vue";
 import { onHide, onLoad, onUnload } from "@dcloudio/uni-app";
-import type { IssueType } from "@gbnt/api-client";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import SignaturePad from "@/components/media/SignaturePad.vue";
 import RecoverableImage from "@/components/common/RecoverableImage.vue";
 import IssueTypeFields from "@/components/report/IssueTypeFields.vue";
 import QuizCard from "@/components/report/QuizCard.vue";
+import FacilityTypeTabs from "@/components/report/FacilityTypeTabs.vue";
+import RegionPicker from "@/components/region/RegionPicker.vue";
+import { useFacilityTypeSelection } from "@/composables/report/useFacilityTypeSelection";
 import { useLocation } from "@/composables/report/useLocation";
 import { useRegions } from "@/composables/report/useRegions";
 import { useReportDraft } from "@/composables/report/useReportDraft";
 import {
-  ISSUE_TYPE_OPTIONS,
   PROJECT_YEAR_OPTIONS,
   QUIZ_DEFINITIONS,
   issueTypeLabel,
@@ -56,7 +57,7 @@ let active = true;
 let latestSignatureUploadToken = 0;
 let activeSignatureUploadToken: number | null = null;
 const authStore = useAuthStore();
-const { options: regionOptions, loading: regionsLoading, error: regionsError, load } =
+const { tree: regionTree, loading: regionsLoading, error: regionsError, load } =
   useRegions();
 const { choosing: choosingLocation, choose } = useLocation();
 const { loadDraft, saveDraft, clearDraft, saveState } = useReportDraft(
@@ -81,18 +82,24 @@ const locationInput = computed(() => ({
   lng: form.lng,
   address: form.address,
 }));
-const regionPickerIndex = computed(() =>
-  Math.max(0, regionOptions.value.findIndex((item) => item.id === form.orgId)),
-);
 const yearPickerIndex = computed(() =>
   Math.max(
     0,
     PROJECT_YEAR_OPTIONS.findIndex((item) => item.value === form.projectYear),
   ),
 );
-const typePickerIndex = computed(() =>
-  Math.max(0, ISSUE_TYPE_OPTIONS.findIndex((item) => item.value === form.type)),
+const typeSelectionDisabled = computed(() =>
+  !draftReady.value || step.value !== 1 || hasPendingPhotos.value ||
+  submitting.value || uploadingSignature.value,
 );
+const { selectingType, selectType } = useFacilityTypeSelection({
+  currentType: () => form.type,
+  disabled: () => !active || typeSelectionDisabled.value,
+  commit: (type) => {
+    replaceIssueType(form, type);
+    errors.value = [];
+  },
+});
 
 function assignForm(next: ReportFormState): void {
   Object.assign(form, next);
@@ -118,25 +125,6 @@ function blockForPhotos(): boolean {
   return true;
 }
 
-function selectType(event: PickerEventLike): void {
-  if (blockForPhotos() || submitting.value) return;
-  const option = ISSUE_TYPE_OPTIONS[Number(event.detail.value)];
-  if (!option || option.value === form.type) {
-    return;
-  }
-  uni.showModal({
-    title: "切换设施类型",
-    content: "切换后将清空当前类型的扩展字段、排查项和签名，是否继续？",
-    confirmText: "继续切换",
-    success: (result) => {
-      if (result.confirm) {
-        replaceIssueType(form, option.value);
-        errors.value = [];
-      }
-    },
-  });
-}
-
 function selectYear(event: PickerEventLike): void {
   const option = PROJECT_YEAR_OPTIONS[Number(event.detail.value)];
   if (option) {
@@ -144,12 +132,10 @@ function selectYear(event: PickerEventLike): void {
   }
 }
 
-function selectRegion(event: PickerEventLike): void {
-  const option = regionOptions.value[Number(event.detail.value)];
-  if (option) {
-    form.orgId = option.id;
-    form.orgLabel = option.label;
-  }
+function selectRegion(option: { id: number | null; label: string }): void {
+  if (option.id === null) return;
+  form.orgId = option.id;
+  form.orgLabel = option.label;
 }
 
 function updateText(
@@ -386,6 +372,12 @@ onUnload(() => {
   <view class="report-page page-shell">
     <view v-if="!draftReady" class="section-card">正在恢复登录状态与上报草稿…</view>
     <template v-else>
+    <FacilityTypeTabs
+      v-if="step === 1"
+      :value="form.type"
+      :disabled="typeSelectionDisabled || selectingType"
+      @select="selectType"
+    />
     <view class="report-hero">
       <view class="report-hero__eyebrow">现场巡查</view>
       <text class="report-hero__title">{{ stepTitle }}</text>
@@ -410,29 +402,17 @@ onUnload(() => {
 
         <view class="form-stack">
           <view class="form-field">
-            <text class="form-label"><text class="required">*</text>设施类型</text>
-            <picker :range="ISSUE_TYPE_OPTIONS" range-key="label" :value="typePickerIndex" @change="selectType">
-              <view class="picker-value">{{ issueTypeLabel(form.type) }}</view>
-            </picker>
-          </view>
-
-          <view class="form-field">
             <text class="form-label"><text class="required">*</text>行政区划</text>
-            <picker
-              :disabled="regionsLoading || regionOptions.length === 0"
-              :range="regionOptions"
-              range-key="label"
-              :value="regionPickerIndex"
-              @change="selectRegion"
-            >
-              <view class="picker-value" :class="{ 'picker-value--placeholder': !form.orgLabel }">
-                {{ form.orgLabel || (regionsLoading ? "正在加载…" : "请选择末级行政区划") }}
-              </view>
-            </picker>
-            <view v-if="regionsError" class="inline-error">
-              <text>{{ regionsError }}</text>
-              <button class="text-button" @tap="load">重新加载</button>
-            </view>
+            <RegionPicker
+              :tree="regionTree"
+              :value="form.orgId"
+              :label="form.orgLabel"
+              :loading="regionsLoading"
+              :error="regionsError"
+              :disabled="!draftReady || submitting"
+              @select="selectRegion"
+              @retry="load"
+            />
           </view>
 
           <view class="form-field">

@@ -1,4 +1,11 @@
-export interface LegalPlaceholderSection {
+export interface LegalSection {
   title: string;
-  description: string;
+  paragraphs: string[];
+}
+
+export interface LegalDocument {
+  title: string;
+  updatedAt: string;
+  introduction: string;
+  sections: LegalSection[];
 }

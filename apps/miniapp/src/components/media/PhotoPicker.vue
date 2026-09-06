@@ -21,29 +21,19 @@ interface ChooseMediaResult {
   tempFiles: ChooseMediaFile[];
 }
 
-const {
-  maximum,
-  cameraOnly,
-  cooldownSeconds,
-  watermark,
-  location,
-} = toRefs(
-  withDefaults(
-    defineProps<{
-      maximum?: number;
-      cameraOnly?: boolean;
-      cooldownSeconds?: number;
-      watermark?: boolean;
-      location: LocationInput;
-    }>(),
-    {
-      maximum: 6,
-      cameraOnly: false,
-      cooldownSeconds: 0,
-      watermark: true,
-    },
-  ),
-);
+const props = withDefaults(defineProps<{
+  maximum?: number;
+  cameraOnly?: boolean;
+  cooldownSeconds?: number;
+  watermark?: boolean;
+  location: LocationInput;
+}>(), {
+  maximum: 6,
+  cameraOnly: false,
+  cooldownSeconds: 0,
+  watermark: true,
+});
+const { maximum, cameraOnly, cooldownSeconds, watermark, location } = toRefs(props);
 
 const model = defineModel<UploadedPhoto[]>({ required: true });
 const emit = defineEmits<{ pending: [value: boolean] }>();
