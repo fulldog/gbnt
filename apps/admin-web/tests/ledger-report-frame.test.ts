@@ -24,9 +24,31 @@ describe("报表工具栏", () => {
     expect(wrapper.get(".test-filter").element.parentElement!.style.display).not.toBe("none");
     await wrapper.get("[aria-label='刷新报表']").trigger("click");
     expect(wrapper.emitted("refresh")).toHaveLength(1);
+    expect(wrapper.findAll("button")[0]!.attributes("title")).toBe("Excel (.xlsx) 格式（保留合并单元格）");
     await wrapper.findAll("button")[0]!.trigger("click");
     expect(wrapper.emitted("export")?.[0]?.[0]).toBe(wrapper.get("table").element);
     expect(wrapper.get("[role='region']").attributes("tabindex")).toBe("0");
+    wrapper.unmount();
+  });
+
+  it("导出中独立显示加载并禁止点击，结束后恢复导出且不阻止刷新", async () => {
+    const wrapper = mount(LedgerReportFrame, {
+      props: { title: "街道台账", loading: false, exportDisabled: false, exporting: true },
+      slots: { default: "<table><tbody><tr><td>真实数据</td></tr></tbody></table>" },
+      global: { stubs: { ElButton: ButtonStub } },
+    });
+    const button = wrapper.findAll("button")[0]!;
+    expect(wrapper.findAllComponents(ButtonStub)[0]!.props("loading")).toBe(true);
+    expect(button.attributes("disabled")).toBeDefined();
+    await button.trigger("click");
+    expect(wrapper.emitted("export")).toBeUndefined();
+    await wrapper.get("[aria-label='刷新报表']").trigger("click");
+    expect(wrapper.emitted("refresh")).toHaveLength(1);
+    await wrapper.setProps({ exporting: false });
+    expect(wrapper.findAllComponents(ButtonStub)[0]!.props("loading")).toBe(false);
+    expect(button.attributes("disabled")).toBeUndefined();
+    await button.trigger("click");
+    expect(wrapper.emitted("export")?.[0]?.[0]).toBe(wrapper.get("table").element);
     wrapper.unmount();
   });
 

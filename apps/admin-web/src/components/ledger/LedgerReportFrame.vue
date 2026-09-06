@@ -36,7 +36,7 @@ onBeforeUnmount(() => {
       <header class="ledger-toolbar">
         <h1>{{ title }}</h1>
         <div class="ledger-toolbar-actions" role="group" aria-label="报表工具栏">
-          <ElButton :icon="Download" :disabled="exportDisabled" :loading="exporting" v-bind="{ title: 'Excel XML 格式（保留合并单元格）' }" @click="exportTable">导出 Excel</ElButton>
+          <ElButton :icon="Download" :disabled="exportDisabled || exporting" :loading="exporting" v-bind="{ title: 'Excel (.xlsx) 格式（保留合并单元格）' }" @click="exportTable">导出 Excel</ElButton>
           <ElButton :icon="Search" circle v-bind="{ 'aria-label': filtersVisible ? '隐藏筛选' : '显示筛选', title: filtersVisible ? '隐藏筛选' : '显示筛选', 'aria-pressed': filtersVisible }" @click="filtersVisible = !filtersVisible" />
           <ElButton :icon="Refresh" circle v-bind="{ 'aria-label': '刷新报表', title: '刷新报表' }" :loading="loading" @click="$emit('refresh')" />
           <ElButton :icon="FullScreen" circle v-bind="{ 'aria-label': fullscreen ? '退出全屏' : '全屏查看', title: fullscreen ? '退出全屏' : '全屏查看', 'aria-pressed': fullscreen }" @click="toggleFullscreen" />

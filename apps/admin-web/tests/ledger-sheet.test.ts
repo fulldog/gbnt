@@ -1,4 +1,5 @@
 import { mount } from "@vue/test-utils";
+import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import StreetLedgerSheet from "@/components/ledger/StreetLedgerSheet.vue";
 import SurveyLedgerSheet from "@/components/ledger/SurveyLedgerSheet.vue";
@@ -8,6 +9,14 @@ import { goldenQuery, goldenStreetParts, goldenSurveyParts } from "./fixtures/le
 import { composeStreetRow, composeSurveyRow, mergeLedgerParts } from "@/utils/ledger-report-merge";
 import { buildLedgerSpreadsheet } from "@/utils/ledger-export";
 import { ledgerDateNote } from "@/utils/ledger-report-query";
+
+/** 回读真实 XLSX，断言工作簿内容而非导出工具的内部序列化实现。 */
+async function readSpreadsheet(table: HTMLTableElement): Promise<ExcelJS.Worksheet> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(await buildLedgerSpreadsheet(table, "黄金报表"));
+  expect(workbook.worksheets).toHaveLength(1);
+  return workbook.worksheets[0]!;
+}
 
 /** 展开 HTML 跨行/跨列表头，防止某一行错位或覆盖已有合并格。 */
 function verifyGrid(table: HTMLTableElement, columnCount: number): void {
@@ -31,7 +40,7 @@ function verifyGrid(table: HTMLTableElement, columnCount: number): void {
 }
 
 describe("Excel 式台账结构", () => {
-  it("G1 黄金报表在两页与实际导出 XML 中保留人工预期，仅删除动态数据口径行", () => {
+  it("G1 黄金报表在两页与真实 XLSX 中保留 16/22 列人工预期，仅删除动态数据口径行", async () => {
     const street = goldenStreetParts();
     const survey = goldenSurveyParts();
     const streetReport = mergeLedgerParts(goldenQuery, street.base, street.statistics, composeStreetRow);
@@ -52,11 +61,13 @@ describe("Excel 式台账结构", () => {
     ] as const) {
       verifyGrid(wrapper.get("table").element, columns);
       expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
-      const xml = new DOMParser().parseFromString(buildLedgerSpreadsheet(wrapper.get("table").element, "黄金报表"), "application/xml");
-      expect(xml.querySelector("parsererror")).toBeNull();
-      const ns = "urn:schemas-microsoft-com:office:spreadsheet";
-      expect(xml.getElementsByTagNameNS(ns, "Column")).toHaveLength(columns);
-      for (const text of [wrapper.text(), xml.documentElement.textContent ?? ""]) {
+      const sheet = await readSpreadsheet(wrapper.get("table").element);
+      expect(sheet.columnCount).toBe(columns);
+      expect(sheet.columns).toHaveLength(columns);
+      expect(sheet.rowCount).toBe(7);
+      const exportedText: string[] = [];
+      sheet.eachRow((row) => row.eachCell((cell) => exportedText.push(cell.text)));
+      for (const text of [wrapper.text(), exportedText.join("\n")]) {
         expect(text).toContain(title);
         expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
         if (columns === 22) expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
@@ -64,21 +75,23 @@ describe("Excel 式台账结构", () => {
           expect(text).not.toContain(note);
         }
       }
-      const rows = Array.from(xml.getElementsByTagNameNS(ns, "Row"));
-      expect(rows[0]!.getElementsByTagNameNS(ns, "Cell")[0]!.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
-      expect(rows.at(-1)!.getElementsByTagNameNS(ns, "Cell")[0]!.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
-      const firstBody = rows[columns === 16 ? 4 : 5]!;
-      const values = Array.from(firstBody.getElementsByTagNameNS(ns, "Data")).map((cell) => cell.textContent);
+      const lastColumn = columns === 16 ? "P" : "V";
+      expect(sheet.model.merges).toEqual(expect.arrayContaining([`A1:${lastColumn}1`, `A7:${lastColumn}7`]));
+      expect(sheet.getCell("A1").value).toBe(title);
+      const bodyValues = (row: number) => Array.from({ length: columns }, (_, column) => sheet.getCell(row, column + 1).value);
       if (columns === 16) {
-        expect(values).toContain("1.75"); expect(values).toContain("100"); expect(values).toContain("0");
+        expect(bodyValues(5)).toEqual(["1", "2023", "测试街道", "测试新村", "—", "—", "—", "—", "—", "1.75", "100", "0", "—", "—", "—", "—"]);
+        expect(bodyValues(6)).toEqual(["2", "2024", "测试街道", "测试新村", "—", "—", "—", "—", "—", "2", "—", "—", "—", "—", "—", "—"]);
       } else {
-        expect(values[6]).toBe("2"); expect(values[12]).toBe("1"); expect(values[4]).toBe("—");
+        expect(bodyValues(6)).toEqual(["测试街道", "测试新村", "—", "—", "—", "—", "2", "—", "0", "—", "0", "2", "1", "0", "0", "0", "0", "—", "—", "—", "—", "—"]);
+        expect(sheet.model.merges).toContain("S6:U6");
+        expect(sheet.getCell("V6").value).toBe("—");
       }
       wrapper.unmount();
     }
   });
 
-  it("街道台账保留 16 列、三层表头、整行标题和分组跨行合并", () => {
+  it("街道台账在页面与 XLSX 保留 16 列、三层表头、整行标题和分组跨行合并", async () => {
     const rows = [
       streetReportRow(),
       streetReportRow({ row_key: "2023:4", org_id: 4 }),
@@ -97,9 +110,18 @@ describe("Excel 式台账结构", () => {
     expect(wrapper.text()).toContain("1.25");
     expect(wrapper.find("input").exists()).toBe(false);
     verifyGrid(wrapper.get("table").element, 16);
+    const sheet = await readSpreadsheet(wrapper.get("table").element);
+    expect(sheet.columnCount).toBe(16);
+    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:P1", "A2:A4", "F2:P2", "F3:G3", "J3:J4", "B5:B6", "C5:C6", "D5:D6", "A8:P8"]));
+    expect(sheet.getCell("B6").master.address).toBe("B5");
+    expect(sheet.getCell("E6").value).toBe("—");
+    expect(sheet.getCell("J6").value).toBe("1.25");
+    expect(sheet.getCell("P6").value).toBe("—");
+    expect(sheet.getCell("B7").value).toBe("2024");
+    wrapper.unmount();
   });
 
-  it("排查汇总保留 22 列、四层表头、左四列固定以及联系人合并格", () => {
+  it("排查汇总在页面与 XLSX 保留 22 列、四层表头、左四列固定以及联系人合并格", async () => {
     const wrapper = mount(SurveyLedgerSheet, { props: { rows: [surveyReportRow()], title: "排查汇总台账" } });
     expect(wrapper.findAll("col")).toHaveLength(22);
     expect(wrapper.findAll("thead tr")).toHaveLength(5);
@@ -110,6 +132,16 @@ describe("Excel 式台账结构", () => {
     expect(wrapper.get("tbody td[colspan='3']").text()).toBe("—");
     expect(wrapper.get("tfoot").text()).toContain("2010年以来");
     verifyGrid(wrapper.get("table").element, 22);
+    const sheet = await readSpreadsheet(wrapper.get("table").element);
+    expect(sheet.columnCount).toBe(22);
+    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:V1", "A2:A5", "E3:E5", "L3:M4", "R3:U4", "R5:U5", "V2:V5", "S6:U6", "A7:V7"]));
+    expect(sheet.getCell("V2").value).toBe("负责人签字：\n（盖章）");
+    expect(sheet.getCell("L6").value).toBe("7");
+    expect(sheet.getCell("M6").value).toBe("5");
+    expect(sheet.getCell("T6").master.address).toBe("S6");
+    expect(sheet.getCell("U6").master.address).toBe("S6");
+    expect(sheet.getCell("V6").value).toBe("—");
+    wrapper.unmount();
   });
 
   it("未知数据不伪造为零，零值正常展示，后端文本按文本转义", () => {

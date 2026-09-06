@@ -1,6 +1,8 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { computed, defineComponent, h, inject, provide, type Component, type ComputedRef, type PropType } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import ExcelJS from "exceljs";
+import { ElMessage } from "element-plus";
 import StreetLedgerView from "@/views/ledger/StreetLedgerView.vue";
 import SurveyLedgerView from "@/views/ledger/SurveyLedgerView.vue";
 import StreetLedgerSheet from "@/components/ledger/StreetLedgerSheet.vue";
@@ -110,12 +112,12 @@ async function click(wrapper: VueWrapper, text: string) {
   expect(button, `找不到按钮 ${text}`).toBeDefined();
   await button!.trigger("click");
 }
-function readBlobText(blob: Blob): Promise<string> {
+function readBlobBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
     reader.onerror = () => reject(reader.error);
-    reader.readAsText(blob);
+    reader.readAsArrayBuffer(blob);
   });
 }
 const user = {
@@ -127,6 +129,7 @@ const role = { id: 2, name: "街道管理员", desc: "", status: 1, created_at: 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(exportLedgerTable).mockReset().mockResolvedValue(undefined);
   for (const group of Object.values(api)) for (const method of Object.values(group)) method.mockReset();
   api.ledger.listStreetOrgOptions.mockResolvedValue([]);
   api.ledger.listSurveyOrgOptions.mockResolvedValue([]);
@@ -226,7 +229,9 @@ describe("汇总表真实状态", () => {
     expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, "街道台账_街道2_2026-01-01至2026-08-31");
   });
 
-  it.each(["street", "survey"] as const)("%s 页面与实际导出 XML 均不含动态口径行，保留原始备注、标题和数据", async (kind) => {
+  it.each(["street", "survey"] as const)("%s 页面与实际导出 XLSX 均不含动态口径行，保留原始备注、标题和数据", async (kind) => {
+    const actualExport = await vi.importActual<typeof import("@/utils/ledger-export")>("@/utils/ledger-export");
+    vi.mocked(exportLedgerTable).mockImplementation(actualExport.exportLedgerTable);
     const component = kind === "street" ? StreetLedgerView : SurveyLedgerView;
     const readRows = kind === "street" ? api.ledger.getStreetRows : api.ledger.getSurveyRows;
     const readStatistics = kind === "street" ? api.ledger.getStreetStatistics : api.ledger.getSurveyStatistics;
@@ -247,14 +252,20 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
     await click(wrapper, "导出 Excel");
+    await vi.mocked(exportLedgerTable).mock.results.at(-1)!.value;
     const label = kind === "street" ? "街道台账" : "街道排查汇总";
-    expect(downloadBlob).toHaveBeenLastCalledWith(expect.any(Blob), `${label}_街道2_2026-01-01至2026-08-31.xml`);
+    expect(downloadBlob).toHaveBeenLastCalledWith(expect.any(Blob), `${label}_街道2_2026-01-01至2026-08-31.xlsx`);
     const [blob] = vi.mocked(downloadBlob).mock.calls.at(-1)!;
-    const xml = new DOMParser().parseFromString(await readBlobText(blob), "application/xml");
-    expect(xml.querySelector("parsererror")).toBeNull();
+    const buffer = await readBlobBuffer(blob);
+    expect(Array.from(new Uint8Array(buffer).slice(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const sheet = workbook.getWorksheet(1)!;
+    const values: string[] = [];
+    sheet.eachRow((row) => row.eachCell((cell) => values.push(cell.text)));
     expect(wrapper.text()).toContain("按上报日期筛选");
     for (const note of ["数据口径", "上报日期范围", ...notes]) expect(wrapper.text()).not.toContain(note);
-    for (const text of [wrapper.get("table").text(), xml.documentElement.textContent ?? ""]) {
+    for (const text of [wrapper.get("table").text(), values.join("\n")]) {
       expect(text).toContain("北城街道");
       expect(text).toContain(wrapper.get("thead tr:first-child th").text());
       expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
@@ -262,11 +273,70 @@ describe("汇总表真实状态", () => {
       else expect(text).toContain("1.25");
       for (const note of ["数据口径", "上报日期", ...notes]) expect(text).not.toContain(note);
     }
-    const ns = "urn:schemas-microsoft-com:office:spreadsheet";
     const columns = kind === "street" ? 16 : 22;
-    expect(xml.getElementsByTagNameNS(ns, "Column")).toHaveLength(columns);
-    const firstCell = xml.getElementsByTagNameNS(ns, "Row")[0]!.getElementsByTagNameNS(ns, "Cell")[0]!;
-    expect(firstCell.getAttributeNS(ns, "MergeAcross")).toBe(String(columns - 1));
+    expect(sheet.columnCount).toBe(columns);
+    expect(sheet.getCell(1, columns).isMerged).toBe(true);
+    expect(sheet.getCell(1, columns).master.address).toBe("A1");
+  });
+
+  it.each(["street", "survey"] as const)("%s 异步导出期间显示独立加载，按钮与直接事件均不能重复导出", async (kind) => {
+    const parts = kind === "street" ? streetParts([streetReportRow()]) : surveyParts([surveyReportRow()]);
+    const readRows = kind === "street" ? api.ledger.getStreetRows : api.ledger.getSurveyRows;
+    const readStatistics = kind === "street" ? api.ledger.getStreetStatistics : api.ledger.getSurveyStatistics;
+    readRows.mockResolvedValue(parts.base);
+    readStatistics.mockResolvedValue(parts.statistics);
+    const wrapper = render(kind === "street" ? StreetLedgerView : SurveyLedgerView);
+    await flushPromises();
+    const frame = wrapper.getComponent(LedgerReportFrame);
+    const pending = deferred<void>();
+    vi.mocked(exportLedgerTable).mockReturnValueOnce(pending.promise);
+    frame.vm.$emit("export", wrapper.get("table").element);
+    frame.vm.$emit("export", wrapper.get("table").element);
+    expect(exportLedgerTable).toHaveBeenCalledOnce();
+    await flushPromises();
+    expect(frame.props("exporting")).toBe(true);
+    expect(frame.props("loading")).toBe(false);
+    const button = wrapper.findAll("button").find((item) => item.text() === "导出 Excel")!;
+    expect(button.attributes("disabled")).toBeDefined();
+    await button.trigger("click");
+    expect(exportLedgerTable).toHaveBeenCalledOnce();
+    pending.resolve(undefined);
+    await flushPromises();
+    expect(frame.props("exporting")).toBe(false);
+    expect(button.attributes("disabled")).toBeUndefined();
+    expect(ElMessage.error).not.toHaveBeenCalled();
+    await button.trigger("click");
+    await flushPromises();
+    expect(exportLedgerTable).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["street", "survey"] as const)("%s 捕获异步导出失败，恢复按钮并保留当前数据供重试", async (kind) => {
+    const parts = kind === "street" ? streetParts([streetReportRow()]) : surveyParts([surveyReportRow()]);
+    const readRows = kind === "street" ? api.ledger.getStreetRows : api.ledger.getSurveyRows;
+    const readStatistics = kind === "street" ? api.ledger.getStreetStatistics : api.ledger.getSurveyStatistics;
+    readRows.mockResolvedValue(parts.base);
+    readStatistics.mockResolvedValue(parts.statistics);
+    const wrapper = render(kind === "street" ? StreetLedgerView : SurveyLedgerView);
+    await flushPromises();
+    const frame = wrapper.getComponent(LedgerReportFrame);
+    const body = wrapper.get("tbody").text();
+    const pending = deferred<void>();
+    vi.mocked(exportLedgerTable).mockReturnValueOnce(pending.promise);
+    await click(wrapper, "导出 Excel");
+    expect(frame.props("exporting")).toBe(true);
+    pending.reject(new Error("工作簿生成失败"));
+    await flushPromises();
+    expect(ElMessage.error).toHaveBeenCalledExactlyOnceWith("工作簿生成失败");
+    expect(frame.props("exporting")).toBe(false);
+    expect(frame.props("exportDisabled")).toBe(false);
+    expect(wrapper.get("tbody").text()).toBe(body);
+    const button = wrapper.findAll("button").find((item) => item.text() === "导出 Excel")!;
+    expect(button.attributes("disabled")).toBeUndefined();
+    await button.trigger("click");
+    await flushPromises();
+    expect(exportLedgerTable).toHaveBeenCalledTimes(2);
+    expect(frame.props("exporting")).toBe(false);
+    expect(ElMessage.error).toHaveBeenCalledTimes(1);
   });
 
   it.each(["street", "survey"] as const)("%s 两页导出 handler 二次保护，并只使用已提交的筛选与完整表格", async (kind) => {

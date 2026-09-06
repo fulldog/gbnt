@@ -17,6 +17,7 @@ import { errorMessage } from "@/utils/error";
 const api = useAdminApi();
 const streetOrgId = shallowRef<number>();
 const dateRange = shallowRef<[string, string]>();
+const exporting = shallowRef(false);
 const { data: streets, loading: optionsLoading, loadError: optionsError, run: loadOrgs } = useLatestQuery<OrgOption[]>({
   initial: () => [],
   load: () => api.ledger.listSurveyOrgOptions(),
@@ -46,16 +47,18 @@ function reset(): void {
   dateRange.value = undefined;
   void load();
 }
-function exportReport(table: HTMLTableElement): void {
-  if (!canExport.value || !report.value) return;
-  try { exportLedgerTable(table, ledgerExportName("街道排查汇总", report.value.query)); }
+async function exportReport(table: HTMLTableElement): Promise<void> {
+  if (exporting.value || !canExport.value || !report.value) return;
+  exporting.value = true;
+  try { await exportLedgerTable(table, ledgerExportName("街道排查汇总", report.value.query)); }
   catch (error) { ElMessage.error(errorMessage(error, "汇总导出失败，请重试")); }
+  finally { exporting.value = false; }
 }
 onMounted(() => { void Promise.all([loadOrgs(), load()]); });
 </script>
 
 <template>
-  <LedgerReportFrame title="街道排查汇总" :loading="loading" :export-disabled="!canExport" @refresh="load" @export="exportReport">
+  <LedgerReportFrame title="街道排查汇总" :loading="loading" :export-disabled="!canExport" :exporting="exporting" @refresh="load" @export="exportReport">
     <template #filters><LedgerFilters v-model:street-org-id="streetOrgId" v-model:date-range="dateRange" :streets="streets" :loading="optionsLoading" :unavailable="Boolean(optionsError)" @search="load" @reset="reset" /></template>
     <template #errors>
       <AsyncError v-if="optionsError" :message="optionsError" @retry="loadOrgs" />
