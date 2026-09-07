@@ -10,7 +10,23 @@ const wrappers: VueWrapper[] = [];
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); });
 
 function permission(id: number, module: string, action: string): SysApi {
-  return { id, module, action, sort: id, name: `权限 ${id}`, method: "GET", path: `/test/${id}`, enabled: true, created_at: "", updated_at: "", created_id: 0, updated_id: 0, is_delete: 0 };
+  return {
+    id,
+    module,
+    action,
+    sort: id,
+    name: `权限 ${id}`,
+    method: "GET",
+    path: `/test/${id}`,
+    enabled: true,
+    is_jwt: true,
+    is_rbac: true,
+    created_at: "",
+    updated_at: "",
+    created_id: 0,
+    updated_id: 0,
+    is_delete: 0,
+  };
 }
 const apis = [
   permission(1, "web.rectify", "view"), permission(2, "web.rectify", "view"),
