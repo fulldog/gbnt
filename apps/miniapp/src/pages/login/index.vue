@@ -103,7 +103,6 @@ onLoad(async () => {
         </view>
 
         <view class="login-field">
-          <text class="login-field__label">账号</text>
           <view class="login-field__control">
             <image class="login-field__prefix" src="/static/icons/user-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
@@ -122,7 +121,6 @@ onLoad(async () => {
         </view>
 
         <view class="login-field">
-          <text class="login-field__label">密码</text>
           <view class="login-field__control">
             <image class="login-field__prefix" src="/static/icons/lock-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
@@ -151,7 +149,6 @@ onLoad(async () => {
         </view>
 
         <view class="login-field login-field--slider">
-          <text class="login-field__label">安全验证</text>
           <AuthSlider
             ref="sliderRef"
             :disabled="authStore.loading"
@@ -160,9 +157,19 @@ onLoad(async () => {
           />
         </view>
 
+        <button
+          class="login-card__submit"
+          form-type="submit"
+          :disabled="!canSubmit"
+          :loading="authStore.loading"
+        >
+          {{ authStore.loading ? "正在登录" : "登录" }}
+        </button>
+
         <checkbox-group class="login-agreement" @change="onAgreementChange">
           <label class="login-agreement__check" aria-label="同意用户协议与隐私政策">
-            <checkbox value="agree" :checked="agreed" color="#015cbb" />
+            <checkbox class="login-agreement__native" value="agree" :checked="agreed" color="#015cbb" />
+            <view class="login-agreement__mark" :class="{ 'login-agreement__mark--checked': agreed }" aria-hidden="true" />
           </label>
           <view class="login-agreement__text">
             <text>我已阅读并同意</text>
@@ -176,14 +183,6 @@ onLoad(async () => {
           </view>
         </checkbox-group>
 
-        <button
-          class="login-card__submit"
-          form-type="submit"
-          :disabled="!canSubmit"
-          :loading="authStore.loading"
-        >
-          {{ authStore.loading ? "正在登录" : "登录" }}
-        </button>
       </form>
     </view>
 
@@ -218,7 +217,7 @@ onLoad(async () => {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: calc(68px + env(safe-area-inset-top)) 22px 20px;
+  padding: max(108px, calc(64px + env(safe-area-inset-top, 0px))) 22px 20px;
 }
 
 .login-page__brand {
@@ -237,16 +236,17 @@ onLoad(async () => {
 }
 
 .login-page__title {
-  margin-top: 14px;
+  margin-top: 16px;
   font-size: 20px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
 }
 
 .login-page__checking,
 .login-card {
-  margin-top: 42px;
-  border-radius: var(--gb-radius-lg);
+  margin-top: 50px;
+  border-radius: 8px;
   background: var(--gb-color-surface);
 }
 
@@ -259,7 +259,7 @@ onLoad(async () => {
 .login-card {
   display: block;
   width: 100%;
-  padding: 22px 20px 20px;
+  padding: 22px 18px 20px;
   box-sizing: border-box;
 }
 
@@ -278,30 +278,22 @@ onLoad(async () => {
   margin-top: 16px;
 }
 
-.login-field__label {
-  display: block;
-  margin-bottom: 7px;
-  color: var(--gbnt-text, #152033);
-  font-size: 14px;
-  font-weight: 600;
-}
-
 .login-field__control {
   position: relative;
   display: flex;
-  height: 48px;
+  height: 44px;
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--gbnt-border, #dce4ee);
+  border: 0;
   border-radius: 6px;
   background: #f0f4f8;
 }
 
 .login-field__prefix {
   flex: none;
-  width: 20px;
-  height: 20px;
-  margin: 0 12px;
+  width: 18px;
+  height: 18px;
+  margin: 0 10px 0 12px;
 }
 
 .login-field__input {
@@ -314,22 +306,23 @@ onLoad(async () => {
   background: transparent;
   color: inherit;
   box-shadow: none;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 44px;
   box-sizing: border-box;
 }
 
 .login-field__input--password {
-  padding-right: 64px;
+  padding-right: 44px;
 }
 
 .login-field__toggle {
   position: absolute;
-  top: 2px;
+  top: 0;
   right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
+  width: 44px;
   height: 44px;
   margin: 0;
   padding: 0;
@@ -344,57 +337,84 @@ onLoad(async () => {
   border: 0;
 }
 
-.login-field__eye { width: 22px; height: 22px; }
+.login-field__eye { width: 18px; height: 18px; }
 .login-field__toggle--pressed { opacity: 0.65; }
-
-.login-field--slider {
-  margin-bottom: 4px;
-}
 
 .login-agreement {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
   margin-top: 14px;
   color: var(--gbnt-text-secondary, #526277);
-  font-size: 13px;
-  line-height: 1.8;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .login-agreement__check {
+  position: relative;
   display: flex;
-  width: 44px;
-  height: 44px;
+  width: 16px;
+  height: 20px;
   flex: none;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
-.login-agreement__check checkbox {
-  transform: scale(0.8);
-  transform-origin: left center;
+.login-agreement__native {
+  position: absolute;
+  z-index: 1;
+  top: -12px;
+  left: -14px;
+  width: 44px;
+  height: 44px;
+  opacity: 0;
+}
+
+.login-agreement__mark {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #b7c6d8;
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+}
+
+.login-agreement__mark--checked {
+  border-color: var(--gbnt-primary, #015cbb);
+  background: var(--gbnt-primary, #015cbb);
+}
+
+.login-agreement__mark--checked::after {
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  content: "";
 }
 
 .login-agreement__text {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: block;
   min-width: 0;
   flex: 1;
 }
 
 .login-agreement__link {
-  display: inline-flex;
-  min-width: 44px;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--gbnt-primary, #015cbb);
   font-size: inherit;
-  line-height: 1.5;
+  line-height: inherit;
+  vertical-align: baseline;
 }
 
 .login-agreement__link::after { border: 0; }
@@ -403,15 +423,17 @@ onLoad(async () => {
 .login-card__submit {
   display: flex;
   width: 100%;
-  height: 48px;
+  height: 44px;
   align-items: center;
   justify-content: center;
-  margin-top: 12px;
+  margin: 16px 0 0;
   border-radius: 6px;
   background: var(--gbnt-primary, #015cbb);
   color: #ffffff;
   font-size: 16px;
-  line-height: 48px;
+  line-height: 44px;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
 }
 
 .login-card__submit[disabled] {
@@ -427,14 +449,14 @@ onLoad(async () => {
   position: relative;
   z-index: 1;
   margin-top: auto;
-  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+  padding: 20px 16px calc(28px + env(safe-area-inset-bottom, 0px));
   color: var(--gb-color-text-secondary);
   font-size: 12px;
   text-align: center;
 }
 
 @media (max-height: 600px) {
-  .login-page__content { padding-top: calc(32px + env(safe-area-inset-top)); }
+  .login-page__content { padding-top: max(76px, calc(44px + env(safe-area-inset-top, 0px))); }
   .login-card, .login-page__checking { margin-top: 24px; }
 }
 </style>

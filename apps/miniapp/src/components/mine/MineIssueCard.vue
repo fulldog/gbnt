@@ -20,14 +20,6 @@ const typeLabels: Record<IssueType, string> = {
   transformer: "变压器",
 };
 
-const typeMarks: Record<IssueType, string> = {
-  well: "井",
-  road: "路",
-  bridge: "桥",
-  forest: "林",
-  transformer: "电",
-};
-
 const statusLabels: Record<IssueStatus, string> = {
   new: "待整改",
   pending: "整改中",
@@ -41,9 +33,8 @@ const summary = computed(() => issueSummary(props.issue));
 const plan = computed(() => issuePlanHint(props.issue, props.today));
 
 const createdText = computed(() => formatDateTime(props.issue.created_at));
-const title = computed(
-  () => `${typeLabels[props.issue.type]} · ${props.issue.code || props.issue.issue_key}`,
-);
+const title = computed(() => issueReporter(props.issue));
+const displayCode = computed(() => props.issue.code.trim() || props.issue.issue_key || `#${props.issue.id}`);
 
 function preview(index: number): void {
   const current = photos.value[index];
@@ -55,12 +46,12 @@ function preview(index: number): void {
   <view
     class="mine-issue-card"
     role="button"
-    :aria-label="`查看${title}详情`"
+    :aria-label="`查看${title}上报的${typeLabels[issue.type]}${displayCode}详情`"
     @tap="emit('open', issue.id)"
   >
     <view class="mine-issue-card__header">
       <view class="mine-issue-card__mark" aria-hidden="true">
-        {{ typeMarks[issue.type] }}
+        {{ issue.report_user_name?.trim().slice(0, 1) || '—' }}
       </view>
       <view class="mine-issue-card__heading">
         <text class="mine-issue-card__title">{{ title }}</text>
@@ -71,8 +62,8 @@ function preview(index: number): void {
       </text>
     </view>
 
-    <view class="mine-issue-card__reporter">
-      <text>{{ issueReporter(issue) }}</text>
+    <view class="mine-issue-card__facility">
+      <text>{{ typeLabels[issue.type] }} · {{ displayCode }}</text>
       <text>{{ issueOrganization(issue) }}</text>
     </view>
     <text class="mine-issue-card__summary">{{ summary }}</text>
@@ -89,7 +80,7 @@ function preview(index: number): void {
 </template>
 
 <style scoped lang="scss">
-.mine-issue-card__reporter {
+.mine-issue-card__facility {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -137,10 +128,10 @@ function preview(index: number): void {
   flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 6px;
   background: var(--gbnt-primary-soft, #e8f1fb);
   color: var(--gbnt-primary, #015cbb);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -154,7 +145,7 @@ function preview(index: number): void {
 .mine-issue-card__title {
   overflow: hidden;
   color: var(--gbnt-text, #152033);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;

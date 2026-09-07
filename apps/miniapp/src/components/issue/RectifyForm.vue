@@ -231,12 +231,13 @@ function submit(): void {
 }
 
 .rectify-form__item-header {
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 20rpx;
 }
 
 .rectify-form__item-title-wrap {
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
   align-items: flex-start;
   gap: 6rpx;
@@ -244,13 +245,13 @@ function submit(): void {
 
 .rectify-form__required {
   color: var(--gb-color-danger, #cf1322);
-  font-size: 28rpx;
+  font-size: 16px;
   line-height: 1.5;
 }
 
 .rectify-form__item-title {
   color: var(--gb-color-text-primary, #172033);
-  font-size: 28rpx;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -259,7 +260,7 @@ function submit(): void {
   flex-shrink: 0;
   gap: 12rpx;
   color: var(--gb-color-text-muted, #8490a3);
-  font-size: 24rpx;
+  font-size: 14px;
 }
 
 .rectify-form__select-label switch {
@@ -280,7 +281,7 @@ function submit(): void {
   border-radius: var(--gb-radius-sm, 12rpx);
   background: #fafbfd;
   color: var(--gb-color-text-primary, #172033);
-  font-size: 27rpx;
+  font-size: 16px;
   line-height: 1.6;
 }
 
@@ -350,7 +351,7 @@ function submit(): void {
   justify-content: center;
   gap: 8rpx;
   color: var(--gb-color-text-secondary, #566176);
-  font-size: 24rpx;
+  font-size: 14px;
 }
 
 .rectify-form__add-icon {
@@ -363,7 +364,7 @@ function submit(): void {
   display: block;
   margin-top: 24rpx;
   color: var(--gb-color-text-muted, #8490a3);
-  font-size: 24rpx;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -375,7 +376,7 @@ function submit(): void {
   border-radius: var(--gb-radius-md, 16rpx);
   background: var(--gb-color-primary, #015cbb);
   color: #fff;
-  font-size: 29rpx;
+  font-size: 16px;
   font-weight: 600;
   line-height: 88rpx;
 }

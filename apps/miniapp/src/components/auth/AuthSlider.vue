@@ -80,7 +80,7 @@ defineExpose({ reset });
         @touchend.stop="onTouchEnd"
         @touchcancel.stop="onTouchCancel"
       >
-        <text aria-hidden="true">{{ state === "verified" ? "✓" : "›" }}</text>
+        <text class="auth-slider__handle-icon" aria-hidden="true">{{ state === "verified" ? "✓" : "›" }}</text>
       </view>
       <button
         v-else
@@ -104,11 +104,11 @@ defineExpose({ reset });
 .auth-slider__track {
   position: relative;
   width: 100%;
-  height: 48px;
+  height: 44px;
   overflow: hidden;
-  border: 1px solid var(--gbnt-border, #dce4ee);
+  border: 0;
   border-radius: 6px;
-  background: #f4f7fb;
+  background: #f0f4f8;
   color: var(--gbnt-text-secondary, #526277);
   box-sizing: border-box;
 }
@@ -139,16 +139,17 @@ defineExpose({ reset });
 
 .auth-slider__handle {
   position: absolute;
-  top: -1px;
-  left: -1px;
+  top: 0;
+  left: 0;
   display: flex;
   width: 48px;
-  height: 48px;
+  height: 44px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--gbnt-primary, #015cbb);
+  padding: 3px;
+  border: 0;
   border-radius: 6px;
-  background: #ffffff;
+  background: transparent;
   color: var(--gbnt-primary, #015cbb);
   font-size: 30px;
   line-height: 1;
@@ -156,7 +157,7 @@ defineExpose({ reset });
 }
 
 .auth-slider__track--verified {
-  border-color: var(--gbnt-success, #197447);
+  box-shadow: inset 0 0 0 1px var(--gbnt-success, #197447);
   color: var(--gbnt-success, #197447);
 }
 
@@ -164,8 +165,17 @@ defineExpose({ reset });
   background: #dcfce7;
 }
 
-.auth-slider__handle--verified {
-  border-color: var(--gbnt-success, #197447);
+.auth-slider__handle-icon {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.auth-slider__handle--verified .auth-slider__handle-icon {
   background: var(--gbnt-success, #197447);
   color: #ffffff;
   font-size: 22px;
@@ -181,7 +191,7 @@ defineExpose({ reset });
 }
 
 .auth-slider__track--error {
-  border-color: #f3b7b3;
+  box-shadow: inset 0 0 0 1px #f3b7b3;
   background: #fff4f3;
   color: var(--gbnt-danger, #b42318);
 }
@@ -190,6 +200,7 @@ defineExpose({ reset });
 .auth-slider__track--preparing .auth-slider__text {
   position: static;
   flex: 1;
+  min-width: 0;
   justify-content: flex-start;
   padding: 0;
   text-align: left;

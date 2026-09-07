@@ -35,6 +35,7 @@ const photoUrls = computed(() =>
 );
 const hasLocation = computed(() => hasValidCoordinates(props.issue.lat, props.issue.lng));
 const displayCode = computed(() => props.issue.code.trim() || props.issue.issue_key || `#${props.issue.id}`);
+const reporter = computed(() => issueReporter(props.issue));
 
 function preview(urls: readonly string[], index: number): void {
   emit("preview", [...urls], index);
@@ -42,18 +43,18 @@ function preview(urls: readonly string[], index: number): void {
 </script>
 
 <template>
-  <view class="issue-card" role="button" :aria-label="`查看${typeLabel}${displayCode}详情`" hover-class="issue-card--pressed" @tap="emit('open', issue.id)">
+  <view class="issue-card" role="button" :aria-label="`查看${reporter}上报的${typeLabel}${displayCode}详情`" hover-class="issue-card--pressed" @tap="emit('open', issue.id)">
     <view class="issue-card__header">
       <view class="issue-card__title-wrap">
-        <text class="issue-card__type">{{ typeLabel }}</text>
-        <text class="issue-card__title">{{ displayCode }}</text>
+        <text class="issue-card__avatar" aria-hidden="true">{{ issue.report_user_name?.trim().slice(0, 1) || '—' }}</text>
+        <text class="issue-card__title">{{ reporter }}</text>
       </view>
       <text class="issue-card__status" :class="`tone-${status.tone}`">{{ status.label }}</text>
     </view>
 
-    <view class="issue-card__reporter">
-      <text class="issue-card__avatar" aria-hidden="true">{{ issue.report_user_name?.slice(0, 1) || '—' }}</text>
-      <text>{{ issueReporter(issue) }}</text>
+    <view class="issue-card__facility">
+      <text class="issue-card__type">{{ typeLabel }}</text>
+      <text>{{ displayCode }}</text>
       <text class="issue-card__org">{{ issueOrganization(issue) }}</text>
     </view>
     <text class="issue-card__summary">{{ summary }}</text>
@@ -89,7 +90,7 @@ function preview(urls: readonly string[], index: number): void {
 </template>
 
 <style scoped lang="scss">
-.issue-card__reporter {
+.issue-card__facility {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -102,14 +103,16 @@ function preview(urls: readonly string[], index: number): void {
 
 .issue-card__avatar {
   display: flex;
-  width: 48rpx;
-  height: 48rpx;
+  width: 40px;
+  height: 40px;
   align-items: center;
   justify-content: center;
   flex: none;
-  border-radius: 50%;
+  border-radius: 6px;
   background: #e8f1fb;
   color: var(--gb-color-primary, #015cbb);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .issue-card__org {
@@ -155,6 +158,7 @@ function preview(urls: readonly string[], index: number): void {
 }
 
 .issue-card__title-wrap {
+  flex: 1;
   min-width: 0;
   gap: 14rpx;
 }
@@ -172,7 +176,7 @@ function preview(urls: readonly string[], index: number): void {
 .issue-card__title {
   overflow: hidden;
   color: var(--gb-color-text-primary, #172033);
-  font-size: 30rpx;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.4;
   text-overflow: ellipsis;

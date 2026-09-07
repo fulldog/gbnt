@@ -62,16 +62,17 @@ function preview(record: RectifyRecord, index: number): void {
 
 .history__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20rpx;
+  gap: 4px 10px;
 }
 
 .history__title {
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
   color: var(--gb-color-text-primary, #172033);
-  font-size: 27rpx;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.45;
 }
@@ -79,7 +80,7 @@ function preview(record: RectifyRecord, index: number): void {
 .history__time {
   flex-shrink: 0;
   color: var(--gb-color-text-muted, #8490a3);
-  font-size: 23rpx;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -87,8 +88,9 @@ function preview(record: RectifyRecord, index: number): void {
   display: block;
   margin-top: 12rpx;
   color: var(--gb-color-text-secondary, #566176);
-  font-size: 26rpx;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 </style>

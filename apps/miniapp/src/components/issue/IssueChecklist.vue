@@ -80,7 +80,7 @@ function preview(urls: readonly string[], index: number): void {
   flex: 1;
   min-width: 0;
   color: var(--gb-color-text-primary, #172033);
-  font-size: 28rpx;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -92,7 +92,7 @@ function preview(urls: readonly string[], index: number): void {
   border-radius: var(--gb-radius-sm, 10rpx);
   background: rgba(26, 127, 75, 0.1);
   color: var(--gb-color-success, #1a7f4b);
-  font-size: 26rpx;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
   text-align: center;
@@ -107,8 +107,9 @@ function preview(urls: readonly string[], index: number): void {
   display: block;
   margin-top: 14rpx;
   color: var(--gb-color-text-secondary, #566176);
-  font-size: 26rpx;
-  line-height: 1.65;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 </style>
