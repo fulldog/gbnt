@@ -101,13 +101,13 @@ function updateStatus(value: string | number | boolean | undefined): void {
   <ElDialog v-model="visible" :title="user ? '编辑工作人员' : '新增工作人员'" width="min(680px, 94vw)" destroy-on-close :close-on-click-modal="false">
     <AsyncError v-if="optionsError" class="mb-4" :message="optionsError" @retry="emit('retryOptions')" />
     <ElAlert v-else-if="!optionsReady" class="mb-4" type="info" :closable="false" title="正在加载组织和角色候选，请稍候。" />
-    <ElForm ref="formRef" :model="form" :rules="rules" :disabled="!optionsReady || submitting" label-position="top">
-      <div class="grid gap-x-4 sm:grid-cols-2">
+    <ElForm ref="formRef" :model="form" :rules="rules" :disabled="!optionsReady || submitting" label-position="right" label-width="100px">
+      <div class="grid gap-x-4">
         <ElFormItem label="登录账号" prop="username">
           <ElInput v-model="form.username" :disabled="Boolean(user)" maxlength="64" autocomplete="off" />
         </ElFormItem>
-        <ElFormItem :label="user ? '新密码（不修改请留空）' : '初始密码（留空等于账号）'">
-          <ElInput v-model="form.password" type="password" show-password autocomplete="new-password" />
+        <ElFormItem :label="user ? '新密码' : '初始密码'">
+          <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '留空时初始密码与账号一致'" type="password" show-password autocomplete="new-password" />
         </ElFormItem>
         <ElFormItem label="姓名" prop="name"><ElInput v-model="form.name" maxlength="64" /></ElFormItem>
         <ElFormItem label="手机号"><ElInput v-model="form.phone" maxlength="32" /></ElFormItem>

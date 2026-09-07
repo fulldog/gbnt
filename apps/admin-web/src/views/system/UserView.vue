@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import type { SysOrg, SysRole } from "@gbnt/api-client";
 import type { AdminUser, AdminUserListResult } from "@/api/types";
-import { Delete, Download, Edit, Plus, Refresh, Upload } from "@element-plus/icons-vue";
+import { Download, Plus, Upload } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, vLoading } from "element-plus";
 import type { UploadRequestOptions } from "element-plus";
-import { computed, onMounted, reactive, shallowRef } from "vue";
+import { computed, onMounted, reactive, shallowRef, useTemplateRef } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
-import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
-import PageHeader from "@/components/PageHeader.vue";
+import OrgFilterTree from "@/components/OrgFilterTree.vue";
+import QueryPanel from "@/components/QueryPanel.vue";
+import TableToolbar from "@/components/TableToolbar.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { usePermissionStore } from "@/stores/permission";
 import { downloadBlob } from "@/utils/download";
@@ -17,6 +18,10 @@ import { formatDateTime } from "@/utils/format";
 import { displayOrg, displayRole } from "@/utils/display";
 import UserFormDialog from "./UserFormDialog.vue";
 
+const tablePage = useTemplateRef<HTMLElement>("tablePage");
+const filtersVisible = shallowRef(true);
+const columns = [{ key: "username", label: "登录账号" }, { key: "phone", label: "手机号" }, { key: "org", label: "所属组织" }, { key: "role", label: "角色" }, { key: "status", label: "状态" }, { key: "created", label: "创建时间" }];
+const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
 const permission = usePermissionStore();
 const page = shallowRef(1);
@@ -57,6 +62,8 @@ function isCancelled(error: unknown): boolean {
 async function loadDictionaries(): Promise<void> {
   await Promise.all([loadOrgs(), loadRoles()]);
 }
+
+function selectOrg(id: number | undefined): void { filters.org_id = id; search(); }
 
 function search(): void {
   page.value = 1;
@@ -164,9 +171,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <PageHeader title="工作人员" description="维护登录账号、所属组织、角色和启停状态。">
-      <template #actions>
+  <div class="staff-layout">
+    <OrgFilterTree :model-value="filters.org_id" :orgs="orgs" :loading="orgsLoading" :unavailable="Boolean(orgsError)" @update:model-value="selectOrg" />
+    <div ref="tablePage" class="data-page">
+      <QueryPanel v-show="filtersVisible" :columns="1" :loading="loading" @search="search" @reset="reset">
+        <ElFormItem label="姓名 / 电话"><ElInput v-model="filters.keyword" clearable placeholder="请输入账号、姓名或手机号" /></ElFormItem>
+      </QueryPanel>
+    <AsyncError v-if="orgsError" :message="orgsError" @retry="loadOrgs" />
+    <AsyncError v-if="rolesError" :message="rolesError" @retry="loadRoles" />
+    <AsyncError v-if="loadError" :message="loadError" @retry="load" />
+
+    <section class="data-card">
+      <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="人员列表" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
+
         <ElButton v-if="permission.can('web.sys-staff', 'export')" :icon="Download" @click="exportUsers">导出 Excel</ElButton>
         <ElUpload
           v-if="permission.can('web.sys-staff', 'import')"
@@ -178,50 +195,31 @@ onMounted(() => {
           <ElButton :icon="Upload">导入 Excel</ElButton>
         </ElUpload>
         <ElButton v-if="permission.can('web.sys-staff', 'create')" type="primary" :icon="Plus" @click="createUser">新增人员</ElButton>
-      </template>
-    </PageHeader>
-
-    <section class="page-card p-4" @submit.prevent="search">
-      <ElForm :model="filters" label-position="top">
-        <div class="grid items-end gap-4 md:grid-cols-[320px_1fr_auto]">
-          <ElFormItem label="所属组织" class="!mb-0"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部组织" /></ElFormItem>
-          <ElFormItem label="账号、姓名或手机号" class="!mb-0"><ElInput v-model="filters.keyword" clearable /></ElFormItem>
-          <div class="flex justify-end gap-2"><ElButton @click="reset">重置</ElButton><ElButton native-type="submit" type="primary">查询</ElButton></div>
-        </div>
-      </ElForm>
-    </section>
-
-    <AsyncError v-if="orgsError" :message="orgsError" @retry="loadOrgs" />
-    <AsyncError v-if="rolesError" :message="rolesError" @retry="loadRoles" />
-    <AsyncError v-if="loadError" :message="loadError" @retry="load" />
-
-    <section class="page-card overflow-hidden">
-      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <span class="text-sm text-slate-600">{{ hasLoaded ? `共 ${total} 名工作人员` : loading ? "正在加载工作人员…" : "工作人员列表未加载成功" }}</span>
-        <ElButton text :icon="Refresh" :loading="loading" @click="load">刷新</ElButton>
-      </div>
-      <ElTable v-loading="loading" :data="users" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无工作人员'">
-        <ElTableColumn type="index" label="#" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
-        <ElTableColumn prop="username" label="登录账号" min-width="130" />
-        <ElTableColumn prop="name" label="姓名" min-width="100" />
-        <ElTableColumn prop="phone" label="手机号" min-width="135" />
-        <ElTableColumn label="所属组织" min-width="220" show-overflow-tooltip><template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template></ElTableColumn>
-        <ElTableColumn label="角色" min-width="130"><template #default="scope">{{ displayRole(asUser(scope.row)) }}</template></ElTableColumn>
-        <ElTableColumn label="状态" width="90" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
-        <ElTableColumn label="创建时间" min-width="155"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
-        <ElTableColumn label="操作" width="280" fixed="right">
+      </TableToolbar>
+      <div class="data-table">
+      <ElTable height="100%" v-loading="loading" :data="users" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无工作人员'">
+        <ElTableColumn type="index" label="序号" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
+        <ElTableColumn prop="name" label="姓名" min-width="100"  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('username')" prop="username" label="登录账号" min-width="130"  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('phone')" prop="phone" label="手机号" min-width="135"  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('org')" label="所属组织" min-width="220" show-overflow-tooltip align="center"><template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('role')" label="角色" min-width="130" align="center"><template #default="scope">{{ displayRole(asUser(scope.row)) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="90" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
+        <ElTableColumn label="操作" width="280" fixed="right" align="center">
           <template #default="scope">
             <div v-if="!scope.row.is_super_admin" class="table-actions">
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" :icon="Edit" @click="editUser(asUser(scope.row))">编辑</ElButton>
+              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" @click="editUser(asUser(scope.row))">编辑</ElButton>
               <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="warning" @click="toggleStatus(asUser(scope.row))">{{ scope.row.status === 1 ? "停用" : "启用" }}</ElButton>
               <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="warning" @click="resetPassword(asUser(scope.row))">重置密码</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'delete')" link type="danger" :icon="Delete" @click="removeUser(asUser(scope.row))">删除</ElButton>
+              <ElButton v-if="permission.can('web.sys-staff', 'delete')" link type="danger" @click="removeUser(asUser(scope.row))">删除</ElButton>
             </div>
             <ElTag v-else type="danger" effect="plain">超级管理员</ElTag>
           </template>
         </ElTableColumn>
       </ElTable>
-      <div v-if="hasLoaded" class="flex justify-end border-t border-slate-200 px-4 py-3">
+      </div>
+      <div v-if="hasLoaded" class="data-pagination">
         <ElPagination
           v-model:current-page="page"
           v-model:page-size="size"
@@ -234,6 +232,12 @@ onMounted(() => {
       </div>
     </section>
 
+    </div>
     <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
   </div>
 </template>
+
+<style scoped>
+.staff-layout { display: flex; flex: 1; gap: 12px; min-width: 0; min-height: 0; }
+@media (max-width: 900px) { .staff-layout { flex-direction: column; flex: 1 0 auto; } }
+</style>

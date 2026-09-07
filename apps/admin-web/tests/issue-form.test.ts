@@ -1,96 +1,114 @@
+import { ISSUE_TYPES } from "@gbnt/api-client";
 import { describe, expect, it } from "vitest";
-import {
-  buildCreateInput,
-  createChecklist,
-  createIssueDraft,
-  draftNeedsRectify,
-  validateChecklist,
-} from "@/views/issues/issue-form";
+import { buildCreateInput, buildUpdateInput, createIssueDraft, draftNeedsRectify, hydrateIssueDraft, validateChecklist } from "@/views/issues/issue-form";
+import { editorIssue } from "./fixtures/issue-editor";
 
-function answerChecklistWithoutIssues(type: Parameters<typeof createChecklist>[0]) {
-  return createChecklist(type).map((item) => ({
-    ...item,
-    value: item.negative ? false : true,
-    files: item.mustImg ? [`${item.type}-file`] : [],
-  }));
-}
-
-describe("专项整改新建表单", () => {
-  it("使用后端默认类型和最新可选年度", () => {
-    const draft = createIssueDraft(9);
-    expect(draft.type).toBe("well");
-    expect(draft.project_year).toBe(2023);
-    expect(draft.report_user_id).toBe(9);
-    expect(draft.checklist).toHaveLength(6);
+describe("五类独立表单与编辑回填", () => {
+  it("新表单保留未填写与数值零的区别，各类型字段隔离", () => {
+    const form = createIssueDraft();
+    expect(form.types.well.outlet_total).toBeUndefined();
+    expect(form.types.well.checklist).toHaveLength(5);
+    expect(form.types.road.checklist.map((q) => q.type)).toEqual(["has_shoulder", "has_ash", "has_road_damage"]);
+    form.types.road.length = 1.5;
+    form.type = "bridge"; form.types.bridge.length = 18;
+    form.type = "road";
+    expect(form.types.road.length).toBe(1.5);
+    expect(form.types.bridge.length).toBe(18);
   });
 
-  it("按 mustImg、问题说明和数量关系执行前置校验", () => {
-    const draft = createIssueDraft(9);
-    expect(validateChecklist(draft)).toBe("请选择“机井是否出水”");
-
-    draft.checklist = answerChecklistWithoutIssues("well");
-    draft.outlet_total = 1;
-    draft.outlet_damaged = 2;
-    expect(validateChecklist(draft)).toBe("出水口损坏数量不能大于总数");
-
-    draft.outlet_damaged = 0;
-    draft.checklist[0]!.value = false;
-    expect(validateChecklist(draft)).toBe("请填写“机井是否出水”的说明");
-
-    draft.checklist[0]!.desc = "现场无出水";
-    expect(validateChecklist(draft)).toBe("请选择计划整改完成日期");
+  it.each(ISSUE_TYPES)("%s 完整回填，原值保存只携带乐观锁，不覆盖照片、历史或隐藏字段", (type) => {
+    const issue = editorIssue(type);
+    const before = JSON.stringify(issue);
+    const form = hydrateIssueDraft(issue);
+    expect(validateChecklist(form, issue)).toBeNull();
+    expect(form.types[type].checklist[0]?.desc).toBe(issue.type_ext.checklist[0]?.desc);
+    expect(form.types[type].checklist[0]?.photos).toEqual(issue.type_ext.checklist[0]?.photos);
+    expect(buildUpdateInput(form, issue, issue.reporter_signature_file_id)).toEqual({ expected_updated_at: issue.updated_at });
+    form.types[type].checklist[0]!.desc = "修改后的备注";
+    const input = buildUpdateInput(form, issue, issue.reporter_signature_file_id);
+    expect(input.type).toBe(type);
+    expect(input.type_ext?.checklist[0]?.desc).toBe("修改后的备注");
+    expect(input.type_ext?.keeper_phone).toBe("13900000001");
+    expect(input).not.toHaveProperty("status");
+    expect(input).not.toHaveProperty("reporter_signature_file_id");
+    expect(JSON.stringify(issue)).toBe(before);
   });
 
-  it("与后端一致地将机井损坏数量判定为需整改", () => {
-    const draft = createIssueDraft(9);
-    draft.outlet_total = 2;
-    draft.outlet_damaged = 1;
-    draft.checklist = answerChecklistWithoutIssues("well");
-
-    expect(draftNeedsRectify(draft)).toBe(true);
+  it("按题目标识匹配倒序清单，保留 false、0 与每题照片", () => {
+    const issue = editorIssue("well"); issue.type_ext.checklist.reverse();
+    const pipe = issue.type_ext.checklist.find((q) => q.type === "pipe_ok")!; pipe.value = false;
+    const form = hydrateIssueDraft(issue);
+    expect(form.types.well.checklist.find((q) => q.type === "pipe_ok")?.value).toBe(false);
+    expect(form.types.well.outlet_damaged).toBe(0);
+    expect(form.types.well.panorama_files).toEqual(["panorama-original"]);
   });
 
-  it("构造与后端判别联合一致的道路创建参数", () => {
-    const draft = createIssueDraft(9);
-    draft.type = "road";
-    draft.project_year = 2022;
-    draft.org_id = 12;
-    draft.code = " RD-01 ";
-    draft.address = " 一组北侧 ";
-    draft.report_user_id = 9;
-    draft.length = 120;
-    draft.width = 4;
-    draft.thickness = 0.2;
-    draft.tree_survive = 18;
-    draft.assignee_user = 15;
-    draft.checklist = answerChecklistWithoutIssues("road");
+  it("切换类型仅提交当前类型，长度不转换或串用，旧类型字段不进入请求", () => {
+    const form = hydrateIssueDraft(editorIssue("road"));
+    Object.assign(form.types.bridge, hydrateIssueDraft(editorIssue("bridge")).types.bridge);
+    form.type = "bridge";
+    const input = buildCreateInput(form, "signature");
+    expect(input).toMatchObject({ type: "bridge", type_ext: { kind: "culvert", length: 18, width: 5 } });
+    expect(input.type_ext).not.toHaveProperty("thickness");
+    expect(input.type_ext.checklist.map((q) => q.type)).toEqual(["needs_rectify"]);
+  });
 
-    expect(draftNeedsRectify(draft)).toBe(false);
-    expect(validateChecklist(draft)).toBeNull();
-    expect(buildCreateInput(draft, "signature-file")).toEqual({
-      type: "road",
-      project_year: 2022,
-      org_id: 12,
-      code: "RD-01",
-      address: "一组北侧",
-      lat: undefined,
-      lng: undefined,
-      plan_date: "",
-      reporter_signature_file_id: "signature-file",
-      report_user_id: 9,
-      assignee_user: 15,
-      type_ext: {
-        length: 120,
-        width: 4,
-        thickness: 0.2,
-        checklist: [
-          { type: "has_shoulder", value: true, desc: "", mustImg: false, files: [] },
-          { type: "has_ash", value: true, desc: "", mustImg: false, files: [] },
-        ],
-        tree_survive: 18,
-        keeper_name: "",
-        keeper_phone: "",
-      },
-    });
+  it("道路观察题均为否也不判异常；道路损坏为是时要求说明、照片和日期", () => {
+    const form = hydrateIssueDraft(editorIssue("road"));
+    form.types.road.checklist.forEach((q) => { q.value = false; });
+    expect(draftNeedsRectify(form)).toBe(false);
+    expect(validateChecklist(form)).toBeNull();
+    const damage = form.types.road.checklist[2]!; damage.value = true; damage.desc = "";
+    expect(validateChecklist(form)).toContain("说明");
+    damage.desc = "路面破损"; damage.files = [];
+    expect(validateChecklist(form)).toContain("现场照片");
+    damage.files = ["proof"];
+    expect(validateChecklist(form)).toBe("请选择整改计划日期");
+  });
+
+  it("机井独立校验全景、两张出水取证照片和损坏数量", () => {
+    const form = hydrateIssueDraft(editorIssue("well"));
+    form.types.well.panorama_files = [];
+    expect(validateChecklist(form)).toBe("请上传全景照片");
+    form.types.well.panorama_files = ["panorama"];
+    form.types.well.checklist[0]!.files = ["one", "one"];
+    expect(validateChecklist(form)).toContain("2 张");
+    form.types.well.checklist[0]!.files = ["one", "two"];
+    form.types.well.outlet_damaged = 8;
+    expect(validateChecklist(form)).toBe("出水口损坏数量不能大于总数");
+  });
+
+  it("旧道路不捏造新题答案，补填前保留旧契约与树木数量，补填后升级", () => {
+    const issue = editorIssue("road"); if (issue.type !== "road") throw new Error();
+    delete issue.type_ext.schema_version; issue.type_ext.tree_survive = 42;
+    issue.type_ext.checklist = issue.type_ext.checklist.filter((q) => q.type !== "has_road_damage");
+    const form = hydrateIssueDraft(issue);
+    expect(form.types.road.checklist[2]?.value).toBeNull();
+    form.types.road.length = 2.5;
+    let input = buildUpdateInput(form, issue, "original-signature");
+    expect(input.type_ext).toMatchObject({ schema_version: 1, tree_survive: 42, length: 2.5 });
+    expect(input.type_ext?.checklist).toHaveLength(2);
+    form.types.road.checklist[2]!.value = false; form.types.road.checklist[2]!.files = ["new-proof"];
+    input = buildUpdateInput(form, issue, "original-signature");
+    expect(input.type_ext).toMatchObject({ schema_version: 2, tree_survive: 42 });
+    expect(input.type_ext?.checklist).toHaveLength(3);
+  });
+
+  it("修改上报姓名解除旧账号关联，签名不变时不重复上传", () => {
+    const issue = editorIssue("forest"); const form = hydrateIssueDraft(issue);
+    form.reporter_name = "李四";
+    expect(buildUpdateInput(form, issue, "original-signature")).toEqual({ expected_updated_at: issue.updated_at, reporter_name: "李四", report_user_id: 0 });
+  });
+
+  it("只编辑整改日期也不能清空异常记录所需的日期", () => {
+    const issue = editorIssue("well");
+    if (issue.type !== "well") throw new Error("机井测试数据类型不符");
+    issue.type_ext.outlet_damaged = 1; issue.plan_date = "2026-09-15";
+    const form = hydrateIssueDraft(issue);
+    form.types.well.plan_date = "";
+    expect(validateChecklist(form, issue)).toBe("请选择整改计划日期");
+    form.types.well.plan_date = "2026-09-20";
+    expect(validateChecklist(form, issue)).toBeNull();
+    expect(buildUpdateInput(form, issue, issue.reporter_signature_file_id)).toEqual({ expected_updated_at: issue.updated_at, plan_date: "2026-09-20" });
   });
 });

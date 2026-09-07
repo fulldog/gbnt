@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { OrgTreeNode, OrgType, SysOrg } from "@gbnt/api-client";
-import { Delete, Edit, Plus, Refresh } from "@element-plus/icons-vue";
+import { Delete, Edit, Plus } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, vLoading } from "element-plus";
-import type { FormInstance, FormRules } from "element-plus";
-import { computed, onMounted, reactive, shallowRef } from "vue";
+import type { FormInstance, FormRules, TableInstance } from "element-plus";
+import { computed, onMounted, reactive, shallowRef, useTemplateRef } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
-import PageHeader from "@/components/PageHeader.vue";
+import TableToolbar from "@/components/TableToolbar.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
@@ -19,6 +19,14 @@ const ORG_TYPE_LABELS: Record<OrgType, string> = {
   village: "村/社区",
 };
 
+const tablePage = useTemplateRef<HTMLElement>("tablePage");
+const orgTable = useTemplateRef<TableInstance>("orgTable");
+function expandAll(value: boolean): void {
+  function visit(nodes: readonly OrgTreeNode[]): void {
+    for (const node of nodes) { orgTable.value?.toggleRowExpansion(node, value); visit(node.children); }
+  }
+  visit(tree.value);
+}
 const api = useAdminApi();
 const permission = usePermissionStore();
 const submitting = shallowRef(false);
@@ -110,18 +118,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <PageHeader title="组织架构" description="维护 root、district、street、village 四级组织结构。">
-      <template #actions>
-        <ElButton :icon="Refresh" :loading="loading" @click="load">刷新</ElButton>
-        <ElButton v-if="permission.can('web.sys-org', 'create')" type="primary" :icon="Plus" @click="createRoot">新增根组织</ElButton>
-      </template>
-    </PageHeader>
-
+  <div ref="tablePage" class="data-page">
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
-    <section class="page-card overflow-hidden">
-      <ElTable
+    <section class="data-card">
+      <TableToolbar title="单位列表" :filterable="false" :loading="loading" :target="() => tablePage" @refresh="load">
+        <ElButtonGroup><ElButton @click="expandAll(true)">展开全部</ElButton><ElButton @click="expandAll(false)">折叠全部</ElButton></ElButtonGroup>
+        <ElButton v-if="permission.can('web.sys-org', 'create')" type="primary" :icon="Plus" @click="createRoot">新增根组织</ElButton>
+      </TableToolbar>
+      <div class="data-table">
+      <ElTable ref="orgTable" height="100%"
         v-loading="loading"
         :data="tree"
         row-key="id"
@@ -129,7 +135,7 @@ onMounted(() => {
         :tree-props="{ children: 'children' }"
         :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无组织数据'"
       >
-        <ElTableColumn prop="name" label="组织名称" min-width="260" />
+        <ElTableColumn prop="name" label="单位名称" align="left" min-width="260" />
         <ElTableColumn label="组织类型" width="120"><template #default="scope">{{ ORG_TYPE_LABELS[scope.row.type as OrgType] }}</template></ElTableColumn>
         <ElTableColumn prop="sort" label="排序" width="100" align="center" />
         <ElTableColumn prop="id" label="组织 ID" width="110" align="center" />
@@ -155,10 +161,11 @@ onMounted(() => {
           </template>
         </ElTableColumn>
       </ElTable>
+      </div>
     </section>
 
     <ElDialog v-model="dialogVisible" :title="editing ? '修改组织名称' : '新增组织'" width="min(480px, 92vw)" destroy-on-close>
-      <ElForm ref="formRef" :model="form" :rules="rules" label-position="top">
+      <ElForm ref="formRef" :model="form" :rules="rules" label-position="right" label-width="90px">
         <ElFormItem v-if="!editing" label="上级组织">
           <ElInput :model-value="form.parent_id ? byId.get(form.parent_id)?.name ?? `组织 #${form.parent_id}` : '无（根组织）'" disabled />
         </ElFormItem>

@@ -1,30 +1,20 @@
-import type {
-  AdminCreateIssueInput,
-  BridgeKind,
-  BridgeTypeExt,
-  FacilityBuildKind,
-  ForestTypeExt,
-  IssueType,
-  ProjectYear,
-  QuizBool,
-  QuizType,
-  RoadTypeExt,
-  TransformerVoltage,
-  TransformerTypeExt,
-  WellTypeExt,
-} from "@gbnt/api-client";
-import { QUIZ_DEFINITIONS, quizIndicatesIssue } from "@/constants/issue";
+import { ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal } from "@gbnt/api-client";
+import type { AdminCreateIssueInput, FileItem, Issue, IssueQuizDefinition, IssueType, IssueTypeExt, ProjectYear, QuizBool, UpdateIssueInput } from "@gbnt/api-client";
+import type { AdminIssue } from "@/api/types";
 
-export interface ChecklistDraft {
-  type: QuizType;
-  label: string;
-  negative: boolean;
-  mustImg: boolean;
+export interface ChecklistDraft extends IssueQuizDefinition {
   value: boolean | null;
   desc: string;
   files: string[];
+  photos: FileItem[];
 }
-
+interface TypeDraftBase { checklist: ChecklistDraft[]; plan_date: string }
+export type WellDraft = TypeDraftBase & { type: "well"; build_kind: "new" | "match"; outlet_total?: number; outlet_damaged?: number; casing_total?: number; casing_damaged?: number; panorama_files: string[]; panorama_photos: FileItem[] };
+export type RoadDraft = TypeDraftBase & { type: "road"; length?: number; width?: number; thickness?: number };
+export type BridgeDraft = TypeDraftBase & { type: "bridge"; kind: "bridge" | "culvert" | "gate"; length?: number; width?: number };
+export type ForestDraft = TypeDraftBase & { type: "forest"; handover_count?: number; existing_count?: number };
+export type TransformerDraft = TypeDraftBase & { type: "transformer"; capacity?: number; model: string; voltage: "10kv" | "0.4kv" };
+export type IssueTypeDraft = WellDraft | RoadDraft | BridgeDraft | ForestDraft | TransformerDraft;
 export interface IssueFormDraft {
   type: IssueType;
   project_year: ProjectYear;
@@ -33,193 +23,173 @@ export interface IssueFormDraft {
   address: string;
   lat?: number;
   lng?: number;
-  plan_date: string;
   report_user_id?: number;
-  assignee_user?: number;
-  build_kind: FacilityBuildKind;
-  outlet_total: number | undefined;
-  outlet_damaged: number | undefined;
-  casing_total: number | undefined;
-  casing_damaged: number | undefined;
-  length: number | undefined;
-  width: number | undefined;
-  thickness: number | undefined;
-  tree_survive: number | undefined;
-  bridge_kind: BridgeKind;
-  handover_count: number | undefined;
-  existing_count: number | undefined;
-  survive_rate: number | undefined;
-  capacity: number | undefined;
-  model: string;
-  voltage: TransformerVoltage;
-  checklist: ChecklistDraft[];
+  reporter_name: string;
+  reporter_phone: string;
+  types: { well: WellDraft; road: RoadDraft; bridge: BridgeDraft; forest: ForestDraft; transformer: TransformerDraft };
 }
 
 export function createChecklist(type: IssueType): ChecklistDraft[] {
-  return QUIZ_DEFINITIONS[type].map((item) => ({
-    ...item,
-    value: null,
-    desc: "",
-    files: [],
-  }));
+  return ISSUE_FORM_QUIZZES[type].map((item) => ({ ...item, value: null, desc: "", files: [], photos: [] }));
 }
 
 export function createIssueDraft(reportUserId?: number): IssueFormDraft {
   return {
-    type: "well",
-    project_year: 2023,
-    org_id: undefined,
-    code: "",
-    address: "",
-    lat: undefined,
-    lng: undefined,
-    plan_date: "",
-    report_user_id: reportUserId,
-    assignee_user: undefined,
-    build_kind: "new",
-    outlet_total: 0,
-    outlet_damaged: 0,
-    casing_total: 0,
-    casing_damaged: 0,
-    length: 0,
-    width: 0,
-    thickness: 0,
-    tree_survive: 0,
-    bridge_kind: "bridge",
-    handover_count: 0,
-    existing_count: 0,
-    survive_rate: 0,
-    capacity: 0,
-    model: "",
-    voltage: "10kv",
-    checklist: createChecklist("well"),
+    type: "well", project_year: 2023, org_id: undefined, code: "", address: "", lat: undefined, lng: undefined,
+    report_user_id: reportUserId, reporter_name: "", reporter_phone: "",
+    types: {
+      well: { type: "well", build_kind: "new", panorama_files: [], panorama_photos: [], checklist: createChecklist("well"), plan_date: "" },
+      road: { type: "road", checklist: createChecklist("road"), plan_date: "" },
+      bridge: { type: "bridge", kind: "bridge", checklist: createChecklist("bridge"), plan_date: "" },
+      forest: { type: "forest", checklist: createChecklist("forest"), plan_date: "" },
+      transformer: { type: "transformer", model: "", voltage: "10kv", checklist: createChecklist("transformer"), plan_date: "" },
+    },
   };
 }
 
-export function draftNeedsRectify(draft: IssueFormDraft): boolean {
-  if (
-    draft.type === "well" &&
-    ((draft.outlet_damaged ?? 0) > 0 || (draft.casing_damaged ?? 0) > 0)
-  ) {
-    return true;
+/** 每种类型独立回填，答案按稳定枚举匹配；空值不转换成 0 或 false。 */
+export function hydrateIssueDraft(issue: AdminIssue): IssueFormDraft {
+  const draft = createIssueDraft(issue.report_user_id);
+  Object.assign(draft, {
+    type: issue.type, project_year: issue.project_year, org_id: issue.org_id, code: issue.code, address: issue.address,
+    lat: issue.lat ?? undefined, lng: issue.lng ?? undefined,
+    reporter_name: issue.reporter_name?.trim() || issue.report_user_name || "", reporter_phone: issue.reporter_phone ?? "",
+  });
+  const active = draft.types[issue.type];
+  const ext = issue.type_ext;
+  const byType = new Map((ext.checklist ?? []).map((q) => [q.type, q]));
+  active.plan_date = issue.plan_date ?? "";
+  active.checklist = active.checklist.map((q) => {
+    const stored = byType.get(q.type);
+    return { ...q, value: typeof stored?.value === "boolean" ? stored.value : null, desc: stored?.desc ?? "", files: [...(stored?.files ?? [])], photos: (stored?.photos ?? []).map((p) => ({ ...p })) };
+  });
+  switch (issue.type) {
+    case "well": Object.assign(draft.types.well, { build_kind: issue.type_ext.build_kind, outlet_total: issue.type_ext.outlet_total ?? undefined, outlet_damaged: issue.type_ext.outlet_damaged ?? undefined, casing_total: issue.type_ext.casing_total ?? undefined, casing_damaged: issue.type_ext.casing_damaged ?? undefined, panorama_files: [...(issue.type_ext.panorama_files ?? [])], panorama_photos: (issue.type_ext.panorama_photos ?? []).map((p) => ({ ...p })) }); break;
+    case "road": Object.assign(draft.types.road, { length: issue.type_ext.length ?? undefined, width: issue.type_ext.width ?? undefined, thickness: issue.type_ext.thickness ?? undefined }); break;
+    case "bridge": Object.assign(draft.types.bridge, { kind: issue.type_ext.kind, length: issue.type_ext.length ?? undefined, width: issue.type_ext.width ?? undefined }); break;
+    case "forest": Object.assign(draft.types.forest, { handover_count: issue.type_ext.handover_count ?? undefined, existing_count: issue.type_ext.existing_count ?? undefined }); break;
+    case "transformer": Object.assign(draft.types.transformer, { capacity: issue.type_ext.capacity ?? undefined, model: issue.type_ext.model ?? "", voltage: issue.type_ext.voltage }); break;
   }
-  return draft.checklist.some(
-    (item) => item.value !== null && quizIndicatesIssue(item.value, item.negative),
-  );
+  return draft;
 }
 
-export function validateChecklist(draft: IssueFormDraft): string | null {
-  for (const item of draft.checklist) {
-    if (item.value === null) return `请选择“${item.label}”`;
-    if (quizIndicatesIssue(item.value, item.negative) && !item.desc.trim()) {
-      return `请填写“${item.label}”的说明`;
-    }
-    if (item.mustImg && item.files.length === 0) {
-      return `请上传“${item.label}”的现场照片`;
-    }
+function withoutPhotos(draft: IssueTypeDraft): unknown {
+  const { checklist, plan_date: _plan, ...fields } = draft;
+  const { panorama_photos: _photos, ...attributes } = fields as typeof fields & { panorama_photos?: FileItem[] };
+  return { ...attributes, checklist: checklist.map(({ type, value, desc, files }) => ({ type, value, desc, files })) };
+}
+
+export function typeDraftChanged(form: IssueFormDraft, issue: AdminIssue | null): boolean {
+  if (!issue || issue.type !== form.type) return true;
+  return JSON.stringify(withoutPhotos(form.types[form.type])) !== JSON.stringify(withoutPhotos(hydrateIssueDraft(issue).types[issue.type]));
+}
+
+/** 旧记录未补齐新增字段时仍用旧版本保存；补齐后升级，不捏造缺失答案。 */
+export function draftSchemaVersion(form: IssueFormDraft, issue: AdminIssue | null): 1 | 2 {
+  if (issue?.type !== form.type || issue.type_ext.schema_version === 2) return 2;
+  const active = form.types[form.type];
+  if (active.type === "well" && active.panorama_files.length === 0) return 1;
+  if (active.type === "road" && active.checklist.find((q) => q.type === "has_road_damage")?.value == null) return 1;
+  return 2;
+}
+
+export function draftNeedsRectify(form: IssueFormDraft, issue: AdminIssue | null = null): boolean {
+  const draft = form.types[form.type];
+  if (draft.type === "well" && ((draft.outlet_damaged ?? 0) > 0 || (draft.casing_damaged ?? 0) > 0)) return true;
+  const definitions = issueQuizDefinitions(form.type, draftSchemaVersion(form, issue));
+  return draft.checklist.some((q) => {
+    const definition = definitions.find((d) => d.type === q.type);
+    return q.value !== null && Boolean(definition && issueQuizIsAbnormal(definition, q.value));
+  }) || Boolean(draftSchemaVersion(form, issue) === 1 && issue?.type === "well" && issue.type_ext.checklist.some((q) => q.type === "transformer_ok" && !q.value));
+}
+
+export function quizPhotoMinimum(q: ChecklistDraft, version = 2): number {
+  if (version === 2 && q.type === "water_out" && q.value === true) return 2;
+  return q.mustImg || (q.value !== null && issueQuizIsAbnormal(q, q.value)) ? 1 : 0;
+}
+
+export function validateChecklist(form: IssueFormDraft, issue: AdminIssue | null = null): string | null {
+  // 基础信息修改不强制改写、升级旧表单，但显式清除必要日期仍然校验。
+  const active = form.types[form.type];
+  if (issue && !typeDraftChanged(form, issue)) {
+    if (active.plan_date !== issue.plan_date && draftNeedsRectify(form, issue) && !active.plan_date) return "请选择整改计划日期";
+    return null;
   }
-  if (draft.type === "well") {
-    if ((draft.outlet_damaged ?? 0) > (draft.outlet_total ?? 0)) return "出水口损坏数量不能大于总数";
-    if ((draft.casing_damaged ?? 0) > (draft.casing_total ?? 0)) return "护筒损坏数量不能大于总数";
+  const version = draftSchemaVersion(form, issue);
+  const definitions = issueQuizDefinitions(form.type, version);
+  for (const q of active.checklist) {
+    const definition = definitions.find((d) => d.type === q.type);
+    if (!definition) continue;
+    if (q.value === null) return `请选择“${q.label}”`;
+    if (issueQuizIsAbnormal(definition, q.value) && !q.desc.trim()) return `请填写“${q.label}”的说明`;
+    const minimum = quizPhotoMinimum(q, version);
+    if (new Set(q.files).size < minimum) return `“${q.label}”至少需要 ${minimum} 张现场照片`;
   }
-  if (draft.type === "forest" && (draft.survive_rate ?? 0) > 100) return "存活率不能大于 100";
-  if (draftNeedsRectify(draft) && !draft.plan_date) return "请选择计划整改完成日期";
+  let numbers: [string, number | undefined][] = [];
+  switch (active.type) {
+    case "well":
+      numbers = [["出水口总数", active.outlet_total], ["出水口损坏", active.outlet_damaged], ["护筒总数", active.casing_total], ["护筒损坏", active.casing_damaged]];
+      if ((active.outlet_damaged ?? 0) > (active.outlet_total ?? 0)) return "出水口损坏数量不能大于总数";
+      if ((active.casing_damaged ?? 0) > (active.casing_total ?? 0)) return "护筒损坏数量不能大于总数";
+      if (version === 2 && !active.panorama_files.length) return "请上传全景照片";
+      break;
+    case "road": numbers = [["道路长度", active.length], ["道路宽度", active.width], ["道路厚度", active.thickness]]; break;
+    case "bridge": numbers = [["长度", active.length], ["宽度", active.width]]; break;
+    case "forest": numbers = [["移交株数", active.handover_count], ["现有株数", active.existing_count]]; break;
+    case "transformer": numbers = [["容量", active.capacity]]; if (!active.model.trim()) return "请填写型号"; break;
+  }
+  for (const [name, number] of numbers) if (number == null || !Number.isFinite(number) || number < 0 || ((active.type === "well" || active.type === "forest") && !Number.isInteger(number))) return `请填写有效的${name}`;
+  if (draftNeedsRectify(form, issue) && !active.plan_date) return "请选择整改计划日期";
   return null;
 }
 
-function checklistOf(draft: IssueFormDraft): QuizBool[] {
-  return draft.checklist.map((item) => ({
-    type: item.type,
-    value: item.value ?? false,
-    desc: item.desc.trim(),
-    mustImg: item.mustImg,
-    files: [...item.files],
-  }));
+function buildTypeInput(form: IssueFormDraft, issue: AdminIssue | null = null): IssueTypeExt {
+  const draft = form.types[form.type];
+  const version = draftSchemaVersion(form, issue);
+  const definitions = issueQuizDefinitions(form.type, version);
+  const checklist: QuizBool[] = definitions.map((definition) => {
+    const q = draft.checklist.find((q) => q.type === definition.type);
+    if (!q && issue?.type === form.type) {
+      const original = issue.type_ext.checklist.find((q) => q.type === definition.type);
+      if (original) return { ...original, files: [...original.files] };
+    }
+    if (!q || q.value === null) throw new Error(`请选择“${definition.label}”`);
+    return { type: q.type, value: q.value, desc: q.desc.trim(), files: [...q.files], mustImg: quizPhotoMinimum(q, version) > 0 };
+  });
+  const { type: _type, plan_date: _plan, checklist: _checklist, ...attributes } = draft;
+  const { panorama_photos: _photos, ...fields } = attributes as typeof attributes & { panorama_photos?: FileItem[] };
+  const previous = issue?.type === form.type ? issue.type_ext : {};
+  // 历史字段仅保留原值；新建不补 tree_survive / survive_rate 等已退出的字段。
+  return { keeper_name: "", keeper_phone: "", ...previous, ...fields, schema_version: version, checklist } as IssueTypeExt;
 }
 
-export function buildCreateInput(
-  draft: IssueFormDraft,
-  reporterSignatureFileId: string,
-): AdminCreateIssueInput {
-  if (!draft.org_id || !draft.report_user_id) throw new Error("组织和上报人必填");
-  const common = {
-    project_year: draft.project_year,
-    org_id: draft.org_id,
-    code: draft.code.trim(),
-    address: draft.address.trim(),
-    lat: draft.lat,
-    lng: draft.lng,
-    plan_date: draftNeedsRectify(draft) ? draft.plan_date : "",
-    reporter_signature_file_id: reporterSignatureFileId,
-    report_user_id: draft.report_user_id,
-    ...(draft.assignee_user ? { assignee_user: draft.assignee_user } : {}),
-  };
-  const checklist = checklistOf(draft);
-  const keeper = { keeper_name: "", keeper_phone: "" };
+export function buildCreateInput(form: IssueFormDraft, signatureId: string): AdminCreateIssueInput {
+  if (!form.org_id) throw new Error("请选择行政区划");
+  return {
+    type: form.type, project_year: form.project_year, org_id: form.org_id, code: form.code.trim(), address: form.address.trim(),
+    lat: form.lat, lng: form.lng, report_user_id: form.report_user_id,
+    reporter_name: form.reporter_name.trim(), reporter_phone: form.reporter_phone.trim(),
+    reporter_signature_file_id: signatureId, plan_date: draftNeedsRectify(form) ? form.types[form.type].plan_date : "",
+    type_ext: buildTypeInput(form),
+  } as AdminCreateIssueInput;
+}
 
-  switch (draft.type) {
-    case "well":
-      return {
-        ...common,
-        type: "well",
-        type_ext: {
-          build_kind: draft.build_kind,
-          checklist: checklist as WellTypeExt["checklist"],
-          outlet_total: draft.outlet_total ?? 0,
-          outlet_damaged: draft.outlet_damaged ?? 0,
-          casing_total: draft.casing_total ?? 0,
-          casing_damaged: draft.casing_damaged ?? 0,
-          ...keeper,
-        },
-      } as AdminCreateIssueInput;
-    case "road":
-      return {
-        ...common,
-        type: "road",
-        type_ext: {
-          length: draft.length ?? 0,
-          width: draft.width ?? 0,
-          thickness: draft.thickness ?? 0,
-          checklist: checklist as RoadTypeExt["checklist"],
-          tree_survive: draft.tree_survive ?? 0,
-          ...keeper,
-        },
-      } as AdminCreateIssueInput;
-    case "bridge":
-      return {
-        ...common,
-        type: "bridge",
-        type_ext: {
-          kind: draft.bridge_kind,
-          length: draft.length ?? 0,
-          width: draft.width ?? 0,
-          checklist: checklist as BridgeTypeExt["checklist"],
-          ...keeper,
-        },
-      } as AdminCreateIssueInput;
-    case "forest":
-      return {
-        ...common,
-        type: "forest",
-        type_ext: {
-          handover_count: draft.handover_count ?? 0,
-          existing_count: draft.existing_count ?? 0,
-          survive_rate: draft.survive_rate ?? 0,
-          checklist: checklist as ForestTypeExt["checklist"],
-          ...keeper,
-        },
-      } as AdminCreateIssueInput;
-    case "transformer":
-      return {
-        ...common,
-        type: "transformer",
-        type_ext: {
-          capacity: draft.capacity ?? 0,
-          model: draft.model.trim(),
-          voltage: draft.voltage,
-          checklist: checklist as TransformerTypeExt["checklist"],
-          ...keeper,
-        },
-      } as AdminCreateIssueInput;
+export function buildUpdateInput(form: IssueFormDraft, issue: AdminIssue, signatureId: string): UpdateIssueInput {
+  const original = hydrateIssueDraft(issue);
+  const input: UpdateIssueInput = { expected_updated_at: issue.updated_at || undefined };
+  const fields = ["project_year", "org_id", "code", "address", "lat", "lng", "reporter_name", "reporter_phone"] as const;
+  for (const key of fields) {
+    const current = typeof form[key] === "string" ? (form[key] as string).trim() : form[key];
+    if (current !== original[key] && current !== undefined) Object.assign(input, { [key]: current });
   }
+  if (form.reporter_name.trim() !== original.reporter_name.trim()) input.report_user_id = 0;
+  const changed = typeDraftChanged(form, issue);
+  if (changed) {
+    input.type = form.type;
+    input.type_ext = buildTypeInput(form, issue);
+  }
+  const plan = form.types[form.type].plan_date;
+  if (plan !== issue.plan_date || changed) input.plan_date = draftNeedsRectify(form, issue) ? plan : "";
+  if (signatureId !== issue.reporter_signature_file_id) input.reporter_signature_file_id = signatureId;
+  return input;
 }

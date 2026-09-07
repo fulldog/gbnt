@@ -60,26 +60,17 @@ describe("专项整改弹窗提交保护", () => {
     wrapper.unmount();
   });
 
-  it("新增切换组织清除旧上报人，禁止在组织候选失败时提交", async () => {
-    const api = { issues: { listReporterOptions: vi.fn() } };
+  it("手工上报信息随组织选择保留，组织候选失败时禁止提交", async () => {
     const wrapper = shallowMount(IssueFormDialog, {
       props: { modelValue: true, orgs: [], orgsReady: true },
-      global: { provide: { [adminApiKey as symbol]: api }, renderStubDefaultSlot: true, stubs: { ElDialog: showSlots } },
+      global: { provide: { [adminApiKey as symbol]: { issues: {} } }, renderStubDefaultSlot: true, stubs: { ElDialog: showSlots } },
     });
-    const state = wrapper.vm as unknown as { form: { org_id?: number; report_user_id?: number } };
-    state.form.org_id = 1;
-    await flushPromises();
-    const candidates = wrapper.findComponent(BusinessUserSelect);
-    candidates.vm.$emit("update:modelValue", 12);
-    candidates.vm.$emit("ready", true);
-    await flushPromises();
-    expect(state.form.report_user_id).toBe(12);
+    const state = wrapper.vm as unknown as { form: { org_id?: number; reporter_name: string; reporter_phone: string } };
+    state.form.org_id = 1; state.form.reporter_name = "实际巡查员"; state.form.reporter_phone = "13800000001";
     state.form.org_id = 2;
     await flushPromises();
-    expect(state.form.report_user_id).toBeUndefined();
-    expect((state.form as { assignee_user?: number }).assignee_user).toBeUndefined();
-    expect(wrapper.findAllComponents({ name: "ElButton" }).at(-1)!.props("disabled")).toBe(true);
-    candidates.vm.$emit("ready", true);
+    expect(state.form.reporter_name).toBe("实际巡查员");
+    expect(state.form.reporter_phone).toBe("13800000001");
     await wrapper.setProps({ orgsReady: false });
     expect(wrapper.findAllComponents({ name: "ElButton" }).at(-1)!.props("disabled")).toBe(true);
     wrapper.unmount();

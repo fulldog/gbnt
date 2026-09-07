@@ -5,7 +5,7 @@ import { createIssuesApi } from "@/api/issues";
 import { createMineApi } from "@/api/mine";
 import { createAuthApi } from "@/api/auth";
 import { parseAuthUser, parseIssue, parseIssuePage, parseMineIssuePage, parseMineStats, parseRegions } from "@/api/response";
-import { issueTypeInfoRows } from "@/utils/issue-display";
+import { issueTypeInfoRows, issueAbnormalQuizzes, issueChecklistPhotos, issueReporter } from "@/utils/issue-display";
 
 function rawIssue(): Record<string, any> {
   return {
@@ -22,6 +22,33 @@ function rawIssue(): Record<string, any> {
 const user = { id: 1, org_id: 2, role_id: 3, username: "tester", is_super_admin: false, apis: [] };
 
 describe("miniapp business response normalization", () => {
+  it("reads the new road question and preserves old-road semantics independently", () => {
+    const legacy = parseIssue(rawIssue());
+    expect(issueAbnormalQuizzes(legacy).map((q) => q.type)).toEqual(["has_shoulder"]);
+    const row = rawIssue();
+    row.type_ext.schema_version = 2;
+    row.type_ext.checklist.push({ type: "has_road_damage", value: true, desc: "路面损坏", mustImg: true, files: ["damage"], photos: [{ file_id: "damage", url: "/damage.png" }] });
+    row.rectify_records = [{ id: 1, quiz_type: "has_shoulder", round: 0, note: "历史整改", photos: [] }];
+    row.reporter_name = "现场上报人";
+    const modern = parseIssue(row);
+    expect(issueAbnormalQuizzes(modern).map((q) => q.type)).toEqual(["has_road_damage"]);
+    expect(modern.rectify_records[0]?.quiz_type).toBe("has_shoulder");
+    expect(issueReporter(modern)).toBe("现场上报人");
+    expect(issueTypeInfoRows(modern).some((field) => field.label === "林网存活数量")).toBe(false);
+  });
+
+  it("reads five well questions with independent panoramas and archived rectification history", () => {
+    const row = rawIssue(); row.type = "well";
+    row.type_ext = {
+      schema_version: 2, panorama_files: ["panorama"], panorama_photos: [{ file_id: "panorama", url: "/panorama.png" }],
+      checklist: ["water_out", "pipe_ok", "wiring_ok", "box_ok", "cover_ok"].map((type) => ({ type, value: true, mustImg: true, files: [], photos: [] })),
+    };
+    row.rectify_records = [{ id: 1, quiz_type: "transformer_ok", round: 0, photos: [] }];
+    const issue = parseIssue(row);
+    expect(issue.type_ext.checklist).toHaveLength(5);
+    expect(issueChecklistPhotos(issue)).toEqual([{ file_id: "panorama", url: "/panorama.png" }]);
+    expect(issue.rectify_records).toHaveLength(1);
+  });
   it("fills optional display fields but never invents coordinates or facility measurements", () => {
     const result = parseIssue(rawIssue());
     expect(result.code).toBe("");

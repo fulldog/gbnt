@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { ISSUE_STATUSES, ISSUE_TYPES, PROJECT_YEARS } from "@gbnt/api-client";
 import type { Issue, IssueListQuery } from "@gbnt/api-client";
-import { Delete, Download, Edit, Plus, Refresh, View } from "@element-plus/icons-vue";
+import { Plus } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, vLoading } from "element-plus";
-import { computed, onMounted, onScopeDispose, reactive, shallowRef, watch } from "vue";
+import { computed, onMounted, onScopeDispose, reactive, shallowRef, useTemplateRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import type { AdminIssue, AdminIssueListResult, OrgOption } from "@/api/types";
 import AsyncError from "@/components/AsyncError.vue";
 import IssueStatusTag from "@/components/IssueStatusTag.vue";
 import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
-import PageHeader from "@/components/PageHeader.vue";
+import QueryPanel from "@/components/QueryPanel.vue";
+import TableToolbar from "@/components/TableToolbar.vue";
 import { ISSUE_STATUS_META, ISSUE_TYPE_LABELS } from "@/constants/issue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useBusinessToday } from "@/composables/useBusinessToday";
@@ -17,12 +18,10 @@ import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
 import { formatDateTime } from "@/utils/format";
 import { displayOrg, displayUser } from "@/utils/display";
-import { issuePlanDisplay } from "@/utils/issue-date";
+import { issueCountdownDisplay, issuePlanDateDisplay } from "@/utils/issue-date";
 import ImportIssuesDialog from "./ImportIssuesDialog.vue";
 import IssueDetailDrawer from "./IssueDetailDrawer.vue";
 import IssueFormDialog from "./IssueFormDialog.vue";
-import ReassignDialog from "./ReassignDialog.vue";
-import RectifyDialog from "./RectifyDialog.vue";
 
 interface IssueFilters {
   type: IssueListQuery["type"];
@@ -32,16 +31,22 @@ interface IssueFilters {
   keyword: string;
 }
 
+const tablePage = useTemplateRef<HTMLElement>("tablePage");
+const filtersVisible = shallowRef(true);
+const columns = [
+  { key: "type", label: "类型" }, { key: "year", label: "年度" }, { key: "code", label: "设施编号" },
+  { key: "org", label: "所属组织" }, { key: "address", label: "定位地址" }, { key: "reporter", label: "上报人" },
+  { key: "assignee", label: "整改人" }, { key: "plan", label: "计划完成" }, { key: "countdown", label: "倒计时" },
+  { key: "status", label: "状态" }, { key: "created", label: "创建时间" },
+];
+const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
 const permission = usePermissionStore();
 const page = shallowRef(1);
 const size = shallowRef(20);
-const selectedIssue = shallowRef<AdminIssue | null>(null);
 const detailId = shallowRef<number>();
 const formVisible = shallowRef(false);
 const detailVisible = shallowRef(false);
-const rectifyVisible = shallowRef(false);
-const reassignVisible = shallowRef(false);
 const importVisible = shallowRef(false);
 const editingIssue = shallowRef<AdminIssue | null>(null);
 const filters = reactive<IssueFilters>({ type: "all", status: "all", keyword: "" });
@@ -78,12 +83,8 @@ function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
 }
 
-function planDisplay(issue: Issue): string {
-  return issuePlanDisplay(issue, today.value).text;
-}
-
 function rowClassName({ row }: { row: Issue }): string {
-  return issuePlanDisplay(row, today.value).overdue ? "is-overdue" : "";
+  return issueCountdownDisplay(row, today.value).overdue ? "is-overdue" : "";
 }
 
 function asIssue(row: unknown): AdminIssue {
@@ -131,8 +132,6 @@ function closeIssuePanels(): void {
   invalidateDetail();
   detailVisible.value = false;
   formVisible.value = false;
-  rectifyVisible.value = false;
-  reassignVisible.value = false;
 }
 
 async function openDetail(issue: AdminIssue): Promise<void> {
@@ -145,18 +144,6 @@ async function openDetail(issue: AdminIssue): Promise<void> {
 watch(detailVisible, (open) => {
   if (!open) invalidateDetail();
 }, { flush: "sync" });
-
-function openRectify(issue: AdminIssue): void {
-  closeIssuePanels();
-  selectedIssue.value = issue;
-  rectifyVisible.value = true;
-}
-
-function openReassign(issue: AdminIssue): void {
-  closeIssuePanels();
-  selectedIssue.value = issue;
-  reassignVisible.value = true;
-}
 
 async function removeIssue(issue: Issue): Promise<void> {
   try {
@@ -173,28 +160,13 @@ async function removeIssue(issue: Issue): Promise<void> {
   }
 }
 
-async function reRectify(issue: Issue): Promise<void> {
-  try {
-    await ElMessageBox.confirm(`确定将 ${issue.issue_key} 重新进入整改流程吗？`, "重新整改", {
-      confirmButtonText: "确认",
-      cancelButtonText: "取消",
-      type: "warning",
-    });
-    await api.issues.reRectify(issue.id);
-    ElMessage.success("已重新进入整改流程");
-    await handleSaved(issue.id);
-  } catch (error) {
-    if (!isCancelled(error)) ElMessage.error(errorMessage(error, "重新整改失败"));
-  }
-}
-
 async function handleSaved(issueId?: number): Promise<void> {
   const current = ++refreshSequence;
   // 写入响应仍为基础 Issue，展示字段以管理端 GET 的最新结果为准。
   await Promise.all([
     load(),
     issueId ? api.issues.get(issueId).then((fresh) => {
-      if (current === refreshSequence && selectedIssue.value?.id === fresh.id) selectedIssue.value = fresh;
+      if (current === refreshSequence && detailVisible.value && detailId.value === fresh.id) detail.value = fresh;
     }).catch((error: unknown) => {
       if (current === refreshSequence) ElMessage.warning(errorMessage(error, "操作成功，但最新详情加载失败，请重试"));
     }) : Promise.resolve(),
@@ -207,128 +179,79 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <PageHeader title="专项整改" description="按当前后端字段管理排查、整改和责任人指派。">
-      <template #actions>
-        <ElButton v-if="permission.can('web.rectify', 'import')" :icon="Download" @click="importVisible = true">
-          JSON 导入
-        </ElButton>
-        <ElButton v-if="permission.can('web.rectify', 'create')" type="primary" :icon="Plus" @click="createIssue">
-          新增排查
-        </ElButton>
+  <div ref="tablePage" class="data-page">
+    <QueryPanel v-show="filtersVisible" :loading="loading" @search="search" @reset="reset">
+      <ElFormItem label="问题类型">
+        <ElSelect v-model="filters.type"><ElOption label="全部类型" value="all" /><ElOption v-for="type in ISSUE_TYPES" :key="type" :label="ISSUE_TYPE_LABELS[type]" :value="type" /></ElSelect>
+      </ElFormItem>
+      <ElFormItem label="整改状态">
+        <ElSelect v-model="filters.status"><ElOption label="全部状态" value="all" /><ElOption v-for="status in ISSUE_STATUSES" :key="status" :label="ISSUE_STATUS_META[status].label" :value="status" /></ElSelect>
+      </ElFormItem>
+      <template #advanced>
+        <ElFormItem label="项目年度"><ElSelect v-model="filters.project_year" clearable placeholder="全部年度"><ElOption v-for="year in PROJECT_YEARS" :key="year" :label="`${year} 年`" :value="year" /></ElSelect></ElFormItem>
+        <ElFormItem label="所属组织"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部组织" /></ElFormItem>
+        <ElFormItem label="关键字"><ElInput v-model="filters.keyword" clearable placeholder="问题编号、设施编号或地址" /></ElFormItem>
       </template>
-    </PageHeader>
-
-    <section class="page-card p-4" @submit.prevent="search">
-      <ElForm :model="filters" label-position="top">
-        <div class="grid gap-x-4 sm:grid-cols-2 xl:grid-cols-5">
-          <ElFormItem label="问题类型">
-            <ElSelect v-model="filters.type" class="w-full">
-              <ElOption label="全部类型" value="all" />
-              <ElOption v-for="type in ISSUE_TYPES" :key="type" :label="ISSUE_TYPE_LABELS[type]" :value="type" />
-            </ElSelect>
-          </ElFormItem>
-          <ElFormItem label="整改状态">
-            <ElSelect v-model="filters.status" class="w-full">
-              <ElOption label="全部状态" value="all" />
-              <ElOption
-                v-for="status in ISSUE_STATUSES"
-                :key="status"
-                :label="ISSUE_STATUS_META[status].label"
-                :value="status"
-              />
-            </ElSelect>
-          </ElFormItem>
-          <ElFormItem label="项目年度">
-            <ElSelect v-model="filters.project_year" clearable class="w-full" placeholder="全部年度">
-              <ElOption v-for="year in PROJECT_YEARS" :key="year" :label="`${year} 年`" :value="year" />
-            </ElSelect>
-          </ElFormItem>
-          <ElFormItem label="所属组织">
-            <OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部组织" />
-          </ElFormItem>
-          <ElFormItem label="问题编号、设施编号或地址">
-            <ElInput v-model="filters.keyword" clearable placeholder="输入问题编号、设施编号或地址" />
-          </ElFormItem>
-        </div>
-        <div class="flex justify-end gap-2">
-          <ElButton @click="reset">重置</ElButton>
-          <ElButton native-type="submit" type="primary">查询</ElButton>
-        </div>
-      </ElForm>
-    </section>
+    </QueryPanel>
 
     <AsyncError v-if="orgError" :message="orgError" @retry="loadOrgs" />
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
-    <section class="page-card overflow-hidden">
-      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <span class="text-sm text-slate-600">{{ hasLoaded ? `共 ${total} 条记录` : loading ? '正在加载…' : '数据未加载' }}</span>
-        <ElButton text :icon="Refresh" :loading="loading" @click="load">刷新</ElButton>
-      </div>
+    <section class="data-card">
+      <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="巡查清单" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
+        <ElButton v-if="permission.can('web.rectify', 'create')" type="primary" :icon="Plus" @click="createIssue">新增排查</ElButton>
+      </TableToolbar>
+      <div class="data-table">
       <ElTable
         v-loading="loading"
         :data="list"
         row-key="id"
         :row-class-name="rowClassName"
         :empty-text="loadError ? '加载失败，请重试' : loading ? '正在加载…' : '暂无排查整改记录'"
-        class="w-full"
+        height="100%"
       >
-        <ElTableColumn type="index" label="#" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
-        <ElTableColumn prop="issue_key" label="问题编号" min-width="150" show-overflow-tooltip />
-        <ElTableColumn label="类型" width="100">
+        <ElTableColumn type="index" label="序号" width="60" align="center" :index="(index: number) => (page - 1) * size + index + 1" />
+        <ElTableColumn prop="issue_key" label="问题编号" min-width="150" show-overflow-tooltip  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('type')" label="类型" width="100" align="center">
           <template #default="scope">{{ ISSUE_TYPE_LABELS[scope.row.type as Issue['type']] }}</template>
         </ElTableColumn>
-        <ElTableColumn prop="project_year" label="年度" width="80" align="center" />
-        <ElTableColumn prop="code" label="设施编号" min-width="120" show-overflow-tooltip />
-        <ElTableColumn label="所属组织" min-width="200" show-overflow-tooltip>
+        <ElTableColumn v-if="visibleColumns.includes('year')" prop="project_year" label="年度" width="80" align="center" />
+        <ElTableColumn v-if="visibleColumns.includes('code')" prop="code" label="设施编号" min-width="120" show-overflow-tooltip  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('org')" label="所属组织" min-width="200" show-overflow-tooltip align="center">
           <template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template>
         </ElTableColumn>
-        <ElTableColumn prop="address" label="定位地址" min-width="220" show-overflow-tooltip />
-        <ElTableColumn label="上报人" min-width="100"><template #default="scope">{{ displayUser(scope.row.report_user_id, scope.row.report_user_name) }}</template></ElTableColumn>
-        <ElTableColumn label="整改人" min-width="100"><template #default="scope">{{ displayUser(scope.row.assignee_user, scope.row.assignee_user_name) }}</template></ElTableColumn>
-        <ElTableColumn label="计划完成" min-width="190">
+        <ElTableColumn v-if="visibleColumns.includes('address')" prop="address" label="定位地址" min-width="220" show-overflow-tooltip  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('reporter')" label="上报人" min-width="100" align="center"><template #default="scope">{{ scope.row.reporter_name || displayUser(scope.row.report_user_id, scope.row.report_user_name) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('assignee')" label="整改人" min-width="100" align="center"><template #default="scope">{{ displayUser(scope.row.assignee_user, scope.row.assignee_user_name) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('plan')" label="计划完成" min-width="135" align="center">
           <template #default="scope">
-            <span :class="{ 'text-red-700': issuePlanDisplay(asIssue(scope.row), today).overdue }">{{ planDisplay(asIssue(scope.row)) }}</span>
+            {{ issuePlanDateDisplay(scope.row.plan_date) }}
           </template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="100" align="center"><template #default="scope"><IssueStatusTag :status="scope.row.status" /></template></ElTableColumn>
-        <ElTableColumn label="创建时间" min-width="155"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
-        <ElTableColumn label="操作" width="300" fixed="right">
+        <ElTableColumn v-if="visibleColumns.includes('countdown')" label="倒计时" min-width="150" align="center">
+          <template #default="scope">
+            <span :class="{ 'text-red-700': issueCountdownDisplay(asIssue(scope.row), today).overdue }">{{ issueCountdownDisplay(asIssue(scope.row), today).text }}</span>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="100" align="center"><template #default="scope"><IssueStatusTag :status="scope.row.status" /></template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
+        <ElTableColumn label="操作" width="170" fixed="right" align="center">
           <template #default="scope">
             <div class="table-actions">
-              <ElButton link type="primary" :icon="View" :loading="detailLoading && detailId === scope.row.id" @click="openDetail(asIssue(scope.row))">详情</ElButton>
-              <ElButton v-if="permission.can('web.rectify', 'edit')" link type="primary" :icon="Edit" @click="editIssue(asIssue(scope.row))">编辑</ElButton>
-              <ElButton
-                v-if="permission.can('web.rectify', 'edit') && scope.row.status !== 'done'"
-                link
-                type="success"
-                @click="openRectify(asIssue(scope.row))"
-              >整改</ElButton>
-              <ElButton
-                v-if="permission.can('web.rectify', 'edit') && scope.row.status !== 'done'"
-                link
-                type="warning"
-                @click="openReassign(asIssue(scope.row))"
-              >指派</ElButton>
-              <ElButton
-                v-if="permission.can('web.rectify', 'edit') && scope.row.status === 'done' && scope.row.rectify_records.length"
-                link
-                type="warning"
-                @click="reRectify(asIssue(scope.row))"
-              >重新整改</ElButton>
+              <ElButton link type="primary" :loading="detailLoading && detailId === scope.row.id" @click="openDetail(asIssue(scope.row))">查看</ElButton>
+              <ElButton v-if="permission.can('web.rectify', 'edit')" link type="primary" @click="editIssue(asIssue(scope.row))">编辑</ElButton>
               <ElButton
                 v-if="permission.can('web.rectify', 'delete')"
                 link
                 type="danger"
-                :icon="Delete"
                 @click="removeIssue(asIssue(scope.row))"
               >删除</ElButton>
             </div>
           </template>
         </ElTableColumn>
       </ElTable>
-      <div class="flex justify-end border-t border-slate-200 px-4 py-3">
+      </div>
+      <div class="data-pagination">
         <ElPagination
           v-if="hasLoaded"
           v-model:current-page="page"
@@ -344,8 +267,6 @@ onMounted(() => {
 
     <IssueFormDialog v-model="formVisible" :issue="editingIssue" :orgs="orgs" :orgs-ready="orgsReady" @saved="handleSaved" />
     <IssueDetailDrawer v-model="detailVisible" :issue="detail" :loading="detailLoading" :load-error="detailError" @retry="loadDetail" />
-    <RectifyDialog v-model="rectifyVisible" :issue="selectedIssue" @saved="handleSaved" />
-    <ReassignDialog v-model="reassignVisible" :issue="selectedIssue" @saved="handleSaved" />
     <ImportIssuesDialog v-model="importVisible" @imported="handleSaved" />
   </div>
 </template>

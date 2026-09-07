@@ -16,6 +16,8 @@ describe("报表分拆关联", () => {
       row.bridge_problem_count, row.bridge_rectified_count, row.road_problem_count, row.road_rectified_count]))
       .toEqual([["0:4", 7, 2, 1, 0, 0, 0, 0]]);
     expect(streetResult.rows[0]!.well_existing).toBeNull();
+    expect(streetResult.rows.map((row) => [row.well_report_count, row.bridge_report_count, row.transformer_report_count, row.road_tree_survive]))
+      .toEqual([[3, 0, 0, 30], [0, 0, 0, 0]]);
     expect(surveyResult.rows[0]!.well_inspected).toBeNull();
     expect(streetResult.notes).toEqual(["资料未采集", "按记录统计"]);
     expect(street.statistics.rows.map((row) => row.row_key)).toEqual(["2023:4", "2024:4"]);

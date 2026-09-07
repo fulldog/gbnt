@@ -1,5 +1,6 @@
 import {
   ISSUE_STATUSES,
+  issueQuizDefinitions,
   ISSUE_TYPES,
   PROJECT_YEARS,
   type FileItem,
@@ -10,7 +11,6 @@ import {
   type SliderStartResult,
   type SliderFinishResult,
 } from "@gbnt/api-client";
-import { QUIZ_DEFINITIONS } from "@/domain/issues/definitions";
 import type {
   MiniappAuthUser,
   MiniappIssue,
@@ -94,7 +94,10 @@ export function parseIssue(value: unknown): MiniappIssue {
       return invalid(`设施信息.${field}`);
     }
   }
-  const definitions = QUIZ_DEFINITIONS[issue.type as MiniappIssue["type"]];
+  if (ext.schema_version != null && ext.schema_version !== 1 && ext.schema_version !== 2) return invalid("表单版本");
+  const type = issue.type as MiniappIssue["type"];
+  const definitions = issueQuizDefinitions(type, ext.schema_version === 2 ? 2 : 1);
+  const historicalTypes = new Set([...issueQuizDefinitions(type, 1), ...issueQuizDefinitions(type, 2)].map((q) => q.type));
   const seen = new Set<string>();
   const checklist = list(ext.checklist, "巡查题单").map((raw) => {
     const quiz = object(raw, "巡查题目");
@@ -116,7 +119,7 @@ export function parseIssue(value: unknown): MiniappIssue {
   const records = list(issue.rectify_records, "整改记录", true).map((raw) => {
     const record = object(raw, "整改记录");
     integer(record.id, "整改记录 ID", 1);
-    if (!definitions.some((definition) => definition.type === record.quiz_type)) return invalid("整改题目类型");
+    if (!historicalTypes.has(record.quiz_type as never)) return invalid("整改题目类型");
     if (record.round !== undefined) integer(record.round, "整改记录轮次");
     return {
       ...record,
@@ -130,6 +133,7 @@ export function parseIssue(value: unknown): MiniappIssue {
     type_ext: {
       ...ext,
       checklist,
+      ...(type === "well" ? { panorama_files: list(ext.panorama_files, "全景附件", true).map((id) => text(id, "全景附件")), panorama_photos: files(ext.panorama_photos, "全景照片") } : {}),
       keeper_name: text(ext.keeper_name, "负责人", true),
       keeper_phone: text(ext.keeper_phone, "联系电话", true),
     },
@@ -142,7 +146,7 @@ export function parseIssue(value: unknown): MiniappIssue {
   };
   const displayFields = [
     "code", "address", "issue_key", "plan_date", "created_at", "updated_at",
-    "reporter_signature_file_id",
+    "reporter_signature_file_id", "reporter_name", "reporter_phone",
   ] as const;
   for (const field of displayFields) {
     result[field] = text(issue[field], field, true);

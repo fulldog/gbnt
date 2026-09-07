@@ -26,11 +26,11 @@ describe("后端问题枚举映射", () => {
       "wiring_ok",
       "box_ok",
       "cover_ok",
-      "transformer_ok",
     ]);
     expect(QUIZ_DEFINITIONS.road.map((item) => item.type)).toEqual([
       "has_shoulder",
       "has_ash",
+      "has_road_damage",
     ]);
   });
 

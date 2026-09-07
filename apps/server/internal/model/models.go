@@ -115,6 +115,8 @@ func (SysRoleAPI) TableName() string { return "sys_role_apis" }
 
 // Issue 排查/整改主表。
 type Issue struct {
+	ReporterName            string  `gorm:"size:128;not null;default:'';comment:上报人姓名快照" json:"reporter_name"`  // 手工上报姓名；旧记录为空
+	ReporterPhone           string  `gorm:"size:32;not null;default:'';comment:上报联系电话快照" json:"reporter_phone"` // 上报联系电话，与负责人电话分开
 	IssueKey                string  `gorm:"size:64;uniqueIndex;comment:业务可读问题编号" json:"issue_key"`
 	Type                    string  `gorm:"size:32;index;comment:问题类型 well/road/bridge/forest/transformer" json:"type"`
 	ProjectYear             int     `gorm:"index;default:0;comment:项目年度 2020-2023" json:"project_year"`

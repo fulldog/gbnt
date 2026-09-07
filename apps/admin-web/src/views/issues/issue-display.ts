@@ -25,7 +25,7 @@ export function issueExtensionFields(issue: Issue): DetailField[] {
         { label: "长度（千米）", value: issue.type_ext.length },
         { label: "宽度（米）", value: issue.type_ext.width },
         { label: "厚度（米）", value: issue.type_ext.thickness },
-        { label: "林网树木存活数量", value: issue.type_ext.tree_survive },
+        ...(issue.type_ext.schema_version !== 2 ? [{ label: "林网树木存活数量", value: issue.type_ext.tree_survive ?? "—" }] : []),
         { label: "负责人", value: issue.type_ext.keeper_name || "—" },
         { label: "联系电话", value: issue.type_ext.keeper_phone || "—" },
       ];
@@ -41,7 +41,7 @@ export function issueExtensionFields(issue: Issue): DetailField[] {
       return [
         { label: "移交株数", value: issue.type_ext.handover_count },
         { label: "现有株数", value: issue.type_ext.existing_count },
-        { label: "存活率", value: `${issue.type_ext.survive_rate}%` },
+        ...(issue.type_ext.schema_version !== 2 ? [{ label: "存活率", value: issue.type_ext.survive_rate == null ? "—" : `${issue.type_ext.survive_rate}%` }] : []),
         { label: "负责人", value: issue.type_ext.keeper_name || "—" },
         { label: "联系电话", value: issue.type_ext.keeper_phone || "—" },
       ];

@@ -1,6 +1,6 @@
 import type { StreetLedgerReportRow } from "@/api/ledger-report-types";
 
-export const STREET_COLUMN_WIDTHS = [40, 70, 85, 100, 85, 70, 70, 90, 80, 80, 70, 70, 70, 70, 155, 145];
+export const STREET_COLUMN_WIDTHS = [40, 70, 85, 100, 85, 70, 105, 90, 105, 105, 130, 80, 80, 70, 105, 155, 145];
 export const SURVEY_COLUMN_WIDTHS = [140, 140, 100, 100, 120, 100, 100, 120, 100, 100, 80, 80, 80, 80, 80, 80, 60, 60, 60, 60, 60, 100];
 
 export function ledgerCell(value: string | number | boolean | null | undefined): string {

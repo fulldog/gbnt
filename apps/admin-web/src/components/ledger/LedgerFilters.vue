@@ -10,7 +10,7 @@ function onSubmit(event: Event): void { event.preventDefault(); emit("search"); 
 </script>
 
 <template>
-  <ElForm class="ledger-filters" v-bind="{ onSubmit }">
+  <ElForm label-width="90px" class="ledger-filters" v-bind="{ onSubmit }">
     <ElFormItem label="街道" class="!mb-0">
       <ElSelect v-model="streetOrgId" clearable filterable :loading="loading" :disabled="loading || unavailable" class="w-full" placeholder="全部街道">
         <ElOption v-for="org in streets" :key="org.id" :label="org.name" :value="org.id" />
@@ -27,7 +27,7 @@ function onSubmit(event: Event): void { event.preventDefault(); emit("search"); 
 </template>
 
 <style scoped>
-.ledger-filters { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(310px, 1.25fr) auto; align-items: center; gap: 20px 32px; padding: 24px; border-radius: 8px; background: #fff; }
+.ledger-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: center; gap: 18px 28px; padding: 24px 20px; border-radius: 8px 8px 0 0; background: #fff; }
 .ledger-filter-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 1100px) { .ledger-filters { grid-template-columns: minmax(190px, 1fr) minmax(280px, 1.3fr); } .ledger-filter-actions { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .ledger-filters { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; } }

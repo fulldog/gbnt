@@ -179,7 +179,12 @@ func enrichAdminIssues(db *gorm.DB, list []IssueVO) ([]AdminIssueVO, error) {
 	out := make([]AdminIssueVO, 0, len(list))
 	for _, issue := range list {
 		orgName, orgPath := names.orgDisplay(issue.OrgID)
-		out = append(out, AdminIssueVO{IssueVO: issue, ReportUserName: nullableName(names.users, issue.ReportUserID),
+		reporter := nullableName(names.users, issue.ReportUserID)
+		if strings.TrimSpace(issue.ReporterName) != "" {
+			name := issue.ReporterName
+			reporter = &name
+		}
+		out = append(out, AdminIssueVO{IssueVO: issue, ReportUserName: reporter,
 			AssigneeUserName: nullableName(names.users, issue.AssigneeUser), OrgName: orgName, OrgPath: orgPath})
 	}
 	return out, nil

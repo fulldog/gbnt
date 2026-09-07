@@ -24,7 +24,7 @@ const items = computed<ChecklistDisplayItem[]>(() =>
     label: quizLabel(quiz.type),
     answer: quiz.value ? "是" : "否",
     description: quiz.desc.trim(),
-    abnormal: quizIndicatesIssue(quiz),
+    abnormal: quizIndicatesIssue(quiz, props.issue),
     photos: (quiz.photos ?? []).map((photo) => toAssetUrl(photo.url)),
   })),
 );

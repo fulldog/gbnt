@@ -13,6 +13,12 @@ export interface LedgerReportLocation {
 
 export interface StreetLedgerReportRow extends LedgerReportLocation {
   project_year: number | null;
+  /** 全部整改状态的上报记录数，非去重设施数；无该类型为 0。 */
+  well_report_count: number;
+  bridge_report_count: number;
+  transformer_report_count: number;
+  /** 道路附属树木存活数（棵）合计；无道路或存在无效值为 null，独立于林网株数。 */
+  road_tree_survive: number | null;
   well_handover: null;
   well_existing: null;
   bridge_handover: null;
@@ -80,7 +86,7 @@ export type StreetBaseRow = LedgerBaseLocation & Pick<StreetLedgerReportRow, "pr
 export type SurveyBaseRow = LedgerBaseLocation & Pick<SurveyLedgerReportRow, "contact_name" | "contact_phone" | "leader_sign">;
 
 export type StreetStatisticsRow = Pick<StreetLedgerReportRow,
-  "row_key" | "source_record_count" | "well_handover" | "well_existing"
+  "row_key" | "source_record_count" | "well_report_count" | "bridge_report_count" | "transformer_report_count" | "road_tree_survive" | "well_handover" | "well_existing"
   | "bridge_handover" | "bridge_existing" | "road_km" | "forest_handover"
   | "forest_existing" | "transformer_handover" | "transformer_existing">;
 export type SurveyStatisticsRow = Pick<SurveyLedgerReportRow,

@@ -45,21 +45,22 @@ func TestParseLedgerSplitQuery(t *testing.T) {
 }
 
 func goldenLedgerIssues() []model.Issue {
-	road := func(length float64) string {
+	road := func(length, trees float64) string {
 		var ext map[string]any
 		_ = json.Unmarshal([]byte(reportChecklist("road", false)), &ext)
 		ext["length"] = length
+		ext["tree_survive"] = trees
 		encoded, _ := json.Marshal(ext)
 		return string(encoded)
 	}
 	return []model.Issue{
-		{OrgID: 4, ProjectYear: 2023, Type: "road", Status: "done", TypeExt: road(1.25)},
-		{OrgID: 4, ProjectYear: 2023, Type: "road", Status: "done", TypeExt: road(0.5)},
+		{OrgID: 4, ProjectYear: 2023, Type: "road", Status: "done", TypeExt: road(1.25, 10)},
+		{OrgID: 4, ProjectYear: 2023, Type: "road", Status: "done", TypeExt: road(0.5, 20)},
 		{OrgID: 4, ProjectYear: 2023, Type: "forest", Status: "done", TypeExt: `{"handover_count":100,"existing_count":0}`},
 		{OrgID: 4, ProjectYear: 2023, Type: "well", Status: "done", TypeExt: reportChecklist("well", true)},
 		{OrgID: 4, ProjectYear: 2023, Type: "well", Status: "new", TypeExt: reportChecklist("well", true)},
 		{OrgID: 4, ProjectYear: 2023, Type: "well", Status: "done", TypeExt: reportChecklist("well", false)},
-		{OrgID: 4, ProjectYear: 2024, Type: "road", Status: "done", TypeExt: road(2)},
+		{OrgID: 4, ProjectYear: 2024, Type: "road", Status: "done", TypeExt: road(2, 0)},
 	}
 }
 
@@ -168,6 +169,9 @@ func TestLedgerPartsGoldenDataAndLegacyCompatibility(t *testing.T) {
 			t.Fatal("跨年行粒度不正确")
 		}
 		first, second := result.streetStats.Rows[0], result.streetStats.Rows[1]
+		if first.WellReportCount != 3 || first.BridgeReportCount != 0 || first.TransformerReportCount != 0 || first.RoadTreeSurvive == nil || *first.RoadTreeSurvive != 30 || second.WellReportCount != 0 || second.RoadTreeSurvive == nil || *second.RoadTreeSurvive != 0 {
+			t.Fatalf("上报条数和道路附属树木统计错误：%+v %+v", first, second)
+		}
 		if first.RowKey != "2023:4" || first.SourceRecordCount != 6 || first.RoadKM == nil || *first.RoadKM != 1.75 || first.ForestHandover == nil || *first.ForestHandover != 100 || first.ForestExisting == nil || *first.ForestExisting != 0 {
 			t.Fatalf("G1台账第一行错误：%+v", first)
 		}

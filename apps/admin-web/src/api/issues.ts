@@ -32,7 +32,11 @@ function normalizeAdminIssue(value: unknown): AdminIssue {
 
 export function createIssuesApi(client: ApiClient) {
   return {
-    /** 管理端关键字同时检索问题编号、设施编号与地址，小程序查询契约不受影响。 */
+    /**
+     * 关键字检索问题编号、设施编号与地址。
+     * 保留服务端分页前的排序：已逾期 > 即将逾期 > 待整改 > 已整改/已排查；同组 created_at、id 倒序。
+     * 即将逾期含北京自然日今天至 3 天后，小程序查询契约不受影响。
+     */
     async list(query: IssueListQuery = {}): Promise<AdminIssueListResult> {
       const value = await client.request<unknown>("/api/issues", {
         query: { ...query, keyword: query.keyword?.trim() || undefined },
@@ -83,6 +87,7 @@ export function createIssuesApi(client: ApiClient) {
       return normalizeAdminIssue(await client.request<unknown>(`/api/issues/${id}`));
     },
 
+    /** 完整编辑支持五类属性、上报信息与签名；省略字段保留，expected_updated_at 防止旧页面覆盖。 */
     update(id: number, input: UpdateIssueInput): Promise<Issue> {
       return client.request<Issue, UpdateIssueInput>(`/api/issues/${id}`, {
         method: "PUT",

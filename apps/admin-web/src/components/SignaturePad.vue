@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef } from "vue";
+import type { FileItem } from "@gbnt/api-client";
+import { computed, shallowRef, useTemplateRef, watch } from "vue";
+import { resolveAssetUrl } from "@/utils/asset";
 
-const { disabled = false } = defineProps<{ disabled?: boolean }>();
+const { disabled = false, existing } = defineProps<{ disabled?: boolean; existing?: FileItem }>();
 const canvas = useTemplateRef<HTMLCanvasElement>("canvas");
 const drawing = shallowRef(false);
 const empty = shallowRef(true);
+const changed = shallowRef(false);
+watch(() => existing?.file_id, () => { changed.value = false; empty.value = true; });
 
 const cursorClass = computed(() => (disabled ? "cursor-not-allowed" : "cursor-crosshair"));
 
@@ -27,6 +31,7 @@ function start(event: PointerEvent): void {
   context.beginPath();
   context.moveTo(current.x, current.y);
   drawing.value = true;
+  changed.value = true;
 }
 
 function draw(event: PointerEvent): void {
@@ -51,6 +56,8 @@ function stop(event: PointerEvent): void {
 }
 
 function clear(): void {
+  changed.value = true;
+  empty.value = true;
   const context = canvas.value?.getContext("2d");
   if (!context || !canvas.value) return;
   context.clearRect(0, 0, canvas.value.width, canvas.value.height);
@@ -67,12 +74,18 @@ function toBlob(): Promise<Blob> {
   });
 }
 
-defineExpose({ clear, empty, toBlob });
+defineExpose({ clear, empty, changed, toBlob });
 </script>
 
 <template>
   <div class="space-y-2">
+    <div v-if="existing && !changed" class="existing-signature">
+      <ElImage v-if="existing.url" :src="resolveAssetUrl(existing.url)" fit="contain" v-bind="{ alt: '原电子签名' }" />
+      <p v-if="!existing.url">原签名已保存，预览暂不可用。</p>
+      <ElButton v-if="!disabled" size="small" @click="clear">重新签名</ElButton>
+    </div>
     <canvas
+      v-show="!existing || changed"
       ref="canvas"
       width="900"
       height="240"
@@ -85,9 +98,15 @@ defineExpose({ clear, empty, toBlob });
       @pointercancel="stop"
       @pointerleave="stop"
     />
-    <div class="flex items-center justify-between gap-3">
+    <div v-if="!existing || changed" class="flex items-center justify-between gap-3">
       <span class="text-xs text-slate-500">请使用鼠标或触控设备在上方签名。</span>
       <ElButton v-if="!disabled" size="small" @click="clear">清空签名</ElButton>
     </div>
   </div>
 </template>
+
+<style scoped>
+.existing-signature { position: relative; min-height: 160px; border: 1px solid #e4dfc3; border-radius: 6px; background: #fbf6df; }
+.existing-signature :deep(.el-image) { width: 100%; height: 160px; }
+.existing-signature .el-button { position: absolute; right: 10px; top: 10px; }
+</style>

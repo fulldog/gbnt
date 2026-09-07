@@ -60,15 +60,19 @@ type StreetLedgerBaseRow struct {
 type StreetLedgerStatisticsRow struct {
 	LedgerStatisticIdentity // 关联键及全部类型记录数
 
-	WellHandover        *int64   `json:"well_handover"`        // 机井移交数量未采集，固定 null
-	WellExisting        *int64   `json:"well_existing"`        // 机井现有数量无资产基线，固定 null
-	BridgeHandover      *int64   `json:"bridge_handover"`      // 桥涵闸移交数量未采集，固定 null
-	BridgeExisting      *int64   `json:"bridge_existing"`      // 桥涵闸现有数量未采集，固定 null
-	RoadKM              *float64 `json:"road_km"`              // 道路上报 length 千米合计；无道路或存在无效值为 null
-	ForestHandover      *float64 `json:"forest_handover"`      // 林网上报移交株数合计；无林网或存在无效值为 null
-	ForestExisting      *float64 `json:"forest_existing"`      // 林网上报现有株数合计；无林网或存在无效值为 null
-	TransformerHandover *int64   `json:"transformer_handover"` // 变压器移交数量未采集，固定 null
-	TransformerExisting *int64   `json:"transformer_existing"` // 变压器现有数量未采集，固定 null
+	WellReportCount        int64    `json:"well_report_count"`        // 机井已上报条数，含全部整改状态；无该类型为 0，不是去重设施数
+	BridgeReportCount      int64    `json:"bridge_report_count"`      // 桥涵闸已上报条数，含全部整改状态；无该类型为 0
+	TransformerReportCount int64    `json:"transformer_report_count"` // 变压器已上报条数，含全部整改状态；无该类型为 0
+	RoadTreeSurvive        *float64 `json:"road_tree_survive"`        // 道路附属树木存活数（棵）合计；无道路或任一值无效为 null，不合并独立林网
+	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量未采集，固定 null
+	WellExisting           *int64   `json:"well_existing"`            // 机井现有数量无资产基线，固定 null
+	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量未采集，固定 null
+	BridgeExisting         *int64   `json:"bridge_existing"`          // 桥涵闸现有数量未采集，固定 null
+	RoadKM                 *float64 `json:"road_km"`                  // 道路上报 length 千米合计；无道路或存在无效值为 null
+	ForestHandover         *float64 `json:"forest_handover"`          // 林网上报移交株数合计；无林网或存在无效值为 null
+	ForestExisting         *float64 `json:"forest_existing"`          // 林网上报现有株数合计；无林网或存在无效值为 null
+	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量未采集，固定 null
+	TransformerExisting    *int64   `json:"transformer_existing"`     // 变压器现有数量未采集，固定 null
 }
 
 // SurveyLedgerBaseRow 按实际落点组织跨年度汇总基础信息，不挪用排查人作为联系人。
@@ -200,11 +204,33 @@ func buildSurveyBaseRow(group reportGroup) SurveyLedgerBaseRow {
 }
 
 func buildStreetStatisticsRow(group reportGroup) StreetLedgerStatisticsRow {
-	return StreetLedgerStatisticsRow{
+	row := StreetLedgerStatisticsRow{
 		LedgerStatisticIdentity: LedgerStatisticIdentity{RowKey: group.location.RowKey, SourceRecordCount: group.location.SourceRecordCount},
 		RoadKM:                  sumReportedMetric(group.issues, "road", "length"),
+		RoadTreeSurvive:         sumReportedMetric(group.issues, "road", "tree_survive"),
 		ForestHandover:          sumReportedMetric(group.issues, "forest", "handover_count"),
 		ForestExisting:          sumReportedMetric(group.issues, "forest", "existing_count"),
+	}
+	// 上报条数只统计问题主记录，不按整改状态过滤，也不累加整改明细或整改轮次。
+	for _, issue := range group.issues {
+		switch issue.Type {
+		case "well":
+			row.WellReportCount++
+		case "bridge":
+			row.BridgeReportCount++
+		case "transformer":
+			row.TransformerReportCount++
+		}
+	}
+	return row
+}
+
+func streetLedgerStatisticsNotes() []string {
+	return []string{
+		"已上报数量按当前筛选内的记录条数统计，包含待整改、整改中和已整改；未按设施去重，不代表现有设施总量。",
+		"道路长度、附属树木存活数及独立林网株数均为上报字段合计；道路树木与独立林网分别统计，不相加为树木总数。",
+		"机井、桥涵闸、变压器的移交数量及现有设施总量尚未采集；已上报数量无记录时为 0，不能代替移交数量。",
+		"— 表示数量未采集、无对应类型记录或该指标存在缺失/无效值，不代表 0；已填报的 0 正常保留。",
 	}
 }
 
@@ -222,6 +248,7 @@ func composeLedgerLocation(base LedgerBaseLocation, statistics LedgerStatisticId
 
 func composeStreetLedgerRow(base StreetLedgerBaseRow, stats StreetLedgerStatisticsRow) StreetLedgerReportRow {
 	return StreetLedgerReportRow{LedgerReportLocation: composeLedgerLocation(base.LedgerBaseLocation, stats.LedgerStatisticIdentity), ProjectYear: base.ProjectYear, Signer: base.Signer, Phone: base.Phone,
+		WellReportCount: stats.WellReportCount, BridgeReportCount: stats.BridgeReportCount, TransformerReportCount: stats.TransformerReportCount, RoadTreeSurvive: stats.RoadTreeSurvive,
 		WellHandover: stats.WellHandover, WellExisting: stats.WellExisting, BridgeHandover: stats.BridgeHandover, BridgeExisting: stats.BridgeExisting, RoadKM: stats.RoadKM, ForestHandover: stats.ForestHandover, ForestExisting: stats.ForestExisting, TransformerHandover: stats.TransformerHandover, TransformerExisting: stats.TransformerExisting}
 }
 
@@ -255,11 +282,7 @@ func (s *IssueService) LedgerStreetStatistics(ctx context.Context, q LedgerRepor
 	}
 	result := &LedgerPartResult[StreetLedgerStatisticsRow]{
 		Query: appliedLedgerQuery(q), Rows: []StreetLedgerStatisticsRow{},
-		Notes: []string{
-			"道路千米数、林网株数为当前筛选内上报记录的已采集字段合计，未按资产去重，不代表全村资产总量。",
-			"机井/桥涵闸/变压器移交及现有数量尚未采集，以 — 表示，不用问题条数代替。",
-			"道路或林网存在缺失/无效字段时对应合计为 —；报表当前只读，不提供未接入持久化的移交数量编辑。",
-		},
+		Notes: streetLedgerStatisticsNotes(),
 	}
 	for _, group := range groups {
 		result.Rows = append(result.Rows, buildStreetStatisticsRow(group))

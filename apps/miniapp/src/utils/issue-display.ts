@@ -1,3 +1,4 @@
+import { issueQuizDefinitions, issueQuizIsAbnormal, ISSUE_FORM_QUIZZES } from "@gbnt/api-client";
 import type {
   FileItem,
   Issue,
@@ -10,7 +11,6 @@ import { businessDateTime, businessToday, calendarDate, calendarDayDifference } 
 import {
   ISSUE_TYPE_OPTIONS as DOMAIN_ISSUE_TYPE_OPTIONS,
   quizDefinition,
-  QUIZ_DEFINITIONS,
   quizIndicatesIssue as definitionIndicatesIssue,
 } from "@/domain/issues/definitions";
 
@@ -48,17 +48,18 @@ export function issueStatusMeta(status: IssueStatus): DisplayMeta<IssueStatus> {
 }
 
 export function quizLabel(type: QuizType): string {
-  return quizDefinition(type)?.label ?? type;
+  return Object.values(ISSUE_FORM_QUIZZES).flat().find((q) => q.type === type)?.label ?? quizDefinition(type)?.label ?? type;
 }
 
-export function quizIndicatesIssue(quiz: QuizBool): boolean {
+export function quizIndicatesIssue(quiz: QuizBool, issue?: Issue): boolean {
+  if (issue) { const definition = issueQuizDefinitions(issue.type, issue.type_ext.schema_version).find((q) => q.type === quiz.type); return Boolean(definition && issueQuizIsAbnormal(definition, quiz.value)); }
   const definition = quizDefinition(quiz.type);
   return definition ? definitionIndicatesIssue(definition, quiz.value) : false;
 }
 
 export function issueAbnormalQuizzes(issue: Issue): QuizBool[] {
   const checklist = Array.isArray(issue.type_ext?.checklist) ? issue.type_ext.checklist as readonly QuizBool[] : [];
-  return checklist.filter(quizIndicatesIssue);
+  return checklist.filter((quiz) => quizIndicatesIssue(quiz, issue));
 }
 
 export function issueEditableRectifyQuizzes(issue: Issue): QuizBool[] {
@@ -104,7 +105,7 @@ export function issuePlanHint(issue: Issue, today = businessToday()): DisplayMet
   return { label: `${diffDays} 天后到期`, tone: "primary", value: "plan" };
 }
 
-function withUnit(value: number, unit: string): string {
+function withUnit(value: number | null | undefined, unit: string): string {
   return typeof value === "number" && Number.isFinite(value) ? `${value} ${unit}` : "未填写";
 }
 
@@ -133,7 +134,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
         { label: "长度", value: withUnit(ext.length, "千米") },
         { label: "宽度", value: withUnit(ext.width, "米") },
         { label: "厚度", value: withUnit(ext.thickness, "米") },
-        { label: "林网存活数量", value: withUnit(ext.tree_survive, "棵") },
+        ...(ext.schema_version !== 2 ? [{ label: "林网存活数量", value: withUnit(ext.tree_survive, "棵") }] : []),
       ];
       break;
     }
@@ -154,7 +155,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
       rows = [
         { label: "移交株数", value: withUnit(ext.handover_count, "株") },
         { label: "现有株数", value: withUnit(ext.existing_count, "株") },
-        { label: "存活率", value: withUnit(ext.survive_rate, "%") },
+        ...(ext.schema_version !== 2 ? [{ label: "存活率", value: withUnit(ext.survive_rate, "%") }] : []),
       ];
       break;
     }
@@ -180,6 +181,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
 export function issueChecklistPhotos(issue: Issue): FileItem[] {
   const seen = new Set<string>();
   const photos: FileItem[] = [];
+  if (issue.type === "well") for (const photo of issue.type_ext.panorama_photos ?? []) { if (!seen.has(photo.file_id)) { seen.add(photo.file_id); photos.push(photo); } }
 
   const checklist = Array.isArray(issue.type_ext?.checklist) ? issue.type_ext.checklist as readonly QuizBool[] : [];
   for (const quiz of checklist) {
@@ -195,7 +197,7 @@ export function issueChecklistPhotos(issue: Issue): FileItem[] {
 
 export function issueSummary(issue: Issue): string {
   const checklist = issue.type_ext?.checklist;
-  if (!Array.isArray(checklist) || checklist.length !== QUIZ_DEFINITIONS[issue.type]?.length) return "巡查数据异常，请联系管理员核对";
+  if (!Array.isArray(checklist) || checklist.length !== issueQuizDefinitions(issue.type, issue.type_ext.schema_version).length) return "巡查数据异常，请联系管理员核对";
   const descriptions = issueAbnormalQuizzes(issue).map((quiz) => quiz.desc?.trim() || `${quizLabel(quiz.type)}：${quiz.value ? "是" : "否"}`);
   if (issue.type === "well") {
     if (issue.type_ext.outlet_damaged > 0) descriptions.push(`出水口损坏 ${issue.type_ext.outlet_damaged} 个`);
@@ -205,7 +207,7 @@ export function issueSummary(issue: Issue): string {
 }
 
 export function issueReporter(issue: Partial<MiniappIssue>): string {
-  return issue.report_user_name?.trim() || (issue.report_user_id ? "上报人资料暂缺" : "未填写上报人");
+  return issue.reporter_name?.trim() || issue.report_user_name?.trim() || (issue.report_user_id ? "上报人资料暂缺" : "未填写上报人");
 }
 
 export function issueOrganization(issue: Partial<MiniappIssue>): string {

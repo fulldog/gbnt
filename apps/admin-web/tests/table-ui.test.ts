@@ -85,6 +85,13 @@ const FormStub = defineComponent({
   },
 });
 const passthrough = { template: "<div><slot /></div>" };
+const TreeStub = defineComponent({
+  name: "ElTree",
+  setup(_, { expose }) {
+    expose({ filter: vi.fn() });
+    return () => h("div");
+  },
+});
 const AlertStub = { props: ["title"], template: "<div>{{ title }}<slot /></div>" };
 const wrappers: VueWrapper[] = [];
 function render(component: Component) {
@@ -93,7 +100,7 @@ function render(component: Component) {
       ElTable: TableStub, ElTableColumn: ColumnStub, ElButton: ButtonStub,
       ElDialog: PanelStub, ElDrawer: PanelStub, ElForm: FormStub, ElFormItem: passthrough,
       ElSelect: true, ElOption: true, ElDatePicker: true, ElInput: true, ElRadioGroup: true, ElRadio: true,
-      ElTag: passthrough, ElIcon: passthrough, ElUpload: true, ElPagination: true, ElTree: true,
+      ElTag: passthrough, ElIcon: passthrough, ElUpload: true, ElPagination: true, ElTree: TreeStub,
       ElInputNumber: true, ElSkeleton: true, ElAlert: AlertStub, OrgTreeSelect: true,
       WorkbenchTrendChart: true,
     } },
@@ -108,7 +115,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 async function click(wrapper: VueWrapper, text: string) {
-  const button = wrapper.findAll("button").find((item) => item.text() === text);
+  const button = wrapper.findAll("button").find((item) => item.text() === text || item.attributes("aria-label") === text);
   expect(button, `找不到按钮 ${text}`).toBeDefined();
   await button!.trigger("click");
 }
@@ -179,7 +186,7 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("北城街道");
     expect(wrapper.getComponent(StreetLedgerSheet).props("rows")).toHaveLength(1);
-    expect(wrapper.text()).not.toContain("缺少资产基表");
+    expect(wrapper.get("tfoot").text()).toContain("缺少资产基表");
     expect(wrapper.text()).not.toContain("数据口径");
     expect(wrapper.text()).toContain("无候选权限");
     expect(api.orgs.list).not.toHaveBeenCalled();
@@ -223,13 +230,13 @@ describe("汇总表真实状态", () => {
     expect(wrapper.get("tfoot").text()).not.toContain("2026-01-01");
     expect(wrapper.get("tfoot").text()).not.toContain("2025-01-01");
     expect(wrapper.text()).not.toContain("上报日期范围");
-    expect(wrapper.text()).not.toContain("非去重资产总量");
+    expect(wrapper.get("tfoot").text()).toContain("非去重资产总量");
     expect(wrapper.get("thead").text()).toContain("北城街道台账");
     await click(wrapper, "导出 Excel");
     expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, "街道台账_街道2_2026-01-01至2026-08-31");
   });
 
-  it.each(["street", "survey"] as const)("%s 页面与实际导出 XLSX 均不含动态口径行，保留原始备注、标题和数据", async (kind) => {
+  it.each(["street", "survey"] as const)("%s 页面与 XLSX 保持一致，街道台账导出完整统计口径", async (kind) => {
     const actualExport = await vi.importActual<typeof import("@/utils/ledger-export")>("@/utils/ledger-export");
     vi.mocked(exportLedgerTable).mockImplementation(actualExport.exportLedgerTable);
     const component = kind === "street" ? StreetLedgerView : SurveyLedgerView;
@@ -250,7 +257,7 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     await click(wrapper, "查询");
     await flushPromises();
-    expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
+    expect(wrapper.findAll("tfoot tr")).toHaveLength(kind === "street" ? 1 + notes.length : 1);
     await click(wrapper, "导出 Excel");
     await vi.mocked(exportLedgerTable).mock.results.at(-1)!.value;
     const label = kind === "street" ? "街道台账" : "街道排查汇总";
@@ -264,16 +271,22 @@ describe("汇总表真实状态", () => {
     const values: string[] = [];
     sheet.eachRow((row) => row.eachCell((cell) => values.push(cell.text)));
     expect(wrapper.text()).toContain("按上报日期筛选");
-    for (const note of ["数据口径", "上报日期范围", ...notes]) expect(wrapper.text()).not.toContain(note);
+    for (const note of notes) {
+      if (kind === "street") expect(wrapper.text()).toContain(note);
+      else expect(wrapper.text()).not.toContain(note);
+    }
     for (const text of [wrapper.get("table").text(), values.join("\n")]) {
       expect(text).toContain("北城街道");
       expect(text).toContain(wrapper.get("thead tr:first-child th").text());
       expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
       if (kind === "survey") expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
       else expect(text).toContain("1.25");
-      for (const note of ["数据口径", "上报日期", ...notes]) expect(text).not.toContain(note);
+      for (const note of notes) {
+        if (kind === "street") expect(text).toContain(note);
+        else expect(text).not.toContain(note);
+      }
     }
-    const columns = kind === "street" ? 16 : 22;
+    const columns = kind === "street" ? 17 : 22;
     expect(sheet.columnCount).toBe(columns);
     expect(sheet.getCell(1, columns).isMerged).toBe(true);
     expect(sheet.getCell(1, columns).master.address).toBe("A1");
@@ -399,6 +412,21 @@ describe("汇总表真实状态", () => {
 });
 
 describe("工作人员展示与表单候选", () => {
+  it("组织树选中和清空会重新查询，并回到第一页", async () => {
+    const wrapper = render(UserView);
+    await flushPromises();
+    const pagination = wrapper.getComponent({ name: "ElPagination" });
+    pagination.vm.$emit("update:current-page", 3);
+    pagination.vm.$emit("current-change", 3);
+    await flushPromises();
+    wrapper.getComponent(TreeStub).vm.$emit("node-click", { id: 3 });
+    await flushPromises();
+    expect(api.users.list).toHaveBeenLastCalledWith(expect.objectContaining({ org_id: 3, page: 1 }));
+    await click(wrapper, "全部");
+    await flushPromises();
+    expect(api.users.list).toHaveBeenLastCalledWith(expect.objectContaining({ org_id: undefined, page: 1 }));
+  });
+
   it("字典无权限不影响名称展示，超管不显示组织 #0 或角色 #0", async () => {
     api.users.list.mockResolvedValue({ list: [user, { ...user, id: 1, username: "admin", org_id: 0, role_id: 0, org_path: null, org_name: null, role_name: null, is_super_admin: true }], total: 2 });
     api.orgs.list.mockRejectedValue(new Error("组织读取未授权"));
@@ -440,6 +468,22 @@ describe("工作人员展示与表单候选", () => {
 });
 
 describe("其他列表回归", () => {
+  it("打开权限后直接保存保持原 API ID，不扩展部分勾选或丢失目录外授权", async () => {
+    api.roles.list.mockResolvedValue([role]);
+    api.roles.listApis.mockResolvedValue([
+      { id: 1, module: "web.rectify", action: "view", name: "列表", sort: 1 },
+      { id: 2, module: "web.rectify", action: "view", name: "详情", sort: 2 },
+    ]);
+    api.roles.getPermissions.mockResolvedValue({ api_ids: [1, 99] });
+    const wrapper = render(RoleView);
+    await flushPromises();
+    await click(wrapper, "授权");
+    await flushPromises();
+    await click(wrapper, "保存权限");
+    await flushPromises();
+    expect(api.roles.updatePermissions).toHaveBeenCalledWith(role.id, { api_ids: [1, 99] });
+  });
+
   it.each([
     ["组织", OrgView, api.orgs.list, [{ id: 1, parent_id: 0, type: "root", name: "测试组织", sort: 0 }]],
     ["角色", RoleView, api.roles.list, [role]],
@@ -450,7 +494,7 @@ describe("其他列表回归", () => {
     await flushPromises();
     expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(1);
     request.mockRejectedValueOnce(new Error("刷新失败"));
-    await click(wrapper, "刷新");
+    await click(wrapper, "刷新表格");
     await flushPromises();
     expect(wrapper.getComponent(TableStub).props("data")).toEqual([]);
     expect(wrapper.text()).toContain("刷新失败");

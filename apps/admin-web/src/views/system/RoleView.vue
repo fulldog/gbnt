@@ -1,44 +1,25 @@
 <script setup lang="ts">
 import type { SysApi, SysRole } from "@gbnt/api-client";
-import { Delete, Edit, Key, Plus, Refresh } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox, ElTree, vLoading } from "element-plus";
+import { Delete, Edit, Key, Plus } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox, vLoading } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
-import { computed, nextTick, onMounted, reactive, shallowRef, watch } from "vue";
+import { computed, onMounted, reactive, shallowRef, useTemplateRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
-import PageHeader from "@/components/PageHeader.vue";
+import QueryPanel from "@/components/QueryPanel.vue";
+import TableToolbar from "@/components/TableToolbar.vue";
+import PermissionMatrix from "@/components/PermissionMatrix.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useAuthStore } from "@/stores/auth";
 import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
 import { formatDateTime } from "@/utils/format";
 
-interface PermissionNode {
-  id: string | number;
-  label: string;
-  children?: PermissionNode[];
-}
-
-const MODULE_LABELS: Record<string, string> = {
-  "web.workbench": "工作台",
-  "web.rectify": "专项整改",
-  "web.ledger-street": "街道台账",
-  "web.ledger-survey": "排查汇总",
-  "web.sys-org": "组织架构",
-  "web.sys-staff": "工作人员",
-  "web.sys-roles": "角色权限",
-  "web.sys-logs": "操作日志",
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  view: "查看",
-  create: "新增",
-  edit: "编辑",
-  delete: "删除",
-  import: "导入",
-  export: "导出",
-};
-
+const tablePage = useTemplateRef<HTMLElement>("tablePage");
+const filtersVisible = shallowRef(true);
+const roleIdFilter = shallowRef("");
+const columns = [{ key: "desc", label: "角色说明" }, { key: "created", label: "创建时间" }, { key: "status", label: "状态" }];
+const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
 const auth = useAuthStore();
 const permission = usePermissionStore();
@@ -58,7 +39,7 @@ const permissionVisible = shallowRef(false);
 const editingRole = shallowRef<SysRole | null>(null);
 const selectedRole = shallowRef<SysRole | null>(null);
 const formRef = shallowRef<FormInstance>();
-const treeRef = shallowRef<InstanceType<typeof ElTree>>();
+const selectedApiIds = shallowRef<number[]>([]);
 const submitting = shallowRef(false);
 const {
   data: permissionIds, loading: permissionLoading, loadError: permissionError,
@@ -79,29 +60,11 @@ const rules: FormRules<typeof form> = {
 
 const filteredRoles = computed(() => {
   const query = keyword.value.trim().toLowerCase();
-  if (!query) return roles.value;
-  return roles.value.filter(
+  const matchingRoles = roleIdFilter.value.trim() ? roles.value.filter((role) => String(role.id) === roleIdFilter.value.trim()) : roles.value;
+  if (!query) return matchingRoles;
+  return matchingRoles.filter(
     (role) => role.name.toLowerCase().includes(query) || role.desc.toLowerCase().includes(query) || String(role.id) === query,
   );
-});
-
-const permissionTree = computed<PermissionNode[]>(() => {
-  const groups = new Map<string, SysApi[]>();
-  for (const item of apis.value) {
-    const list = groups.get(item.module) ?? [];
-    list.push(item);
-    groups.set(item.module, list);
-  }
-  return [...groups.entries()].map(([module, items]) => ({
-    id: `module:${module}`,
-    label: MODULE_LABELS[module] ?? module,
-    children: items
-      .sort((a, b) => a.sort - b.sort || a.id - b.id)
-      .map((item) => ({
-        id: item.id,
-        label: `${ACTION_LABELS[item.action] ?? item.action} · ${item.name}（${item.method} ${item.path}）`,
-      })),
-  }));
 });
 
 function isCancelled(error: unknown): boolean {
@@ -181,10 +144,9 @@ async function openPermissions(role: SysRole): Promise<void> {
 }
 
 async function loadPermissions(): Promise<void> {
-  treeRef.value?.setCheckedKeys([], false);
+  selectedApiIds.value = [];
   if (await loadPermissionIds()) {
-    await nextTick();
-    if (permissionVisible.value && permissionsReady.value) treeRef.value?.setCheckedKeys(permissionIds.value, false);
+    if (permissionVisible.value && permissionsReady.value) selectedApiIds.value = [...permissionIds.value];
   }
 }
 
@@ -194,8 +156,7 @@ watch(permissionVisible, (visible) => {
 
 async function savePermissions(): Promise<void> {
   if (!selectedRole.value || selectedRole.value.id === 1 || !permissionsReady.value || permissionLoading.value || loading.value || loadError.value || submitting.value) return;
-  const checked = treeRef.value?.getCheckedKeys(false) ?? [];
-  const apiIds = checked.filter((id): id is number => typeof id === "number");
+  const apiIds = [...selectedApiIds.value];
   submitting.value = true;
   try {
     await api.roles.updatePermissions(selectedRole.value.id, { api_ids: apiIds });
@@ -231,30 +192,25 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <PageHeader title="角色权限" description="角色授权以当前后端 API 目录中的数字 ID 为准。">
-      <template #actions>
-        <ElButton :icon="Refresh" :loading="loading" @click="load">刷新</ElButton>
-        <ElButton v-if="permission.can('web.sys-roles', 'create')" type="primary" :icon="Plus" @click="createRole">新增角色</ElButton>
-      </template>
-    </PageHeader>
-
-    <section class="page-card p-4">
-      <ElFormItem label="角色名称、说明或 ID" class="!mb-0">
-        <ElInput v-model="keyword" clearable class="max-w-lg" placeholder="输入关键字筛选当前角色列表" />
-      </ElFormItem>
-    </section>
-
+  <div ref="tablePage" class="data-page">
+    <QueryPanel v-show="filtersVisible" :loading="loading" @search="load" @reset="keyword = ''; roleIdFilter = ''; load()">
+      <ElFormItem label="角色名称"><ElInput v-model="keyword" clearable placeholder="角色名称或说明" /></ElFormItem>
+      <ElFormItem label="角色 ID"><ElInput v-model="roleIdFilter" clearable placeholder="请输入角色 ID" /></ElFormItem>
+    </QueryPanel>
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
-    <section class="page-card overflow-hidden">
-      <ElTable v-loading="loading" :data="filteredRoles" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无角色'">
+    <section class="data-card">
+      <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="角色管理" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
+        <ElButton v-if="permission.can('web.sys-roles', 'create')" type="primary" :icon="Plus" @click="createRole">新增角色</ElButton>
+      </TableToolbar>
+      <div class="data-table">
+      <ElTable height="100%" v-loading="loading" :data="filteredRoles" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无角色'">
         <ElTableColumn prop="id" label="角色 ID" width="100" align="center" />
-        <ElTableColumn prop="name" label="角色名称" min-width="160" />
-        <ElTableColumn prop="desc" label="角色说明" min-width="240" show-overflow-tooltip />
-        <ElTableColumn label="状态" width="100" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
-        <ElTableColumn label="创建时间" min-width="160"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
-        <ElTableColumn label="操作" width="260" fixed="right">
+        <ElTableColumn prop="name" label="角色名称" min-width="160"  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('desc')" prop="desc" label="角色说明" min-width="240" show-overflow-tooltip  align="center"/>
+        <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="100" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="160" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
+        <ElTableColumn label="操作" width="260" fixed="right" align="center">
           <template #default="scope">
             <div v-if="scope.row.id !== 1" class="table-actions">
               <ElButton v-if="permission.can('web.sys-roles', 'view')" link type="primary" :icon="Key" @click="openPermissions(asRole(scope.row))">授权</ElButton>
@@ -269,44 +225,38 @@ onMounted(() => {
           </template>
         </ElTableColumn>
       </ElTable>
+      </div>
+      <div class="data-pagination">共 {{ filteredRoles.length }} 条记录</div>
     </section>
 
     <ElDialog v-model="roleDialogVisible" :title="editingRole ? '编辑角色' : '新增角色'" width="min(520px, 92vw)" destroy-on-close>
-      <ElForm ref="formRef" :model="form" :rules="rules" label-position="top">
+      <ElForm ref="formRef" :model="form" :rules="rules" label-position="right" label-width="90px">
         <ElFormItem label="角色名称" prop="name"><ElInput v-model="form.name" maxlength="64" /></ElFormItem>
         <ElFormItem label="角色说明"><ElInput v-model="form.desc" type="textarea" :rows="3" maxlength="255" show-word-limit /></ElFormItem>
         <ElFormItem v-if="editingRole" label="状态"><ElRadioGroup :model-value="form.status" @update:model-value="updateRoleStatus"><ElRadio :value="1">启用</ElRadio><ElRadio :value="0">停用</ElRadio></ElRadioGroup></ElFormItem>
-        <p v-else class="mt-0 mb-0 text-sm text-slate-500">新角色按后端规则默认启用，创建后可再停用。</p>
+        <p v-else class="mt-0 mb-0 text-sm text-slate-500">新角色默认启用，创建后可配置权限。</p>
       </ElForm>
       <template #footer><ElButton @click="roleDialogVisible = false">取消</ElButton><ElButton type="primary" :loading="submitting" @click="submitRole">保存</ElButton></template>
     </ElDialog>
 
-    <ElDrawer v-model="permissionVisible" :title="`${selectedRole?.name ?? ''} · API 权限`" size="min(760px, 96vw)" destroy-on-close>
+    <ElDialog v-model="permissionVisible" :title="`${selectedRole?.name ?? ''} · 角色授权`" width="min(760px, 94vw)" top="8vh" destroy-on-close :close-on-click-modal="false" :close-on-press-escape="!submitting" :show-close="!submitting">
       <AsyncError v-if="permissionError" class="mb-4" :message="permissionError" @retry="loadPermissions" />
-      <ElAlert
-        v-if="selectedRole?.id === 1"
-        class="mb-4"
-        type="info"
-        show-icon
-        :closable="false"
-        title="管理员角色固定拥有全部 API 权限，不允许修改。"
-      />
-      <ElTree
-        v-if="!permissionError"
-        ref="treeRef"
-        v-loading="permissionLoading"
-        :data="permissionTree"
-        node-key="id"
-        :show-checkbox="selectedRole?.id !== 1"
-        default-expand-all
-        :props="{ label: 'label', children: 'children' }"
-      />
+      <ElAlert v-if="selectedRole?.id === 1" class="mb-4" type="info" show-icon :closable="false" title="管理员角色拥有全部权限，不允许修改。" />
+      <dl class="role-info"><div><dt>角色名称</dt><dd>{{ selectedRole?.name }}</dd></div><div><dt>备注</dt><dd>{{ selectedRole?.desc || '—' }}</dd></div></dl>
+      <div v-loading="permissionLoading">
+        <PermissionMatrix v-if="!permissionError" v-model="selectedApiIds" :apis="apis" :disabled="selectedRole?.id === 1 || permissionLoading || !permissionsReady || submitting" />
+      </div>
       <template #footer>
-        <div class="flex justify-end gap-2 p-4">
-          <ElButton @click="permissionVisible = false">关闭</ElButton>
-          <ElButton v-if="selectedRole?.id !== 1" type="primary" :loading="submitting" :disabled="!permissionsReady || permissionLoading || loading || Boolean(loadError)" @click="savePermissions">保存权限</ElButton>
-        </div>
+        <ElButton :disabled="submitting" @click="permissionVisible = false">关闭</ElButton>
+        <ElButton v-if="selectedRole?.id !== 1" type="primary" :loading="submitting" :disabled="!permissionsReady || permissionLoading || loading || Boolean(loadError)" @click="savePermissions">保存权限</ElButton>
       </template>
-    </ElDrawer>
+    </ElDialog>
   </div>
 </template>
+
+<style scoped>
+.role-info { display: grid; gap: 12px; margin: 0 0 20px; }
+.role-info > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); }
+.role-info dt { color: #6b7a90; }
+.role-info dd { margin: 0; overflow-wrap: anywhere; }
+</style>

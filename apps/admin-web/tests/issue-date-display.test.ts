@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useBusinessToday } from "@/composables/useBusinessToday";
-import { businessDate, issuePlanDisplay } from "@/utils/issue-date";
+import { businessDate, issueCountdownDisplay, issuePlanDateDisplay, issuePlanDisplay } from "@/utils/issue-date";
 import { displayOrg, displayRole, displayUser } from "@/utils/display";
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -15,15 +15,22 @@ describe("自然日到期提示", () => {
     ["2027-01-01", "2026-12-31", "剩余 1 天", false],
     ["2024-02-29", "2024-03-01", "逾期 1 天", true],
   ])("%s 与 %s 的日期文字和颜色一致", (plan, today, text, overdue) => {
+    expect(issuePlanDateDisplay(plan)).toBe(plan.replaceAll("-", "/"));
+    expect(issueCountdownDisplay({ plan_date: plan, status: "new" }, today)).toEqual({ text, overdue });
     expect(issuePlanDisplay({ plan_date: plan, status: "new" }, today)).toEqual({
       text: `${plan.replaceAll("-", "/")}（${text}）`, overdue,
     });
   });
 
   it("已完成不标逾期；无日期/非法日期不产生NaN或Invalid Date", () => {
+    expect(issueCountdownDisplay({ plan_date: "2026-09-04", status: "done" }, "2026-09-05")).toEqual({ text: "已完成", overdue: false });
+    expect(issuePlanDateDisplay("")).toBe("—");
+    expect(issueCountdownDisplay({ plan_date: "", status: "new" }, "2026-09-05")).toEqual({ text: "—", overdue: false });
     expect(issuePlanDisplay({ plan_date: "2026-09-04", status: "done" }, "2026-09-05")).toEqual({ text: "2026/09/04", overdue: false });
     expect(issuePlanDisplay({ plan_date: "", status: "new" }, "2026-09-05").text).toBe("—");
     for (const plan of ["not-a-date", "2026-02-29", "2026-13-01", "2026-9-5"]) {
+      expect(issuePlanDateDisplay(plan)).toBe("日期格式异常");
+      expect(issueCountdownDisplay({ plan_date: plan, status: "pending" }, "2026-09-05")).toEqual({ text: "日期格式异常", overdue: false });
       expect(issuePlanDisplay({ plan_date: plan, status: "pending" }, "2026-09-05")).toEqual({ text: "日期格式异常", overdue: false });
     }
   });

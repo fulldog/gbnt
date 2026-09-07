@@ -9,6 +9,7 @@ const location = {
 };
 const streetRow = {
   ...location, project_year: 2023, well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
+  well_report_count: 1, bridge_report_count: 0, transformer_report_count: 0, road_tree_survive: 10,
   road_km: 1.75, forest_handover: 100, forest_existing: 0, transformer_handover: null, transformer_existing: null, signer: null, phone: null,
 };
 const surveyRow = {
@@ -44,6 +45,9 @@ describe("只读正式报表 API", () => {
 
   it.each([
     { ...streetRow, road_km: "2" }, { ...streetRow, road_km: -1 },
+    { ...streetRow, road_tree_survive: undefined }, { ...streetRow, road_tree_survive: -1 },
+    { ...streetRow, well_report_count: null }, { ...streetRow, bridge_report_count: 0.5 },
+    { ...streetRow, transformer_report_count: 4 },
     { ...streetRow, forest_existing: undefined }, { ...streetRow, source_record_count: 1.5 },
     { ...streetRow, natural_village: "凭地址猜测" }, { ...streetRow, well_existing: 4 },
     { ...streetRow, row_key: "" }, { ...streetRow, street_name: 5 },
@@ -139,6 +143,24 @@ describe("四个拆分报表 GET 契约", () => {
   it.each(["2", -1, Infinity, NaN, undefined])("台账指标拒绝异常数字 %s", async (road_km) => {
     const value = goldenStreetParts().statistics;
     await expect(setup({ ...value, rows: [{ ...value.rows[0], road_km }] }).ledger.getStreetStatistics()).rejects.toThrow();
+  });
+
+  it.each(["well_report_count", "bridge_report_count", "transformer_report_count"] as const)("%s 必须为安全非负整数且不超过来源记录数", async (field) => {
+    const value = goldenStreetParts().statistics;
+    for (const count of ["1", -1, 0.5, null, undefined, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, 7]) {
+      await expect(setup({ ...value, rows: [{ ...value.rows[0], [field]: count }] }).ledger.getStreetStatistics()).rejects.toThrow();
+    }
+  });
+
+  it("道路树木可为 0 或未知，独立林网株数原样保留", async () => {
+    const value = goldenStreetParts().statistics;
+    for (const road_tree_survive of [0, 10, null]) {
+      const row = { ...value.rows[0]!, road_tree_survive, forest_existing: 8 };
+      expect((await setup({ ...value, rows: [row] }).ledger.getStreetStatistics()).rows[0]).toEqual(row);
+    }
+    for (const road_tree_survive of ["10", -1, undefined, NaN, Infinity]) {
+      await expect(setup({ ...value, rows: [{ ...value.rows[0], road_tree_survive }] }).ledger.getStreetStatistics()).rejects.toThrow();
+    }
   });
 
   it("安全整数及固定 null、问题整改关系不能放宽", async () => {

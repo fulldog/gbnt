@@ -30,6 +30,7 @@ func (d *Deps) registerRectify(api *gin.RouterGroup) {
 }
 
 // ListIssues GET /api/issues — 专项整改列表；query: type/status/org_id/project_year/keyword/page/size。
+// 分页前按已逾期、即将逾期（北京自然日今天至 3 天后）、待整改、已整改/已排查排序；同组创建时间倒序。
 func (d *Deps) ListIssues(c *gin.Context) {
 	q := service.IssueQuery{
 		Type:        c.Query("type"),
@@ -83,13 +84,13 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// UpdateIssue PUT /api/issues/:id — 更新问题；传 type_ext 时按 type 校验。
+// UpdateIssue PUT /api/issues/:id — 更新问题；省略字段保持原值，完整校验类型表单，保留整改历史。
 func (d *Deps) UpdateIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	var req service.IssueInput
+	var req service.IssueUpdateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return

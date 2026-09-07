@@ -75,6 +75,7 @@ export type QuizType =
   | "transformer_ok"
   | "has_shoulder"
   | "has_ash"
+  | "has_road_damage"
   | "needs_rectify"
   | "broken_belt"
   | "dead_trees"
@@ -91,7 +92,7 @@ export type WellQuizType =
   | "box_ok"
   | "cover_ok"
   | "transformer_ok";
-export type RoadQuizType = "has_shoulder" | "has_ash";
+export type RoadQuizType = "has_shoulder" | "has_ash" | "has_road_damage";
 export type BridgeQuizType = "needs_rectify";
 export type ForestQuizType = "broken_belt" | "dead_trees" | "pest";
 export type TransformerQuizType =
@@ -109,7 +110,17 @@ export interface QuizBool<TType extends QuizType = QuizType> {
   photos?: FileItem[];
 }
 
-export interface WellTypeExt {
+/** 未提供版本表示旧版表单；2 为原型对齐后的五类表单。 */
+export interface IssueExtMetadata {
+  schema_version?: 1 | 2;
+  /** 已退出当前表单的历史题项，保留答案和附件，不参与新版判定。 */
+  legacy_checklist?: QuizBool[];
+}
+
+export interface WellTypeExt extends IssueExtMetadata {
+  /** 机井全景照片，与各排查题附件独立。新版新建必填。 */
+  panorama_files?: string[];
+  panorama_photos?: FileItem[];
   build_kind: FacilityBuildKind;
   checklist: QuizBool<WellQuizType>[];
   outlet_total: number;
@@ -120,17 +131,18 @@ export interface WellTypeExt {
   keeper_phone: string;
 }
 
-export interface RoadTypeExt {
+export interface RoadTypeExt extends IssueExtMetadata {
   length: number;
   width: number;
   thickness: number;
   checklist: QuizBool<RoadQuizType>[];
-  tree_survive: number;
+  /** 历史字段；新版表单不要求填写。 */
+  tree_survive?: number | null;
   keeper_name: string;
   keeper_phone: string;
 }
 
-export interface BridgeTypeExt {
+export interface BridgeTypeExt extends IssueExtMetadata {
   kind: BridgeKind;
   length: number;
   width: number;
@@ -139,16 +151,17 @@ export interface BridgeTypeExt {
   keeper_phone: string;
 }
 
-export interface ForestTypeExt {
+export interface ForestTypeExt extends IssueExtMetadata {
   handover_count: number;
   existing_count: number;
-  survive_rate: number;
+  /** 历史字段；新版表单不要求填写。 */
+  survive_rate?: number | null;
   checklist: QuizBool<ForestQuizType>[];
   keeper_name: string;
   keeper_phone: string;
 }
 
-export interface TransformerTypeExt {
+export interface TransformerTypeExt extends IssueExtMetadata {
   capacity: number;
   model: string;
   voltage: TransformerVoltage;
@@ -174,6 +187,9 @@ export interface RectifyRecord extends BaseRecord {
 }
 
 interface IssueBase extends BaseRecord {
+  /** 上报信息快照，与负责人和实际操作账号分别保存。 */
+  reporter_name?: string;
+  reporter_phone?: string;
   issue_key: string;
   project_year: ProjectYear;
   org_id: number;
@@ -220,13 +236,21 @@ type IssueCreateByType =
   | { type: "transformer"; type_ext: TransformerTypeExt };
 
 export type MiniappCreateIssueInput = IssueCreateCommon & IssueCreateByType;
-export type AdminCreateIssueInput = MiniappCreateIssueInput & {
-  report_user_id: number;
+export type AdminCreateIssueInput = IssueCreateCommon & IssueCreateByType & {
+  /** 旧版必填；新版手工填报可不关联账号。 */
+  report_user_id?: number;
+  reporter_name?: string;
+  reporter_phone?: string;
   /** 选填；非 0 须启用且所属组织与 org_id 互为上下级或同一节点。 */
   assignee_user?: number;
 };
 
+/** 省略字段保留原值；空字符串/0 为显式赋值；type_ext 提供时按当前类型完整校验。 */
 export interface UpdateIssueInput {
+  /** 乐观锁：编辑打开时详情的 updated_at，过期拒绝保存。 */
+  expected_updated_at?: string;
+  reporter_name?: string;
+  reporter_phone?: string;
   type?: IssueType;
   project_year?: ProjectYear;
   org_id?: number;

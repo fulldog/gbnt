@@ -28,7 +28,7 @@ export function createLedgerApi(client: ApiClient) {
       return normalizeStreetRowsPart(await client.request<unknown>("/api/ledger/street/rows", { query: { ...normalizeLedgerQuery(query) } }));
     },
 
-    /** 批量提供同一筛选的台账指标；须与基础行按 row_key 关联。 */
+    /** 同一筛选的上报条数、道路长度/附属树木存活数及独立林网株数；按 row_key 关联基础行，条数非去重设施数。 */
     async getStreetStatistics(query: LedgerSplitQuery = {}): Promise<LedgerPart<StreetStatisticsRow>> {
       return normalizeStreetStatisticsPart(await client.request<unknown>("/api/ledger/street/statistics", { query: { ...normalizeLedgerQuery(query) } }));
     },
@@ -43,7 +43,7 @@ export function createLedgerApi(client: ApiClient) {
       return normalizeSurveyStatisticsPart(await client.request<unknown>("/api/ledger/survey/statistics", { query: { ...normalizeLedgerQuery(query) } }));
     },
 
-    /** 按年度及落点组织生成只读建设项目报表；日期筛选按北京时间自然日（含起止日），未采集字段保留 null。 */
+    /** 按年度及落点组织返回同一套上报数量与树木统计；北京时间日期含起止日，缺失数量保留 null，原资产字段仍为 null。 */
     async getStreetReport(query: LedgerQuery = {}): Promise<StreetLedgerReportResult> {
       return normalizeStreetReport(await client.request<unknown>("/api/ledger/street/report", { query: { ...query } }));
     },

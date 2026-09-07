@@ -31,21 +31,23 @@ type IssueQuery struct {
 	Size        int    // 每页条数，默认 20
 }
 
-// IssueInput 创建/更新入参（对齐 miniapp 上报向导）。
+// IssueInput 创建入参；管理端新版表单与旧小程序按 type_ext.schema_version 分别校验。
 type IssueInput struct {
+	ReporterName            string          `json:"reporter_name"`              // 上报人姓名快照，选填，与操作账号分开
+	ReporterPhone           string          `json:"reporter_phone"`             // 上报联系电话，选填，不复用负责人电话
 	Type                    string          `json:"type"`                       // 问题类型 well/road/bridge/forest/transformer（必填）
 	ProjectYear             int             `json:"project_year"`               // 项目年度 2020–2023（新建必填）
-	OrgID                   uint64          `json:"org_id"`                     // 落点组织 ID，对应 sys_orgs.id（新建必填；更新时 0 表示不改）
-	Code                    string          `json:"code"`                       // 设施编号（选填）
+	OrgID                   uint64          `json:"org_id"`                     // 落点组织 ID，对应 sys_orgs.id（必填）
+	Code                    string          `json:"code"`                       // 设施编号；新版表单必填，旧版保持选填
 	Address                 string          `json:"address"`                    // 定位地址（必填）
 	Lat                     float64         `json:"lat"`                        // 纬度
 	Lng                     float64         `json:"lng"`                        // 经度
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
-	ReportUserID            uint64          `json:"report_user_id"`             // 上报人用户ID：app端由登录用户注入；后台创建必填
-	AssigneeUser            uint64          `json:"assignee_user"`              // 整改责任人用户 ID，对应 issues.assignee_user；0/省略新建不写、更新不改；App 上报由服务端注入当前用户；非 0 须启用且所属组织与表单 org_id 互为上下级或同一节点
+	ReportUserID            uint64          `json:"report_user_id"`             // 上报人账号：App 由登录用户注入；后台旧版必填，新版手工填报可不关联账号
+	AssigneeUser            uint64          `json:"assignee_user"`              // 整改责任人账号；后台 0/省略表示未指派，App 由服务端注入当前用户；非 0 须启用且所属组织与表单 org_id 互为上下级或同一节点
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
-	Status                  string          `json:"status"`                     // 仅更新用 new|pending|done；新建由 quiz 推导
+	Status                  string          `json:"status"`                     // 兼容历史请求；创建忽略该值，状态由排查清单推导
 }
 
 // IssueVO 业务明细/列表项。
@@ -163,7 +165,8 @@ func (v IssueVO) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// List 管理端基础列表；编号搜索仅在该入口扩大，小程序待办保持原语义。
+// List 管理端基础列表；按已逾期、即将逾期、待整改、已整改/已排查分组，同组按创建时间倒序。
+// 即将逾期含北京自然日今天至 3 天后；小程序查询保持原语义。
 func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	q.Page, q.Size = NormalizePagination(q.Page, q.Size, 0)
 	db := s.applyAdminIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
@@ -177,7 +180,7 @@ func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64
 		return nil, 0, err
 	}
 	var list []model.Issue
-	if err := db.Order("id DESC").Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
+	if err := db.Clauses(adminIssueOrder(db.NowFunc())).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]IssueVO, 0, len(list))
@@ -448,8 +451,14 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if strings.TrimSpace(in.ReporterSignatureFileID) == "" {
 		return nil, errors.New("请提交电子签名")
 	}
-	if in.ReportUserID == 0 {
+	if in.ReportUserID == 0 && issueExtVersion(in.TypeExt) != 2 {
 		return nil, errors.New("请传入上报人report_user_id")
+	}
+	if err := validateReporterSnapshot(in.ReporterName, in.ReporterPhone); err != nil {
+		return nil, err
+	}
+	if issueExtVersion(in.TypeExt) == 2 && strings.TrimSpace(in.Code) == "" {
+		return nil, errors.New("请填写设施编号")
 	}
 	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, in.OrgID); err != nil {
 		return nil, err
@@ -473,6 +482,8 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	status := deriveCreateStatus(needsRectify)
 
 	item := &model.Issue{
+		ReporterName:            strings.TrimSpace(in.ReporterName),
+		ReporterPhone:           strings.TrimSpace(in.ReporterPhone),
 		IssueKey:                "issue-" + uuid.NewString()[:8],
 		Type:                    typ,
 		ProjectYear:             in.ProjectYear,
@@ -494,78 +505,6 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		return nil, err
 	}
 	return s.toVO(item)
-}
-
-func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*IssueVO, error) {
-	var item model.Issue
-	if err := s.DB.First(&item, id).Error; err != nil {
-		return nil, err
-	}
-	typ := strings.TrimSpace(in.Type)
-	if typ == "" {
-		typ = item.Type
-	}
-	if !model.IssueType(typ).Valid() {
-		return nil, errors.New("问题类型无效")
-	}
-	year := in.ProjectYear
-	if year == 0 {
-		year = item.ProjectYear
-	}
-	if !model.ProjectYear(year).Valid() {
-		return nil, errors.New("请选择项目年度")
-	}
-
-	orgID := in.OrgID
-	if orgID == 0 {
-		orgID = item.OrgID
-	}
-	if err := s.requireOrgID(ctx, orgID); err != nil {
-		return nil, err
-	}
-	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, orgID); err != nil {
-		return nil, err
-	}
-
-	ext := item.TypeExt
-	//if len(in.TypeExt) > 0 {
-	//	canon, needs, nerr := s.normalizeTypeExt(ctx, typ, in.TypeExt)
-	//	if nerr != nil {
-	//		return nil, nerr
-	//	}
-	//	ext, needsRectify = canon, needs
-	//}
-
-	//sig := in.ReporterSignatureFileID
-	//if sig == "" {
-	//	sig = item.ReporterSignatureFileID
-	//}
-
-	addr := strings.TrimSpace(in.Address)
-	if addr == "" {
-		addr = item.Address
-	}
-
-	updates := map[string]interface{}{
-		"type": typ, "project_year": year, "org_id": orgID,
-		"code": in.Code, "address": addr,
-		"lat": in.Lat, "lng": in.Lng,
-		"plan_date": in.PlanDate, "type_ext": ext,
-		//"reporter_signature_file_id": sig,
-	}
-	if in.Status != "" {
-		if !model.IssueStatus(in.Status).Valid() {
-			return nil, errors.New("状态无效")
-		}
-		updates["status"] = in.Status
-	}
-	if in.AssigneeUser > 0 {
-		updates["assignee_user"] = in.AssigneeUser
-	}
-	if err := s.db(ctx).Model(&item).Updates(updates).Error; err != nil {
-		return nil, err
-	}
-	return s.Get(id)
 }
 
 func (s *IssueService) Delete(ctx context.Context, id uint64) error {

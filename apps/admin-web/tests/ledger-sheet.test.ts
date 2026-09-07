@@ -40,12 +40,12 @@ function verifyGrid(table: HTMLTableElement, columnCount: number): void {
 }
 
 describe("Excel 式台账结构", () => {
-  it("G1 黄金报表在两页与真实 XLSX 中保留 16/22 列人工预期，仅删除动态数据口径行", async () => {
+  it("G1 黄金报表在页面与 XLSX 保留 17/22 列人工预期，街道台账携带统计口径", async () => {
     const street = goldenStreetParts();
     const survey = goldenSurveyParts();
     const streetReport = mergeLedgerParts(goldenQuery, street.base, street.statistics, composeStreetRow);
     const surveyReport = mergeLedgerParts(goldenQuery, survey.base, survey.statistics, composeSurveyRow);
-    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账" } });
+    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账", notes: streetReport.notes } });
     const surveyWrapper = mount(SurveyLedgerSheet, { props: { rows: surveyReport.rows, title: "测试街道排查" } });
     expect(streetWrapper.findAll("tbody tr")).toHaveLength(2);
     expect(surveyWrapper.findAll("tbody tr")).toHaveLength(1);
@@ -56,32 +56,40 @@ describe("Excel 式台账结构", () => {
     expect(surveyCells[6]).toBe("2"); expect(surveyCells[12]).toBe("1");
     expect(surveyCells[4]).toBe("—");
     for (const [wrapper, columns, title, notes] of [
-      [streetWrapper, 16, "测试街道台账", streetReport.notes],
+      [streetWrapper, 17, "测试街道台账", streetReport.notes],
       [surveyWrapper, 22, "测试街道排查", surveyReport.notes],
     ] as const) {
       verifyGrid(wrapper.get("table").element, columns);
-      expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
+      const noteRows = columns === 17 ? notes.length : 0;
+      expect(wrapper.findAll("tfoot tr")).toHaveLength(1 + noteRows);
       const sheet = await readSpreadsheet(wrapper.get("table").element);
       expect(sheet.columnCount).toBe(columns);
       expect(sheet.columns).toHaveLength(columns);
-      expect(sheet.rowCount).toBe(7);
+      expect(sheet.rowCount).toBe(7 + noteRows);
       const exportedText: string[] = [];
       sheet.eachRow((row) => row.eachCell((cell) => exportedText.push(cell.text)));
       for (const text of [wrapper.text(), exportedText.join("\n")]) {
         expect(text).toContain(title);
         expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
         if (columns === 22) expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
-        for (const note of ["数据口径", "上报日期", ledgerDateNote(goldenQuery), ...notes]) {
+        for (const note of ["数据口径", "上报日期", ledgerDateNote(goldenQuery)]) {
           expect(text).not.toContain(note);
         }
+        for (const note of notes) {
+          if (columns === 17) expect(text).toContain(note);
+          else expect(text).not.toContain(note);
+        }
       }
-      const lastColumn = columns === 16 ? "P" : "V";
-      expect(sheet.model.merges).toEqual(expect.arrayContaining([`A1:${lastColumn}1`, `A7:${lastColumn}7`]));
+      const lastColumn = columns === 17 ? "Q" : "V";
+      expect(sheet.model.merges).toEqual(expect.arrayContaining([`A1:${lastColumn}1`, `A${sheet.rowCount}:${lastColumn}${sheet.rowCount}`]));
       expect(sheet.getCell("A1").value).toBe(title);
       const bodyValues = (row: number) => Array.from({ length: columns }, (_, column) => sheet.getCell(row, column + 1).value);
-      if (columns === 16) {
-        expect(bodyValues(5)).toEqual(["1", "2023", "测试街道", "测试新村", "—", "—", "—", "—", "—", "1.75", "100", "0", "—", "—", "—", "—"]);
-        expect(bodyValues(6)).toEqual(["2", "2024", "测试街道", "测试新村", "—", "—", "—", "—", "—", "2", "—", "—", "—", "—", "—", "—"]);
+      if (columns === 17) {
+        expect(bodyValues(5)).toEqual(["1", "2023", "测试街道", "测试新村", "—", "—", "3", "—", "0", "1.75", "30", "100", "0", "—", "0", "—", "—"]);
+        expect(bodyValues(6)).toEqual(["2", "2024", "测试街道", "测试新村", "—", "—", "0", "—", "0", "2", "0", "—", "—", "—", "0", "—", "—"]);
+        expect(sheet.getCell("G4").value).toBe("已上报数量\n（条）");
+        expect(sheet.getCell("K4").value).toBe("附属树木存活数\n（棵）");
+        expect(sheet.getCell("L3").value).toBe("独立林网");
       } else {
         expect(bodyValues(6)).toEqual(["测试街道", "测试新村", "—", "—", "—", "—", "2", "—", "0", "—", "0", "2", "1", "0", "0", "0", "0", "—", "—", "—", "—", "—"]);
         expect(sheet.model.merges).toContain("S6:U6");
@@ -91,16 +99,16 @@ describe("Excel 式台账结构", () => {
     }
   });
 
-  it("街道台账在页面与 XLSX 保留 16 列、三层表头、整行标题和分组跨行合并", async () => {
+  it("街道台账在页面与 XLSX 保留 17 列、三层表头、整行标题和分组跨行合并", async () => {
     const rows = [
       streetReportRow(),
       streetReportRow({ row_key: "2023:4", org_id: 4 }),
       streetReportRow({ row_key: "2024:3", project_year: 2024 }),
     ];
     const wrapper = mount(StreetLedgerSheet, { props: { rows, title: "建设项目北城街道台账" } });
-    expect(wrapper.findAll("col")).toHaveLength(16);
+    expect(wrapper.findAll("col")).toHaveLength(17);
     expect(wrapper.findAll("thead tr")).toHaveLength(4);
-    expect(wrapper.get("thead tr:first-child th").attributes("colspan")).toBe("16");
+    expect(wrapper.get("thead tr:first-child th").attributes("colspan")).toBe("17");
     expect(wrapper.get("tbody tr:first-child td:nth-child(2)").attributes("rowspan")).toBe("2");
     expect(wrapper.get("tbody tr:first-child td:nth-child(3)").attributes("rowspan")).toBe("2");
     expect(wrapper.get("tbody tr:first-child td:nth-child(4)").attributes("rowspan")).toBe("2");
@@ -109,14 +117,14 @@ describe("Excel 式台账结构", () => {
     expect(wrapper.text()).not.toContain("数据口径");
     expect(wrapper.text()).toContain("1.25");
     expect(wrapper.find("input").exists()).toBe(false);
-    verifyGrid(wrapper.get("table").element, 16);
+    verifyGrid(wrapper.get("table").element, 17);
     const sheet = await readSpreadsheet(wrapper.get("table").element);
-    expect(sheet.columnCount).toBe(16);
-    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:P1", "A2:A4", "F2:P2", "F3:G3", "J3:J4", "B5:B6", "C5:C6", "D5:D6", "A8:P8"]));
+    expect(sheet.columnCount).toBe(17);
+    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:Q1", "A2:A4", "F2:Q2", "F3:G3", "J3:K3", "B5:B6", "C5:C6", "D5:D6", "A8:Q8"]));
     expect(sheet.getCell("B6").master.address).toBe("B5");
     expect(sheet.getCell("E6").value).toBe("—");
     expect(sheet.getCell("J6").value).toBe("1.25");
-    expect(sheet.getCell("P6").value).toBe("—");
+    expect(sheet.getCell("Q6").value).toBe("—");
     expect(sheet.getCell("B7").value).toBe("2024");
     wrapper.unmount();
   });
@@ -170,7 +178,7 @@ describe("Excel 式台账结构", () => {
     ]);
   });
 
-  it.each([["街道", StreetLedgerSheet, 16], ["汇总", SurveyLedgerSheet, 22]] as const)("%s 空报表仍保留完整表头与脚注", (_, component, columns) => {
+  it.each([["街道", StreetLedgerSheet, 17], ["汇总", SurveyLedgerSheet, 22]] as const)("%s 空报表仍保留完整表头与脚注", (_, component, columns) => {
     const wrapper = mount(component, { props: { rows: [], title: "空报表", emptyText: "加载失败，请重试" } });
     expect(wrapper.get("tbody td").attributes("colspan")).toBe(String(columns));
     expect(wrapper.get("tbody").text()).toBe("加载失败，请重试");

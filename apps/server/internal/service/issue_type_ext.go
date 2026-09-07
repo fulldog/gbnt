@@ -57,22 +57,26 @@ var (
 
 // WellExt 机井扩展。
 type WellExt struct {
-	BuildKind     model.FacilityBuildKind `json:"build_kind"`     // 新建/配套 new|match
-	Checklist     []QuizBool              `json:"checklist"`      // 是/否排查清单，type 见 well 子集
-	OutletTotal   *int                    `json:"outlet_total"`   // 出水口总数 ≥0
-	OutletDamaged *int                    `json:"outlet_damaged"` // 出水口损坏数量；≤总数，>0 则需整改
-	CasingTotal   *int                    `json:"casing_total"`   // 护筒总数 ≥0
-	CasingDamaged *int                    `json:"casing_damaged"` // 护筒损坏数量；≤总数，>0 则需整改
-	KeeperName    string                  `json:"keeper_name"`    // 井长及分管负责人（选填）
-	KeeperPhone   string                  `json:"keeper_phone"`   // 联系电话（选填）
+	IssueExtMetadata
+	PanoramaFiles  []string                `json:"panorama_files,omitempty"`  // 新版机井全景附件，独立于题目附件
+	PanoramaPhotos []FileItem              `json:"panorama_photos,omitempty"` // 全景照片回显，入参忽略
+	BuildKind      model.FacilityBuildKind `json:"build_kind"`                // 新建/配套 new|match
+	Checklist      []QuizBool              `json:"checklist"`                 // 是/否排查清单，type 见 well 子集
+	OutletTotal    *int                    `json:"outlet_total"`              // 出水口总数 ≥0
+	OutletDamaged  *int                    `json:"outlet_damaged"`            // 出水口损坏数量；≤总数，>0 则需整改
+	CasingTotal    *int                    `json:"casing_total"`              // 护筒总数 ≥0
+	CasingDamaged  *int                    `json:"casing_damaged"`            // 护筒损坏数量；≤总数，>0 则需整改
+	KeeperName     string                  `json:"keeper_name"`               // 井长及分管负责人（选填）
+	KeeperPhone    string                  `json:"keeper_phone"`              // 联系电话（选填）
 }
 
 // RoadExt 道路扩展。
 type RoadExt struct {
+	IssueExtMetadata
 	Length      *float64   `json:"length"`       // 长度（千米）≥0
 	Width       *float64   `json:"width"`        // 宽度（米）≥0
 	Thickness   *float64   `json:"thickness"`    // 厚度（米）≥0
-	Checklist   []QuizBool `json:"checklist"`    // 是/否排查清单，type=has_shoulder|has_ash
+	Checklist   []QuizBool `json:"checklist"`    // 排查清单 has_shoulder|has_ash，新版另含 has_road_damage
 	TreeSurvive *float64   `json:"tree_survive"` // 林网存活数量（棵）≥0
 	KeeperName  string     `json:"keeper_name"`  // 负责人（选填）
 	KeeperPhone string     `json:"keeper_phone"` // 电话（选填）
@@ -80,6 +84,7 @@ type RoadExt struct {
 
 // BridgeExt 桥涵闸扩展。
 type BridgeExt struct {
+	IssueExtMetadata
 	Kind        model.BridgeKind `json:"kind"`         // 设施类型 bridge|culvert|gate
 	Length      *float64         `json:"length"`       // 长度（米）≥0
 	Width       *float64         `json:"width"`        // 宽度（米）≥0
@@ -90,8 +95,9 @@ type BridgeExt struct {
 
 // ForestExt 林网扩展。
 type ForestExt struct {
-	HandoverCount *float64   `json:"handover_count"` // 移交株数 ≥0
-	ExistingCount *float64   `json:"existing_count"` // 现有株数 ≥0
+	IssueExtMetadata
+	HandoverCount *float64   `json:"handover_count"` // 移交株数 ≥0；新版须为整数，旧版保持兼容
+	ExistingCount *float64   `json:"existing_count"` // 现有株数 ≥0；新版须为整数，旧版保持兼容
 	SurviveRate   *float64   `json:"survive_rate"`   // 存活率 0–100
 	Checklist     []QuizBool `json:"checklist"`      // 是/否排查清单，type=broken_belt|dead_trees|pest
 	KeeperName    string     `json:"keeper_name"`    // 负责人（选填）
@@ -100,8 +106,9 @@ type ForestExt struct {
 
 // TransformerExt 变压器扩展。
 type TransformerExt struct {
+	IssueExtMetadata
 	Capacity    *float64                 `json:"capacity"`     // 容量（kVA）≥0
-	Model       string                   `json:"model"`        // 型号（选填）
+	Model       string                   `json:"model"`        // 型号；旧版选填，新版必填
 	Voltage     model.TransformerVoltage `json:"voltage"`      // 电压等级 10kv|0.4kv
 	Checklist   []QuizBool               `json:"checklist"`    // 是/否排查清单，type=powered|device_ok|cabinet_ok|illegal_wire
 	KeeperName  string                   `json:"keeper_name"`  // 负责人（选填）
@@ -178,8 +185,14 @@ func checklistSpecsFor(typ string) []quizSpec {
 // neededQuizTypes 从 type_ext.checklist 取出判定为需整改的 QuizType（不含出水口/护筒损坏等非题项）。
 func neededQuizTypes(issueType, typeExt string) []model.QuizType {
 	specs := checklistSpecsFor(issueType)
+	if issueExtVersion(json.RawMessage(typeExt)) == 2 {
+		specs = formChecklistSpecsFor(issueType)
+	}
 	neg := make(map[model.QuizType]bool, len(specs))
 	for _, sp := range specs {
+		if issueExtVersion(json.RawMessage(typeExt)) == 2 && (sp.Type == model.QuizHasShoulder || sp.Type == model.QuizHasAsh) {
+			continue
+		}
 		neg[sp.Type] = sp.Negative
 	}
 	var ext struct {
@@ -428,6 +441,13 @@ func (s *IssueService) normalizeTransformerExt(ctx context.Context, raw json.Raw
 }
 
 func (s *IssueService) normalizeTypeExt(ctx context.Context, typ string, raw json.RawMessage) (string, bool, error) {
+	version := issueExtVersion(raw)
+	if version == 2 {
+		return s.normalizeIssueFormExt(ctx, typ, raw)
+	}
+	if version != 0 && version != 1 {
+		return "", false, errors.New("排查表单版本无效")
+	}
 	switch model.IssueType(typ) {
 	case model.IssueTypeWell:
 		return s.normalizeWellExt(ctx, raw)
@@ -482,6 +502,10 @@ func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (jso
 			return msg, nil
 		}
 		s.hydrateChecklist(ctx, ext.Checklist)
+		s.hydrateChecklist(ctx, ext.LegacyChecklist)
+		if s.Attach != nil && len(ext.PanoramaFiles) > 0 {
+			ext.PanoramaPhotos, _ = s.Attach.lookupExisting(ctx, ext.PanoramaFiles)
+		}
 		canon, err = marshalExt(ext)
 	case model.IssueTypeRoad:
 		var ext RoadExt
@@ -489,6 +513,7 @@ func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (jso
 			return msg, nil
 		}
 		s.hydrateChecklist(ctx, ext.Checklist)
+		s.hydrateChecklist(ctx, ext.LegacyChecklist)
 		canon, err = marshalExt(ext)
 	case model.IssueTypeBridge:
 		var ext BridgeExt
@@ -496,6 +521,7 @@ func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (jso
 			return msg, nil
 		}
 		s.hydrateChecklist(ctx, ext.Checklist)
+		s.hydrateChecklist(ctx, ext.LegacyChecklist)
 		canon, err = marshalExt(ext)
 	case model.IssueTypeForest:
 		var ext ForestExt
@@ -503,6 +529,7 @@ func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (jso
 			return msg, nil
 		}
 		s.hydrateChecklist(ctx, ext.Checklist)
+		s.hydrateChecklist(ctx, ext.LegacyChecklist)
 		canon, err = marshalExt(ext)
 	case model.IssueTypeTransformer:
 		var ext TransformerExt
@@ -510,6 +537,7 @@ func (s *IssueService) hydrateTypeExt(ctx context.Context, typ, raw string) (jso
 			return msg, nil
 		}
 		s.hydrateChecklist(ctx, ext.Checklist)
+		s.hydrateChecklist(ctx, ext.LegacyChecklist)
 		canon, err = marshalExt(ext)
 	default:
 		return msg, nil

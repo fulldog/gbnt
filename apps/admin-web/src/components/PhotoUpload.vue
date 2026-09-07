@@ -15,6 +15,7 @@ const {
   address,
   lat,
   lng,
+  compact = false,
 } = defineProps<{
   photos?: readonly FileItem[];
   disabled?: boolean;
@@ -22,9 +23,10 @@ const {
   address?: string;
   lat?: number;
   lng?: number;
+  compact?: boolean;
 }>();
 
-const emit = defineEmits<{ uploading: [busy: boolean] }>();
+const emit = defineEmits<{ uploading: [busy: boolean]; uploaded: [item: FileItem] }>();
 const files = defineModel<string[]>({ required: true });
 const api = useAdminApi();
 const pendingCount = shallowRef(0);
@@ -95,6 +97,7 @@ async function upload(options: UploadRequestOptions): Promise<unknown> {
       throw new Error("图片数量超限或返回了重复图片，请检查后重试");
     }
     uploadedItems.value = [...uploadedItems.value, item];
+    emit("uploaded", item);
     currentIds.value = [...currentIds.value, item.file_id];
     files.value = [...currentIds.value];
     return result;
@@ -115,8 +118,8 @@ function remove(id: string): void {
 </script>
 
 <template>
-  <div class="space-y-2">
-    <div v-if="visibleItems.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+  <div class="space-y-2" :class="{ 'photo-upload-compact': compact }">
+    <div v-if="visibleItems.length" class="photo-upload-images grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
       <div
         v-for="item in visibleItems"
         :key="item.file_id"
@@ -157,9 +160,18 @@ function remove(id: string): void {
       :before-upload="beforeUpload"
       :http-request="upload"
     >
-      <ElButton :icon="Plus" :loading="uploading">上传现场照片</ElButton>
+      <ElButton :icon="Plus" :loading="uploading" :class="{ 'photo-add': compact }" v-bind="{ 'aria-label': compact ? '添加现场照片' : undefined }"><span v-if="!compact">上传现场照片</span></ElButton>
     </ElUpload>
     <p v-if="!disabled && locationError" class="m-0 text-xs text-amber-700" role="status">{{ locationError }}</p>
-    <p class="m-0 text-xs text-slate-500">已上传 {{ currentIds.length }}/{{ limit }} 张<span v-if="uploading">，{{ pendingCount }} 张上传中</span>，单张不超过 10MB；现场照片由后端叠加时间、地址和坐标水印。</p>
+    <p v-if="!compact || uploading" class="m-0 text-xs text-slate-500">已上传 {{ currentIds.length }}/{{ limit }} 张<span v-if="uploading">，{{ pendingCount }} 张上传中</span>，单张不超过 10MB；现场照片由后端叠加时间、地址和坐标水印。</p>
   </div>
 </template>
+
+<style scoped>
+.photo-upload-compact { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.photo-upload-compact .photo-upload-images { display: contents; }
+.photo-upload-compact .photo-upload-images > div { width: 80px; height: 80px; }
+.photo-upload-compact :deep(.el-upload) { margin: 0; }
+.photo-upload-compact .photo-add { width: 80px; height: 80px; margin: 0; border: 1px dashed #dcdfe6; background: #fff; font-size: 24px; color: #a0a8b2; }
+.photo-upload-compact > p { width: 100%; }
+</style>

@@ -60,6 +60,15 @@ function normalizeMetadata(value: unknown) {
   };
 }
 
+function normalizeStreetCounts(row: Record<string, unknown>) {
+  const source = responseInteger(row.source_record_count, "来源记录数");
+  const well = responseInteger(row.well_report_count, "机井上报数量");
+  const bridge = responseInteger(row.bridge_report_count, "桥涵闸上报数量");
+  const transformer = responseInteger(row.transformer_report_count, "变压器上报数量");
+  if (well + bridge + transformer > source) throw new Error("台账上报计数关系格式异常，请刷新重试");
+  return { well_report_count: well, bridge_report_count: bridge, transformer_report_count: transformer };
+}
+
 export function normalizeStreetReport(value: unknown): StreetLedgerReportResult {
   const result = normalizeMetadata(value);
   return { ...result, rows: result.rows.map((value): StreetLedgerReportRow => {
@@ -67,9 +76,11 @@ export function normalizeStreetReport(value: unknown): StreetLedgerReportResult 
     requireUncollected(row, ["well_handover", "well_existing", "bridge_handover", "bridge_existing", "transformer_handover", "transformer_existing", "signer", "phone"]);
     return {
       ...normalizeLocation(row),
+      ...normalizeStreetCounts(row),
       project_year: nullableNumber(row.project_year, "项目年度", true),
       well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
       road_km: nullableNumber(row.road_km, "道路千米数"),
+      road_tree_survive: nullableNumber(row.road_tree_survive, "道路附属树木存活数"),
       forest_handover: nullableNumber(row.forest_handover, "林网移交株数"),
       forest_existing: nullableNumber(row.forest_existing, "林网现有株数"),
       transformer_handover: null, transformer_existing: null, signer: null, phone: null,
@@ -148,8 +159,10 @@ export function normalizeStreetStatisticsPart(value: unknown): LedgerPart<Street
     requireUncollected(row, ["well_handover", "well_existing", "bridge_handover", "bridge_existing", "transformer_handover", "transformer_existing"]);
     return {
       row_key: rowKey(row), source_record_count: responseInteger(row.source_record_count, "来源记录数"),
+      ...normalizeStreetCounts(row),
       well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
       road_km: nullableNumber(row.road_km, "道路千米数"),
+      road_tree_survive: nullableNumber(row.road_tree_survive, "道路附属树木存活数"),
       forest_handover: nullableNumber(row.forest_handover, "林网移交株数"),
       forest_existing: nullableNumber(row.forest_existing, "林网现有株数"),
       transformer_handover: null, transformer_existing: null,

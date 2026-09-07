@@ -42,18 +42,22 @@ type LedgerReportLocation struct {
 // StreetLedgerReportRow 建设年份、村级分组的街道台账；资产基表未采集项固定 null。
 type StreetLedgerReportRow struct {
 	LedgerReportLocation
-	ProjectYear         *int     `json:"project_year"`         // 建设项目年度；历史缺失值为 null
-	WellHandover        *int64   `json:"well_handover"`        // 机井移交数量；未建立资产基表，固定 null
-	WellExisting        *int64   `json:"well_existing"`        // 机井现有数量；不能用排查记录条数冒充，固定 null
-	BridgeHandover      *int64   `json:"bridge_handover"`      // 桥涵闸移交数量；未采集，固定 null
-	BridgeExisting      *int64   `json:"bridge_existing"`      // 桥涵闸现有数量；未采集，固定 null
-	RoadKM              *float64 `json:"road_km"`              // 道路上报记录 length 千米合计；没有道路或含缺失/无效长度时为 null
-	ForestHandover      *float64 `json:"forest_handover"`      // 林网上报记录 handover_count 株数合计；无记录或含缺失值为 null
-	ForestExisting      *float64 `json:"forest_existing"`      // 林网上报记录 existing_count 株数合计；无记录或含缺失值为 null
-	TransformerHandover *int64   `json:"transformer_handover"` // 变压器移交数量；未采集，固定 null
-	TransformerExisting *int64   `json:"transformer_existing"` // 变压器现有数量；未采集，固定 null
-	Signer              *string  `json:"signer"`               // 村级报表负责人签字/盖章；未采集，不能挪用单条排查签名
-	Phone               *string  `json:"phone"`                // 村级报表负责人电话；未指定，不能任选一名上报人
+	ProjectYear            *int     `json:"project_year"`             // 建设项目年度；历史缺失值为 null
+	WellReportCount        int64    `json:"well_report_count"`        // 机井上报记录数，包含全部整改状态；无该类型为 0，不是去重设施数
+	BridgeReportCount      int64    `json:"bridge_report_count"`      // 桥涵闸上报记录数，包含全部整改状态；无该类型为 0
+	TransformerReportCount int64    `json:"transformer_report_count"` // 变压器上报记录数，包含全部整改状态；无该类型为 0
+	RoadTreeSurvive        *float64 `json:"road_tree_survive"`        // 道路附属树木存活数（棵）合计；无道路或任一值无效为 null，不与独立林网相加
+	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量；未建立资产基表，固定 null
+	WellExisting           *int64   `json:"well_existing"`            // 机井现有数量；不能用排查记录条数冒充，固定 null
+	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量；未采集，固定 null
+	BridgeExisting         *int64   `json:"bridge_existing"`          // 桥涵闸现有数量；未采集，固定 null
+	RoadKM                 *float64 `json:"road_km"`                  // 道路上报记录 length 千米合计；没有道路或含缺失/无效长度时为 null
+	ForestHandover         *float64 `json:"forest_handover"`          // 林网上报记录 handover_count 株数合计；无记录或含缺失值为 null
+	ForestExisting         *float64 `json:"forest_existing"`          // 林网上报记录 existing_count 株数合计；无记录或含缺失值为 null
+	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量；未采集，固定 null
+	TransformerExisting    *int64   `json:"transformer_existing"`     // 变压器现有数量；未采集，固定 null
+	Signer                 *string  `json:"signer"`                   // 村级报表负责人签字/盖章；未采集，不能挪用单条排查签名
+	Phone                  *string  `json:"phone"`                    // 村级报表负责人电话；未指定，不能任选一名上报人
 }
 
 // StreetLedgerReportResult 保留报表行和统计口径，无数据时 rows 为 []。
@@ -248,11 +252,9 @@ func (s *IssueService) LedgerStreetReport(ctx context.Context, query LedgerRepor
 	if err != nil {
 		return nil, err
 	}
-	result := &StreetLedgerReportResult{StreetOrgID: query.StreetOrgID, Rows: []StreetLedgerReportRow{}, Notes: []string{
-		"道路千米数、林网株数为当前筛选内上报记录的已采集字段合计，未按资产去重，不代表全村资产总量。",
-		"自然村、机井/桥涵闸/变压器移交及现有数量、村级负责人签字和电话尚未采集，以 — 表示，不用问题条数代替。",
-		"道路或林网存在缺失/无效字段时对应合计为 —；报表当前只读，不提供未接入持久化的移交数量编辑。",
-	}}
+	result := &StreetLedgerReportResult{StreetOrgID: query.StreetOrgID, Rows: []StreetLedgerReportRow{}, Notes: append(
+		[]string{"自然村、村级报表签字和电话尚未采集。"}, streetLedgerStatisticsNotes()...),
+	}
 	for _, group := range groupLedgerReport(issues, orgs, true) {
 		result.Rows = append(result.Rows, composeStreetLedgerRow(buildStreetBaseRow(group), buildStreetStatisticsRow(group)))
 	}
@@ -276,6 +278,12 @@ func reportProblemState(issue model.Issue) (problem, known bool) {
 		return false, false
 	}
 	specs := checklistSpecsFor(issue.Type)
+	version := issueExtVersion(json.RawMessage(issue.TypeExt))
+	if version == 2 {
+		specs = formChecklistSpecsFor(issue.Type)
+	} else if version != 0 && version != 1 {
+		return false, false
+	}
 	if len(specs) == 0 || len(ext.Checklist) != len(specs) {
 		return false, false
 	}
@@ -293,6 +301,9 @@ func reportProblemState(issue model.Issue) (problem, known bool) {
 		value, exists := values[spec.Type]
 		if !exists {
 			return false, false
+		}
+		if version == 2 && (spec.Type == model.QuizHasShoulder || spec.Type == model.QuizHasAsh) {
+			continue
 		}
 		if value == spec.Negative {
 			problem = true

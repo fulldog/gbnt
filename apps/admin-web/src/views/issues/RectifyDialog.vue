@@ -4,7 +4,7 @@ import { ElMessage } from "element-plus";
 import { computed, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import PhotoUpload from "@/components/PhotoUpload.vue";
-import { QUIZ_DEFINITIONS, quizIndicatesIssue, quizLabel } from "@/constants/issue";
+import { issueQuizDefinitions, issueQuizIsAbnormal, quizLabel } from "@/constants/issue";
 import { errorMessage } from "@/utils/error";
 
 interface RectifyDraft {
@@ -36,11 +36,11 @@ const historicalTypes = computed(() => new Set(issue?.rectify_records
 
 const neededTypes = computed(() => {
   if (!issue) return [];
-  const definitions = QUIZ_DEFINITIONS[issue.type];
+  const definitions = issueQuizDefinitions(issue.type, issue.type_ext.schema_version);
   return issue.type_ext.checklist
     .filter((item) => {
       const definition = definitions.find((candidate) => candidate.type === item.type);
-      return definition ? quizIndicatesIssue(item.value, definition.negative) : false;
+      return definition ? issueQuizIsAbnormal(definition, item.value) : false;
     })
     .map((item) => item.type);
 });

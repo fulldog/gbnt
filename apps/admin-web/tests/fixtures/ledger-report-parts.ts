@@ -19,9 +19,11 @@ export function goldenStreetParts(): { base: LedgerPart<StreetBaseRow>; statisti
     ] },
     statistics: { query: { ...goldenQuery }, notes: ["按记录统计", "资料未采集"], rows: [
       { row_key: "2023:4", source_record_count: 6, road_km: 1.75, forest_handover: 100, forest_existing: 0,
+        well_report_count: 3, bridge_report_count: 0, transformer_report_count: 0, road_tree_survive: 30,
         well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
         transformer_handover: null, transformer_existing: null },
       { row_key: "2024:4", source_record_count: 1, road_km: 2, forest_handover: null, forest_existing: null,
+        well_report_count: 0, bridge_report_count: 0, transformer_report_count: 0, road_tree_survive: 0,
         well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
         transformer_handover: null, transformer_existing: null },
     ] },

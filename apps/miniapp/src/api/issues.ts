@@ -15,6 +15,7 @@ export function createIssuesApi(client: ApiClient) {
       }));
     },
 
+    /** 同时读取旧版与 schema_version=2 表单，保留分类型题目及独立全景附件。 */
     async get(id: number): Promise<MiniappIssue> {
       return parseIssue(await client.request<unknown>(`/api/app/issues/${id}`));
     },

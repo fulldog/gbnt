@@ -51,10 +51,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.ledger-report-frame { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 560px; height: calc(100dvh - 156px); }
+.ledger-report-frame { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; min-height: 0; }
 .ledger-report-frame:fullscreen { height: 100dvh; padding: 20px; background: var(--gbnt-bg, #f5f7fa); overflow: auto; }
-.ledger-report-card { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 340px; overflow: hidden; border-radius: 8px; background: #fff; }
-.ledger-toolbar { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; }
+.ledger-report-card { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 340px; overflow: hidden; border-radius: 0 0 8px 8px; background: #fff; }
+.ledger-toolbar { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 16px; min-height: 56px; }
 .ledger-toolbar h1 { margin: 0; font-size: 16px; font-weight: 600; color: #333; }
 .ledger-toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .ledger-toolbar-actions :deep(.el-button + .el-button) { margin-left: 0; }

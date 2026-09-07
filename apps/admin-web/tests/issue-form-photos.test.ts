@@ -3,7 +3,8 @@ import { enableAutoUnmount, flushPromises, shallowMount } from "@vue/test-utils"
 import { ElMessage } from "element-plus";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { adminApiKey } from "@/api/runtime";
-import BusinessUserSelect from "@/components/BusinessUserSelect.vue";
+import { editorIssue } from "./fixtures/issue-editor";
+import { hydrateIssueDraft } from "@/views/issues/issue-form";
 import PhotoUpload from "@/components/PhotoUpload.vue";
 import IssueFormDialog from "@/views/issues/IssueFormDialog.vue";
 import type { IssueFormDraft } from "@/views/issues/issue-form";
@@ -30,6 +31,7 @@ function mountForm(toBlob = vi.fn().mockResolvedValue(new Blob(["signature"], { 
       provide: { [adminApiKey as symbol]: { attachments: { uploadImages }, issues: { create, listReporterOptions: vi.fn() } } },
       renderStubDefaultSlot: true,
       stubs: {
+        IssueChecklistFields: false, IssueTypeFields: false,
         ElDialog: { template: "<div><slot /><slot name='footer' /></div>" },
         ElForm: defineComponent({ setup(_, { expose }) { expose({ validate, clearValidate: vi.fn() }); }, template: "<div><slot /></div>" }),
         SignaturePad: defineComponent({ setup(_, { expose }) { expose({ toBlob }); }, template: "<div />" }),
@@ -39,14 +41,8 @@ function mountForm(toBlob = vi.fn().mockResolvedValue(new Blob(["signature"], { 
   const state = wrapper.vm as unknown as { form: IssueFormDraft };
   const submit = () => wrapper.findAllComponents({ name: "ElButton" }).at(-1)!;
   async function ready() {
-    state.form.org_id = 1;
-    state.form.report_user_id = 7;
-    state.form.address = "真实现场位置";
-    for (const question of state.form.checklist) {
-      question.value = !question.negative;
-      if (question.mustImg) question.files = [`photo-${question.type}`];
-    }
-    wrapper.findComponent(BusinessUserSelect).vm.$emit("ready", true);
+    const next = hydrateIssueDraft(editorIssue(state.form.type));
+    Object.assign(state.form, next);
     await flushPromises();
   }
   return { wrapper, state, submit, ready, create, uploadImages, toBlob, validate };
@@ -60,8 +56,8 @@ describe("排查表单照片与签名", () => {
     state.form.lng = 115.98;
     await flushPromises();
     const uploads = wrapper.findAllComponents(PhotoUpload);
-    expect(uploads).toHaveLength(state.form.checklist.length);
-    expect(state.form.checklist.some((question) => !question.mustImg)).toBe(true);
+    expect(uploads).toHaveLength(state.form.types[state.form.type].checklist.length + 1);
+    expect(state.form.types[state.form.type].checklist.some((question) => !question.mustImg)).toBe(true);
     expect(wrapper.text()).toContain("现场照片（选填）");
     expect(wrapper.text()).toContain("现场照片（必填）");
     expect(wrapper.text()).toContain("系统不会自动补零");
@@ -71,8 +67,9 @@ describe("排查表单照片与签名", () => {
   it("签名关闭水印，新增请求保留选填照片且不制造坐标", async () => {
     const { wrapper, state, ready, submit, uploadImages, create } = mountForm();
     await ready();
-    const optional = state.form.checklist.find((question) => !question.mustImg)!;
+    const optional = state.form.types[state.form.type].checklist.find((question) => !question.mustImg)!;
     optional.files = ["optional-photo"];
+    state.form.lat = undefined; state.form.lng = undefined;
     submit().vm.$emit("click");
     await flushPromises();
     expect(uploadImages).toHaveBeenCalledExactlyOnceWith({ files: [expect.any(File)], watermark: false });
@@ -140,7 +137,7 @@ describe("排查表单照片与签名", () => {
     oldFilesListener(["late-old-photo"]);
     await flushPromises();
     expect(submit().props("disabled")).toBe(true);
-    expect(state.form.checklist.some((item) => item.files.includes("late-old-photo"))).toBe(false);
+    expect(state.form.types[state.form.type].checklist.some((item) => item.files.includes("late-old-photo"))).toBe(false);
     wrapper.findComponent(PhotoUpload).vm.$emit("uploading", false);
     oldListener(true);
     await flushPromises();

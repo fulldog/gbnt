@@ -31,7 +31,7 @@ describe("后台整改轮次展示", () => {
     expect(tags).toEqual(expect.arrayContaining(["第 3 轮 · 本轮", "第 2 轮 · 历史", "第 1 轮 · 历史"]));
     expect(wrapper.findAllComponents({ name: "ElTimelineItem" })).toHaveLength(3);
     expect(wrapper.text()).toContain("反馈 1");
-    expect(wrapper.findAllComponents({ name: "ElDescriptionsItem" }).find((entry) => entry.props("label") === "当前整改轮次")?.text()).toBe("第 3 轮");
+    expect(wrapper.findAll(".detail-fields > div").find((entry) => entry.find("dt").text() === "当前整改轮次")?.find("dd").text()).toBe("第 3 轮");
     wrapper.unmount();
   });
 

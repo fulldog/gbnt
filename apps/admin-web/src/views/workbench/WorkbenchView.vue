@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import type { WorkbenchStats } from "@gbnt/api-client";
-import { CircleCheck, Clock, DataLine, Refresh, Warning } from "@element-plus/icons-vue";
-import type { Component } from "vue";
+import { Refresh } from "@element-plus/icons-vue";
 import { computed, onMounted, shallowRef } from "vue";
 import { useAdminApi } from "@/api/runtime";
 import type { WorkbenchTodoResult, WorkbenchTrendRange, WorkbenchTrendResult } from "@/api/workbench";
 import AsyncError from "@/components/AsyncError.vue";
-import PageHeader from "@/components/PageHeader.vue";
+import MetricMiniChart from "./MetricMiniChart.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { ISSUE_TYPE_LABELS } from "@/constants/issue";
 import { formatNumber, formatPercent } from "@/utils/format";
@@ -17,8 +16,9 @@ interface MetricCard {
   title: string;
   value: string;
   hint: string;
-  icon: Component;
-  tone: string;
+  chart?: "reported" | "completed";
+  percentage?: number;
+  color: string;
 }
 
 const api = useAdminApi();
@@ -52,36 +52,22 @@ function refreshAll(): void { void load(); void loadTrend(); void loadTodos(); }
 const cards = computed<MetricCard[]>(() => {
   const value = stats.value;
   if (!value) return [];
+  const percent = (count: number) => value.total ? Math.min(100, count / value.total * 100) : 0;
   return [
-    { title: "排查记录", value: formatNumber(value.total), hint: "当前全部记录", icon: DataLine, tone: "blue" },
-    { title: "待整改", value: formatNumber(value.new), hint: "尚未完成任何分项整改", icon: Warning, tone: "red" },
-    { title: "整改中", value: formatNumber(value.pending), hint: "处理中，包含重新整改", icon: Clock, tone: "amber" },
-    { title: "已整改", value: formatNumber(value.done), hint: "包含无需整改的正常排查", icon: CircleCheck, tone: "green" },
-    { title: "完成率", value: formatPercent(value.complete_rate), hint: "已整改 / 全部", icon: CircleCheck, tone: "violet" },
+    { title: "排查记录", value: formatNumber(value.total), hint: "当前全部记录", chart: 'reported', color: '#015cbb' },
+    { title: "待整改", value: formatNumber(value.new), hint: "尚未完成任何分项整改", percentage: percent(value.new), color: '#e6a23c' },
+    { title: "整改中", value: formatNumber(value.pending), hint: "处理中，包含重新整改", percentage: percent(value.pending), color: '#5b8ff9' },
+    { title: "已整改", value: formatNumber(value.done), hint: "包含无需整改的正常排查", chart: 'completed', color: '#1a7f4b' },
+    { title: "完成率", value: formatPercent(value.complete_rate), hint: "已整改 / 全部", percentage: value.complete_rate, color: '#015cbb' },
   ];
 });
-
-function toneClasses(tone: string): string {
-  return {
-    blue: "bg-blue-50 text-blue-700",
-    red: "bg-red-50 text-red-700",
-    amber: "bg-amber-50 text-amber-700",
-    green: "bg-emerald-50 text-emerald-700",
-    violet: "bg-violet-50 text-violet-700",
-  }[tone] ?? "bg-slate-50 text-slate-700";
-}
 
 onMounted(refreshAll);
 </script>
 
 <template>
-  <div class="space-y-4">
-    <PageHeader title="工作台" description="排查整改概览、整改趋势与待办任务。">
-      <template #actions>
-        <ElButton :icon="Refresh" :loading="refreshing" @click="refreshAll">刷新数据</ElButton>
-      </template>
-    </PageHeader>
-
+  <div class="workbench-page">
+    <h1 class="sr-only">工作台</h1>
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
 
     <div v-if="loading && !stats" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -91,16 +77,16 @@ onMounted(refreshAll);
     </div>
 
     <template v-else-if="stats">
-      <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" aria-label="核心指标">
-        <article v-for="card in cards" :key="card.title" class="page-card flex items-start justify-between gap-4 p-5">
-          <div>
-            <p class="m-0 text-sm text-slate-500">{{ card.title }}</p>
-            <strong class="numeric mt-3 block text-3xl font-semibold tracking-tight text-slate-900">{{ card.value }}</strong>
-            <p class="mt-2 mb-0 text-xs text-slate-500">{{ card.hint }}</p>
+      <section class="metric-cards" aria-label="核心指标">
+        <article v-for="card in cards" :key="card.title" class="metric-card">
+          <p class="metric-label">{{ card.title }}</p>
+          <strong class="metric-value numeric">{{ card.value }}</strong>
+          <div class="metric-chart">
+            <MetricMiniChart v-if="card.chart && trend && !trendError && !trendLoading" :values="trend.points.map((point) => point[card.chart!])" :label="`${ranges.find((item) => item.value === range)?.label} ${card.chart === 'reported' ? '上报' : '完成整改'}走势`" :color="card.color" />
+            <span v-else-if="card.chart" class="metric-chart-empty">{{ trendLoading ? '趋势加载中…' : '暂无趋势数据' }}</span>
+            <div v-else class="metric-progress" role="progressbar" :aria-label="`${card.title}占比`" :aria-valuenow="card.percentage" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${card.percentage}%`, background: card.color }" /></div>
           </div>
-          <span :class="toneClasses(card.tone)" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl">
-            <ElIcon :size="22"><component :is="card.icon" /></ElIcon>
-          </span>
+          <p class="metric-foot">{{ card.hint }}</p>
         </article>
       </section>
 
@@ -109,10 +95,13 @@ onMounted(refreshAll);
     <ElEmpty v-else-if="!loadError" description="暂无工作台数据" />
 
     <section class="page-card overflow-hidden" aria-labelledby="workbench-trend-title">
-      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
-        <h2 id="workbench-trend-title" class="m-0 self-stretch border-b-2 border-blue-700 py-2 text-base font-semibold text-blue-700">整改趋势</h2>
+      <header class="workbench-toolbar">
+        <h2 id="workbench-trend-title" class="m-0 self-stretch flex items-center border-b-2 border-blue-700 text-sm font-semibold text-blue-700">整改趋势</h2>
+        <div class="flex items-center gap-3">
+        <ElButton text :icon="Refresh" :loading="refreshing" @click="refreshAll">刷新数据</ElButton>
         <div class="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="趋势时间范围">
           <button v-for="item in ranges" :key="item.value" type="button" class="range-button" :class="{ active: range === item.value }" :aria-pressed="range === item.value" @click="changeRange(item.value)">{{ item.label }}</button>
+        </div>
         </div>
       </header>
       <div class="trend-grid">
@@ -126,8 +115,10 @@ onMounted(refreshAll);
           <template v-else-if="trend">
             <WorkbenchTrendChart :data="trend" />
             <p v-if="emptyTrend" class="my-1 text-center text-xs text-slate-500">所选时段暂无上报或有完成日期的整改记录</p>
+            <details class="trend-notes"><summary>统计说明</summary>
             <p class="mt-3 mb-0 text-xs leading-5 text-slate-500">北京时间：上报按创建时间；完成整改按当前已完成问题、本轮最后一条整改记录时间统计。</p>
             <p v-if="trend.undated_completed" class="mt-1 mb-0 text-xs leading-5 text-amber-700">{{ trend.undated_completed }} 条已完成状态记录缺少本轮整改记录（可能为无问题排查或历史记录），未计入完成曲线。</p>
+            </details>
           </template>
         </div>
         <aside class="rank-panel min-w-0 p-5" aria-label="问题类型分布">
@@ -145,6 +136,22 @@ onMounted(refreshAll);
 </template>
 
 <style scoped>
+.workbench-page { display: flex; flex-direction: column; gap: 14px; }
+.metric-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.metric-card { min-width: 0; padding: 14px 18px 10px; border: 1px solid var(--gbnt-border); border-radius: 8px; background: #fff; }
+.metric-label { margin: 0; font-size: 14px; font-weight: 600; }
+.metric-value { display: block; margin-top: 4px; font-size: 26px; line-height: 1.1; font-weight: 700; }
+.metric-chart { height: 48px; display: flex; align-items: center; margin-top: 2px; }
+.metric-chart-empty { font-size: 12px; color: #9aa3af; }
+.metric-progress { width: 100%; height: 6px; overflow: hidden; border-radius: 100px; background: #f0f2f5; }
+.metric-progress span { display: block; height: 100%; border-radius: inherit; }
+.metric-foot { margin: 2px 0 0; padding-top: 8px; border-top: 1px solid #f0f2f5; font-size: 12px; color: #6b7a90; }
+.workbench-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; padding: 0 24px; border-bottom: 1px solid #f0f2f5; }
+.trend-notes { margin-top: 12px; font-size: 12px; color: #6b7a90; }
+.trend-notes summary { cursor: pointer; }
+@media (max-width: 1100px) { .metric-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .metric-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .workbench-toolbar { padding: 12px 16px; } }
+
 .trend-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.85fr); }
 .rank-panel { border-left: 1px solid #f1f5f9; }
 .range-button { min-height: 30px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: #475569; cursor: pointer; font: inherit; font-size: 13px; }
