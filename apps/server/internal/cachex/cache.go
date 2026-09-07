@@ -23,12 +23,19 @@ func New(defaultExp, cleanup time.Duration) *Store {
 	return &Store{c: gocache.New(defaultExp, cleanup)}
 }
 
-// Set 写入；ttl<=0 时使用创建时的默认过期。
+// NoExpiration 写入后不过期，直至 Delete。
+const NoExpiration = time.Duration(-1)
+
+// Set 写入；ttl<0 永不过期，ttl==0 使用创建时的默认过期。
 func (s *Store) Set(key string, val interface{}, ttl time.Duration) {
 	if s == nil || s.c == nil || key == "" {
 		return
 	}
-	if ttl <= 0 {
+	if ttl < 0 {
+		s.c.Set(key, val, gocache.NoExpiration)
+		return
+	}
+	if ttl == 0 {
 		s.c.SetDefault(key, val)
 		return
 	}

@@ -20,17 +20,11 @@ func TestAdminLoginRegistry(t *testing.T) {
 	if found.Module != "web.auth" || found.Action != "login" {
 		t.Fatalf("管理端登录未入 RBAC 目录：%+v", found)
 	}
-	if _, skip := RBACSkipPaths[found.Path]; skip {
-		t.Fatal("管理端登录不能放进 JWT-only skip")
+	if found.IsJWT {
+		t.Fatal("管理端登录须 JWT 公开（无 token）")
 	}
-	public := false
-	for _, p := range PublicPaths {
-		if p == found.Path {
-			public = true
-		}
-	}
-	if !public {
-		t.Fatal("管理端登录须保留 JWT 公开（无 token）")
+	if !found.IsRBAC {
+		t.Fatal("管理端登录须 is_rbac=1，由 handler 校验角色")
 	}
 }
 

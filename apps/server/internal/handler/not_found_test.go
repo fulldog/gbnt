@@ -37,12 +37,13 @@ func newAPINotFoundTestRouter(t *testing.T) (*gin.Engine, string, string) {
 		return &database.UserInfo{ID: userID, TokenVer: 1, IsSuperAdmin: userID == 7}, nil
 	}
 	permissions := perm.NewStaticService(nil, []model.SysAPI{
-		{Method: http.MethodGet, Path: "/api/known", Module: "web.ledger-street", Action: "view"},
+		{Method: http.MethodGet, Path: "/api/known", Module: "web.ledger-street", Action: "view", IsJWT: true, IsRBAC: true},
+		{Method: http.MethodGet, Path: "/api/health", Name: "健康检查", IsJWT: false, IsRBAC: false},
 	})
 	r := gin.New()
 	r.Use(middleware.TraceAndTiming())
-	r.Use(middleware.JWTAuth(jm, loadUser, nil, perm.PublicPaths))
-	r.Use(middleware.RBAC(permissions, true, perm.PublicPaths))
+	r.Use(middleware.JWTAuth(jm, loadUser, nil, permissions))
+	r.Use(middleware.RBAC(permissions, true))
 	r.GET("/api/known", func(c *gin.Context) { response.OK(c, "known") })
 	r.GET("/api/health", func(c *gin.Context) { response.OK(c, "healthy") })
 	// 保留新版 RBAC：已注册但未入目录的路由只放行超管，普通用户仍被拒绝。

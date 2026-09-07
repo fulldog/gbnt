@@ -42,8 +42,11 @@ func TestFullPathInGlobalMiddleware(t *testing.T) {
 
 func TestRBACSkipsPublicPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
+		{Method: "GET", Path: "/api/health", IsJWT: false, IsRBAC: false},
+	})
 	r := gin.New()
-	r.Use(RBAC(nil, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	r.GET("/api/health", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -60,14 +63,15 @@ func TestRBACSkipsPublicPath(t *testing.T) {
 func TestRBACSkipsAttachUpload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
-		{Method: "GET", Path: "/api/issues", Module: "web.rectify", Action: "view"},
+		{Method: "GET", Path: "/api/issues", Module: "web.rectify", Action: "view", IsJWT: true, IsRBAC: true},
+		{Method: "POST", Path: "/api/attachments/images", IsJWT: true, IsRBAC: false},
 	})
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 3, RoleID: 3}))
 		c.Next()
 	})
-	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	r.POST("/api/attachments/images", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodPost, "/api/attachments/images", nil)
@@ -82,10 +86,11 @@ func TestRBACSkipsAttachUpload(t *testing.T) {
 func TestRBACSkipsAppPrefix(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
-		{Method: "GET", Path: "/api/issues", Module: "web.rectify", Action: "view"},
+		{Method: "GET", Path: "/api/issues", Module: "web.rectify", Action: "view", IsJWT: true, IsRBAC: true},
+		{Method: "GET", Path: "/api/app/todos", IsJWT: true, IsRBAC: false},
 	})
 	r := gin.New()
-	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	app := r.Group("/api/app")
 	app.GET("/todos", func(c *gin.Context) { c.Status(http.StatusOK) })
 
@@ -93,7 +98,6 @@ func TestRBACSkipsAppPrefix(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// /api/app/* 整段跳过 RBAC；本用例未挂 JWT，故应直接放行到 handler。
 	if w.Code != http.StatusOK {
 		t.Fatalf("app route should skip RBAC (JWT is separate), got %d", w.Code)
 	}
@@ -101,12 +105,15 @@ func TestRBACSkipsAppPrefix(t *testing.T) {
 
 func TestRBACSkipsAppPrefixWithUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
+		{Method: "GET", Path: "/api/app/todos", IsJWT: true, IsRBAC: false},
+	})
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 2, RoleID: 3}))
 		c.Next()
 	})
-	r.Use(RBAC(perm.NewStaticService(cachex.New(0, 0), nil), true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	app := r.Group("/api/app")
 	app.GET("/todos", func(c *gin.Context) { c.Status(http.StatusOK) })
 
@@ -127,7 +134,7 @@ func TestRBACSuperAdminAllowsUnindexedAPI(t *testing.T) {
 		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 1, RoleID: 0, IsSuperAdmin: true}))
 		c.Next()
 	})
-	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	r.GET("/api/ledger/street/options/orgs", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/ledger/street/options/orgs", nil)
@@ -146,7 +153,7 @@ func TestRBACNormalUserUnindexedAPIForbidden(t *testing.T) {
 		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 2, RoleID: 3, IsSuperAdmin: false}))
 		c.Next()
 	})
-	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	r.GET("/api/ledger/street/options/orgs", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	req := httptest.NewRequest(http.MethodGet, "/api/ledger/street/options/orgs", nil)
@@ -156,13 +163,14 @@ func TestRBACNormalUserUnindexedAPIForbidden(t *testing.T) {
 		t.Fatalf("普通用户未收录接口应为 403，got %d body=%s", w.Code, w.Body.String())
 	}
 }
+
 func TestRBACRequiresLoginForProtectedTemplate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := perm.NewStaticService(cachex.New(0, 0), []model.SysAPI{
-		{Method: "GET", Path: "/api/issues/:id", Module: "web.rectify", Action: "view"},
+		{Method: "GET", Path: "/api/issues/:id", Module: "web.rectify", Action: "view", IsJWT: true, IsRBAC: true},
 	})
 	r := gin.New()
-	r.Use(RBAC(svc, true, perm.PublicPaths))
+	r.Use(RBAC(svc, true))
 	api := r.Group("/api")
 	issues := api.Group("/issues")
 	issues.GET("/:id", func(c *gin.Context) { c.Status(http.StatusOK) })

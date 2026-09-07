@@ -9,9 +9,9 @@ import (
 	"gbnt/apps/server/internal/model"
 )
 
-// ensureSchema 按当前模型 AutoMigrate 并写表注释。开发模式已整库删表，此处不写历史列 DROP。
-func ensureSchema(db *gorm.DB) error {
-	if err := db.AutoMigrate(
+// projectModels 本项目 GORM 模型（开发模式只删这些表，AutoMigrate 也只建这些表）。
+func projectModels() []any {
+	return []any{
 		&model.SysOrg{},
 		&model.SysUser{},
 		&model.SysRole{},
@@ -21,7 +21,27 @@ func ensureSchema(db *gorm.DB) error {
 		&model.IssueRectifyRecord{},
 		&model.OpLog{},
 		&model.Attachment{},
-	); err != nil {
+	}
+}
+
+// projectTableNames 本项目物理表名。
+func projectTableNames() []string {
+	names := make([]string, 0, len(projectModels()))
+	for _, m := range projectModels() {
+		tn, ok := m.(interface{ TableName() string })
+		if !ok {
+			continue
+		}
+		if name := tn.TableName(); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// ensureSchema 按当前模型 AutoMigrate 并写表注释。开发模式已按项目表删表，此处不写历史列 DROP。
+func ensureSchema(db *gorm.DB) error {
+	if err := db.AutoMigrate(projectModels()...); err != nil {
 		return err
 	}
 	return applyTableComments(db)

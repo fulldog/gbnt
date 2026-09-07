@@ -1,6 +1,6 @@
 server:
   addr: ":8080"
-  mode: release # 迁移开启时必须使用 release；debug/dev 模式会清空当前数据库的全部表
+  mode: release # 迁移开启时必须使用 release；debug/dev 只会 DROP 本项目模型表并重建种子，同库其它表不动
 
 mysql:
   dsn: "root:your_root_pass@tcp(127.0.0.1:3306)/gbnt?charset=utf8mb4&parseTime=True&loc=Local"
@@ -10,7 +10,7 @@ mysql:
 # 数据库迁移控制（启动时）；已有环境需同步修改实际使用的 config.yaml
 migrate:
   enabled: true   # 启动时执行所有当前模型的 GORM AutoMigrate；上线前备份数据库
-  seed: false     # release 模式下关闭种子初始化；不能阻止 debug/dev 模式清表和重建种子
+  seed: false     # release 模式下关闭种子初始化；不能阻止 debug/dev 模式清空本项目表并重建种子
 
 jwt:
   secret: "gbnt-dev-secret-change-me"

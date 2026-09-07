@@ -107,8 +107,8 @@ func main() {
 		}
 	}
 	r.Static("/uploads", uploadRoot)
-	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, denyList, perm.PublicPaths))
-	r.Use(middleware.RBAC(permSvc, cfg.RBAC.Enabled, perm.PublicPaths))
+	r.Use(middleware.JWTAuth(jm, authSvc.LoadActiveUserInfo, denyList, permSvc))
+	r.Use(middleware.RBAC(permSvc, cfg.RBAC.Enabled))
 	handler.Register(r, deps)
 	// 未匹配 API 同样经过 JWT/RBAC，再由统一处理器保留 Trace ID 并返回标准 404。
 	r.NoRoute(handler.APINotFound)

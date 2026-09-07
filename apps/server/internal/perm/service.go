@@ -2,7 +2,6 @@ package perm
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -11,29 +10,34 @@ import (
 	"gbnt/apps/server/internal/model"
 )
 
+const cacheKeySysAPIs = "sys_apis:catalog"
+
+// apiCatalog sys_apis 启用目录的进程内缓存快照。
+type apiCatalog struct {
+	List  []model.SysAPI
+	ByKey map[string]model.SysAPI // method+"\x00"+path
+	ByID  map[uint64]model.SysAPI
+}
+
 // Service RBAC 权限校验与 API 目录。
 type Service struct {
 	DB    *gorm.DB
 	Cache *cachex.Store
-	mu    sync.RWMutex
-	byKey map[string]model.SysAPI // method+"\x00"+path
 }
 
-// NewStaticService 用内存 API 索引构造（测试或跳过 DB 加载）。
+// NewStaticService 用内存 API 索引构造（测试或跳过 DB 加载），并写入 sys_apis 缓存。
 func NewStaticService(cache *cachex.Store, apis []model.SysAPI) *Service {
-	m := make(map[string]model.SysAPI, len(apis))
-	for _, a := range apis {
-		m[apiKey(a.Method, a.Path)] = a
-	}
 	if cache == nil {
 		cache = cachex.New(0, 0)
 	}
-	return &Service{Cache: cache, byKey: m}
+	s := &Service{Cache: cache}
+	s.storeCatalog(buildAPICatalog(apis))
+	return s
 }
 
-// NewService 创建权限服务。
+// NewService 创建权限服务；启动时加载 sys_apis 进缓存。
 func NewService(db *gorm.DB, cache *cachex.Store) *Service {
-	s := &Service{DB: db, Cache: cache, byKey: map[string]model.SysAPI{}}
+	s := &Service{DB: db, Cache: cache}
 	_ = s.ReloadAPIIndex()
 	return s
 }
@@ -42,31 +46,71 @@ func apiKey(method, path string) string {
 	return method + "\x00" + path
 }
 
-// ReloadAPIIndex 从 DB 重建 API 索引（sync 后调用）。
-func (s *Service) ReloadAPIIndex() error {
-	var list []model.SysAPI
-	if err := s.DB.Where("enabled = ?", true).Find(&list).Error; err != nil {
-		return err
-	}
-	m := make(map[string]model.SysAPI, len(list))
+func buildAPICatalog(list []model.SysAPI) *apiCatalog {
+	byKey := make(map[string]model.SysAPI, len(list))
+	byID := make(map[uint64]model.SysAPI, len(list))
 	for _, a := range list {
-		m[apiKey(a.Method, a.Path)] = a
+		byKey[apiKey(a.Method, a.Path)] = a
+		if a.ID != 0 {
+			byID[a.ID] = a
+		}
 	}
-	s.mu.Lock()
-	s.byKey = m
-	s.mu.Unlock()
-	return nil
+	return &apiCatalog{List: list, ByKey: byKey, ByID: byID}
 }
 
-// FindAPI 按 method + gin FullPath 查找 API。
+func (s *Service) storeCatalog(cat *apiCatalog) {
+	if s == nil || cat == nil {
+		return
+	}
+	s.Cache.Set(cacheKeySysAPIs, cat, cachex.NoExpiration)
+}
+
+// loadSysAPICatalog 先读缓存，未命中再查库并回填。
+func (s *Service) loadSysAPICatalog() (*apiCatalog, error) {
+	if s == nil {
+		return &apiCatalog{ByKey: map[string]model.SysAPI{}, ByID: map[uint64]model.SysAPI{}}, nil
+	}
+	if v, ok := s.Cache.Get(cacheKeySysAPIs); ok {
+		if c, ok2 := v.(*apiCatalog); ok2 && c != nil {
+			return c, nil
+		}
+	}
+	return s.loadSysAPICatalogFromDB()
+}
+
+func (s *Service) loadSysAPICatalogFromDB() (*apiCatalog, error) {
+	if s == nil || s.DB == nil {
+		cat := buildAPICatalog(nil)
+		s.storeCatalog(cat)
+		return cat, nil
+	}
+	var list []model.SysAPI
+	if err := s.DB.Where("enabled = ?", true).Order("sort ASC, id ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	cat := buildAPICatalog(list)
+	s.storeCatalog(cat)
+	return cat, nil
+}
+
+// ReloadAPIIndex 从 DB 重建 sys_apis 缓存（sync 后调用）。
+func (s *Service) ReloadAPIIndex() error {
+	_, err := s.loadSysAPICatalogFromDB()
+	return err
+}
+
+// FindAPI 按 method + gin FullPath 查找 API；先走 sys_apis 缓存。
 func (s *Service) FindAPI(method, path string) (*model.SysAPI, bool) {
-	s.mu.RLock()
-	a, ok := s.byKey[apiKey(method, path)]
-	s.mu.RUnlock()
+	cat, err := s.loadSysAPICatalog()
+	if err != nil || cat == nil {
+		return nil, false
+	}
+	a, ok := cat.ByKey[apiKey(method, path)]
 	if !ok {
 		return nil, false
 	}
-	return &a, true
+	cp := a
+	return &cp, true
 }
 
 type roleGrantCache struct {
@@ -85,18 +129,33 @@ func (s *Service) loadRoleGrants(roleID uint64) (*roleGrantCache, error) {
 	if err := s.DB.Model(&model.SysRoleAPI{}).Where("role_id = ?", roleID).Pluck("api_id", &apiIDs).Error; err != nil {
 		return nil, err
 	}
-	var apis []model.SysAPI
-	if len(apiIDs) > 0 {
-		if err := s.DB.Where("id IN ? AND enabled = ?", apiIDs, true).Find(&apis).Error; err != nil {
-			return nil, err
-		}
+	cat, err := s.loadSysAPICatalog()
+	if err != nil {
+		return nil, err
 	}
 	grants := map[string]map[string]bool{}
-	for _, a := range apis {
+	addGrant := func(a model.SysAPI) {
 		if grants[a.Module] == nil {
 			grants[a.Module] = map[string]bool{}
 		}
 		grants[a.Module][a.Action] = true
+	}
+	var missing []uint64
+	for _, id := range apiIDs {
+		if a, ok := cat.ByID[id]; ok {
+			addGrant(a)
+			continue
+		}
+		missing = append(missing, id)
+	}
+	if len(missing) > 0 && s.DB != nil {
+		var extra []model.SysAPI
+		if err := s.DB.Where("id IN ? AND enabled = ?", missing, true).Find(&extra).Error; err != nil {
+			return nil, err
+		}
+		for _, a := range extra {
+			addGrant(a)
+		}
 	}
 	out := &roleGrantCache{ModuleActions: grants, APIIDs: apiIDs}
 	s.Cache.Set(key, out, 5*time.Minute)
@@ -132,9 +191,13 @@ func (s *Service) ListAPIIDsForRole(roleID uint64) ([]uint64, error) {
 	return grants.APIIDs, nil
 }
 
-// ListAllAPIs 返回启用中的 API 目录。
+// ListAllAPIs 返回启用中的 API 目录；先走 sys_apis 缓存。
 func (s *Service) ListAllAPIs() ([]model.SysAPI, error) {
-	var list []model.SysAPI
-	err := s.DB.Where("enabled = ?", true).Order("sort ASC, id ASC").Find(&list).Error
-	return list, err
+	cat, err := s.loadSysAPICatalog()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.SysAPI, len(cat.List))
+	copy(out, cat.List)
+	return out, nil
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"gbnt/apps/server/internal/model"
 	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/internal/testutil"
@@ -126,12 +125,9 @@ func TestLedgerHTTPEmptyAndFailure(t *testing.T) {
 
 func TestBusinessOptionRoutesRequireAuthentication(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	apis := []model.SysAPI{}
-	for _, entry := range perm.Registry {
-		apis = append(apis, model.SysAPI{Method: entry.Method, Path: entry.Path, Module: entry.Module, Action: entry.Action})
-	}
+	apis := perm.RegistryAsSysAPIs()
 	r := gin.New()
-	r.Use(middleware.RBAC(perm.NewStaticService(nil, apis), true, perm.PublicPaths))
+	r.Use(middleware.RBAC(perm.NewStaticService(nil, apis), true))
 	d := &Deps{}
 	d.registerRectify(r.Group("/api"))
 	d.registerLedgerStreet(r.Group("/api"))

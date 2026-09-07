@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"gbnt/apps/server/internal/database"
-	"gbnt/apps/server/internal/model"
 	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/internal/testutil"
@@ -103,10 +102,7 @@ func TestLedgerPartsHTTPEmptyFailureAndAppliedQuery(t *testing.T) {
 
 func TestLedgerPartsAndOptionsKeepIndependentModulePermissions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	apis := []model.SysAPI{}
-	for _, entry := range perm.Registry {
-		apis = append(apis, model.SysAPI{Method: entry.Method, Path: entry.Path, Module: entry.Module, Action: entry.Action})
-	}
+	apis := perm.RegistryAsSysAPIs()
 	paths := append(append([]string{}, ledgerPartPaths...), "/api/ledger/street/options/orgs", "/api/ledger/survey/options/orgs")
 	for _, role := range []string{"anonymous", "none", "street", "survey", "super"} {
 		for _, path := range paths {
@@ -141,7 +137,7 @@ func TestLedgerPartsAndOptionsKeepIndependentModulePermissions(t *testing.T) {
 					d.Sys = &service.SysService{DB: db}
 				}
 				r := gin.New()
-				r.Use(middleware.RBAC(permission, true, perm.PublicPaths))
+				r.Use(middleware.RBAC(permission, true))
 				d.registerLedgerStreet(r.Group("/api"))
 				d.registerLedgerSurvey(r.Group("/api"))
 				request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -213,13 +209,10 @@ func TestLedgerReportHTTPRejectsInvalidQuery(t *testing.T) {
 
 func TestLedgerReportRoutesAreProtectedByExistingViewPermission(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	apis := []model.SysAPI{}
-	for _, entry := range perm.Registry {
-		apis = append(apis, model.SysAPI{Method: entry.Method, Path: entry.Path, Module: entry.Module, Action: entry.Action})
-	}
+	apis := perm.RegistryAsSysAPIs()
 	svc := perm.NewStaticService(nil, apis)
 	r := gin.New()
-	r.Use(middleware.RBAC(svc, true, perm.PublicPaths))
+	r.Use(middleware.RBAC(svc, true))
 	d := &Deps{}
 	d.registerLedgerStreet(r.Group("/api"))
 	d.registerLedgerSurvey(r.Group("/api"))

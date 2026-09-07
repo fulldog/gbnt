@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"gbnt/apps/server/internal/model"
 )
 
 func TestBusinessOptionsReuseExistingModuleActions(t *testing.T) {
@@ -16,10 +14,7 @@ func TestBusinessOptionsReuseExistingModuleActions(t *testing.T) {
 		"/api/ledger/street/options/orgs":  {"web.ledger-street", "view"},
 		"/api/ledger/survey/options/orgs":  {"web.ledger-survey", "view"},
 	}
-	apis := []model.SysAPI{}
-	for _, entry := range Registry {
-		apis = append(apis, model.SysAPI{Method: entry.Method, Path: entry.Path, Module: entry.Module, Action: entry.Action})
-	}
+	apis := RegistryAsSysAPIs()
 	svc := NewStaticService(nil, apis)
 	for path, grant := range expected {
 		t.Run(path, func(t *testing.T) {
@@ -27,13 +22,8 @@ func TestBusinessOptionsReuseExistingModuleActions(t *testing.T) {
 			if !ok || api.Module != grant[0] || api.Action != grant[1] {
 				t.Fatalf("候选权限注册错误：%+v", api)
 			}
-			if _, skip := RBACSkipPaths[path]; skip {
-				t.Fatal("候选不能加入 JWT-only 白名单")
-			}
-			for _, public := range PublicPaths {
-				if public == path {
-					t.Fatal("候选不能公开")
-				}
+			if !api.IsJWT || !api.IsRBAC {
+				t.Fatal("候选须 JWT+RBAC，不能公开或仅 JWT")
 			}
 			for _, action := range []string{"view", "create", "edit"} {
 				grants := map[string]map[string]bool{grant[0]: {action: true}}

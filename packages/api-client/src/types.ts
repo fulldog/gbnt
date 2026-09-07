@@ -445,6 +445,8 @@ export interface SysApi extends BaseRecord {
   action: string;
   sort: number;
   enabled: boolean;
+  is_jwt: boolean | number;
+  is_rbac: boolean | number;
 }
 
 export interface OpLog extends BaseRecord {

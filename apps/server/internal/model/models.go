@@ -90,15 +90,18 @@ type SysRole struct {
 
 func (SysRole) TableName() string { return "sys_roles" }
 
-// SysAPI 需登录鉴权的 API 目录。
+// SysAPI 平台 API 目录；鉴权以 is_jwt / is_rbac 为准，不再使用代码白名单。
 type SysAPI struct {
 	Method  string `gorm:"size:8;uniqueIndex:uk_method_path;comment:HTTP方法" json:"method"`
 	Path    string `gorm:"size:256;uniqueIndex:uk_method_path;comment:路由模式 如/api/issues/:id" json:"path"`
 	Name    string `gorm:"size:128;comment:接口名称" json:"name"`
 	Module  string `gorm:"size:64;index;comment:权限模块" json:"module"`
-	Action  string `gorm:"size:32;comment:动作 view/create/edit/delete/import/export" json:"action"`
+	Action  string `gorm:"size:32;comment:动作 view/create/edit/delete/import/export/login" json:"action"`
 	Sort    int    `gorm:"default:0;comment:排序" json:"sort"`
 	Enabled bool   `gorm:"default:1;comment:是否启用" json:"enabled"`
+	// IsJWT/IsRBAC 禁止写 gorm default:1：GORM 会把 false 当零值跳过，INSERT 落到库默认 1。
+	IsJWT  bool `gorm:"column:is_jwt;not null;comment:是否需要JWT 1是 0否" json:"is_jwt"`    // 公开=0，其余=1
+	IsRBAC bool `gorm:"column:is_rbac;not null;comment:是否需要RBAC 1是 0否" json:"is_rbac"` // 公开或登录即可=0；角色授权与管理端登录=1
 	Base
 }
 

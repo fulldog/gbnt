@@ -15,6 +15,7 @@ import (
 
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/logger"
+	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/pkg/jwtutil"
 	"gbnt/apps/server/pkg/response"
 )
@@ -128,23 +129,15 @@ type TokenDenier interface {
 	Denied(jti string) bool
 }
 
-// JWTAuth 校验 Bearer Token；whitelist 路径跳过。
+// JWTAuth 校验 Bearer Token；sys_apis.is_jwt=0 的接口跳过。
+// 未入目录或 FullPath 为空时默认校验 JWT。
 // 解析 JWT 后校验 jti 黑名单与 token_ver，再按 user_id 查库加载 UserInfo，失败则 401。
 // 滑动续期：剩余有效期进入 renew 窗口时，签发新 token，经响应头带回：
 //
 //	X-New-Token / X-Token-Expires-At
-func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, whitelist []string) gin.HandlerFunc {
-	set := map[string]struct{}{}
-	for _, p := range whitelist {
-		set[p] = struct{}{}
-	}
+func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, svc *perm.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		path := c.Request.URL.Path
-		if _, ok := set[path]; ok {
-			c.Next()
-			return
-		}
-		if strings.HasPrefix(path, "/uploads/") {
+		if api, ok := lookupSysAPI(svc, c); ok && !api.IsJWT {
 			c.Next()
 			return
 		}

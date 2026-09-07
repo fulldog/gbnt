@@ -48,11 +48,14 @@ apps/server/
 
 ## Auth
 
-- JWT Bearer; whitelist login/health/captcha; token claims only `user_id`
-- Admin `POST /api/auth/login` stays JWT-public; after password check, super admin skips RBAC, others need Registry `web.auth`/`login`. Miniapp login is JWT-only, no RBAC.
+- JWT Bearer；`sys_apis.is_jwt=1` 才校验 token（claims 仅 `user_id`）。未入目录默认要 JWT
+- `sys_apis` 启用目录进进程内 `cachex`（键 `sys_apis:catalog`）；FindAPI / ListAllAPIs / 角色授权解析 API 先读缓存，未命中再查库；`ReloadAPIIndex`（启动同步后）强制回填
+- `sys_apis.is_rbac=1` 才做角色授权；`is_jwt=0` 时中间件同时跳过 JWT 与 RBAC
+- Admin `POST /api/auth/login`：`is_jwt=0`、`is_rbac=1`；账密通过后超管跳过，其余需 Registry `web.auth`/`login`。小程序登录 `is_jwt=0`、`is_rbac=0`
+- 小程序业务接口 `is_jwt=1`、`is_rbac=0`；me/password/logout/附件上传同此
 - JWT middleware loads active `UserInfo` from DB by `user_id` (status=1); failure → 401
 - Sliding renew: when remaining TTL ≤ `renew_before_hours`, middleware issues new token via headers `X-New-Token` + `X-Token-Expires-At` (no refresh token)
-- Change password: `PUT /api/auth/password` (and app mirror) — JWT only, RBAC skip; Reset: `POST /api/sys/users/:id/reset-password` → password=username
+- Change password: `PUT /api/auth/password` (and app mirror) — `is_jwt=1`、`is_rbac=0`; Reset: `POST /api/sys/users/:id/reset-password` → password=username
 - Logout: `POST /api/auth/logout` — ban JWT `jti` until expiry (in-process cache); password change/reset bumps `token_ver` to invalidate all tokens
 - Comments in Chinese for business intent; mark `[PRD]` where rules come from PRD
 
@@ -83,7 +86,7 @@ apps/server/
 ## Migration
 
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
-- **`server.mode=debug` or `dev`**: every startup DROP all tables in the current database, AutoMigrate from models, then seed orgs, admin role, sys_apis, and super admin `admin/admin`. Do **not** write DROP COLUMN / legacy-table migrations for this mode.
+- **`server.mode=debug` or `dev`**: every startup DROP **only this project's model tables** (see `projectModels` / `TableComments`), AutoMigrate from models, then seed orgs, admin role, sys_apis, and super admin `admin/admin`. Other tables in the same MySQL database are left untouched. Do **not** write DROP COLUMN / legacy-table migrations for this mode.
 - User super-admin: `sys_users.is_super_admin` (exactly one); cannot edit/delete that user; change/reset password allowed; RBAC bypass via flag
 - **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs` only (additive; no history DROP scripts); seed only on empty DB when `migrate.seed=true`
 - Package layout: `migrate.go` (entry), `schema.go`, `dev_reset.go`, `seed.go`, `rbac.go`, `org_seed.go`, `sync_apis.go`

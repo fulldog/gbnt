@@ -115,7 +115,7 @@ func (d *Deps) SetRoleAPIs(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ListAPIs GET /api/sys/apis — 全量 API 目录（供授权 UI）。
+// ListAPIs GET /api/sys/apis — 全量 API 目录（含 is_jwt/is_rbac，供授权 UI）。
 func (d *Deps) ListAPIs(c *gin.Context) {
 	list, err := d.Sys.ListAPIs()
 	if err != nil {

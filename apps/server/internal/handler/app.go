@@ -18,11 +18,11 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 	{
 		auth := app.Group("/auth")
 		{
-			// POST /api/app/auth/slider/start — 开始滑动验证（白名单）
+			// POST /api/app/auth/slider/start — 开始滑动验证（is_jwt=0）
 			auth.POST("/slider/start", d.AppSliderStart)
-			// POST /api/app/auth/slider/finish — 完成滑动，换取 pass_token（白名单）
+			// POST /api/app/auth/slider/finish — 完成滑动，换取 pass_token（is_jwt=0）
 			auth.POST("/slider/finish", d.AppSliderFinish)
-			// POST /api/app/auth/login — 小程序登录（账密 + pass_token）
+			// POST /api/app/auth/login — 小程序登录（账密 + pass_token，is_jwt=0）
 			auth.POST("/login", d.AppLogin)
 			// GET /api/app/auth/me — 当前登录用户
 			auth.GET("/me", d.AppMe)
