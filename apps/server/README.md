@@ -19,7 +19,7 @@ go run .
 
 默认监听 `:8080`。健康检查：`GET /api/health`
 
-`admin` / `admin` 仅为种子初始化时创建的超级管理员（`is_super_admin=true`，org/role=0；生产务必修改）。当前示例配置在 `release` 模式下使用 `migrate.seed=false`，不会自动创建该账号；不要把示例账号视为现有数据库的真实凭据。
+`admin` / `admin` 仅为种子初始化时创建的超级管理员（`is_super_admin=true`，`role_id=1` 管理员角色，`org_id=0`；生产务必修改）。当前示例配置在 `release` 模式下使用 `migrate.seed=false`，不会自动创建该账号；不要把示例账号视为现有数据库的真实凭据。种子仅含组织架构、管理员角色、API 目录与该账号，不播种其它角色或业务数据。
 
 ## 目录
 

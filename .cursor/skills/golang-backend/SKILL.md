@@ -48,7 +48,8 @@ apps/server/
 
 ## Auth
 
-- JWT Bearer; whitelist login/health; token claims only `user_id`
+- JWT Bearer; whitelist login/health/captcha; token claims only `user_id`
+- Admin `POST /api/auth/login` stays JWT-public; after password check, super admin skips RBAC, others need Registry `web.auth`/`login`. Miniapp login is JWT-only, no RBAC.
 - JWT middleware loads active `UserInfo` from DB by `user_id` (status=1); failure → 401
 - Sliding renew: when remaining TTL ≤ `renew_before_hours`, middleware issues new token via headers `X-New-Token` + `X-Token-Expires-At` (no refresh token)
 - Change password: `PUT /api/auth/password` (and app mirror) — JWT only, RBAC skip; Reset: `POST /api/sys/users/:id/reset-password` → password=username
@@ -82,7 +83,7 @@ apps/server/
 ## Migration
 
 - Config `migrate.enabled` / `migrate.seed` (env: `GBNT_MIGRATE_ENABLED`, `GBNT_MIGRATE_SEED`)
-- **`server.mode=debug` or `dev`**: every startup DROP all tables in the current database, AutoMigrate from models, then full seed (orgs, roles, APIs, super admin `admin/admin`). Do **not** write DROP COLUMN / legacy-table migrations for this mode.
+- **`server.mode=debug` or `dev`**: every startup DROP all tables in the current database, AutoMigrate from models, then seed orgs, admin role, sys_apis, and super admin `admin/admin`. Do **not** write DROP COLUMN / legacy-table migrations for this mode.
 - User super-admin: `sys_users.is_super_admin` (exactly one); cannot edit/delete that user; change/reset password allowed; RBAC bypass via flag
 - **`server.mode=release`**: `AutoMigrate` + `SyncSysAPIs` only (additive; no history DROP scripts); seed only on empty DB when `migrate.seed=true`
 - Package layout: `migrate.go` (entry), `schema.go`, `dev_reset.go`, `seed.go`, `rbac.go`, `org_seed.go`, `sync_apis.go`

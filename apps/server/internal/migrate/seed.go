@@ -5,9 +5,10 @@ import (
 	"gorm.io/gorm"
 
 	"gbnt/apps/server/internal/model"
+	"gbnt/apps/server/internal/perm"
 )
 
-// bootstrapSeed 全量写入组织、角色、API 目录、默认授权与管理员。
+// bootstrapSeed 写入组织架构、管理员角色、API 目录与 admin 用户；不播种其它角色、授权或业务数据。
 func bootstrapSeed(db *gorm.DB) error {
 	if _, _, err := seedDemoOrgs(db); err != nil {
 		return err
@@ -16,9 +17,6 @@ func bootstrapSeed(db *gorm.DB) error {
 		return err
 	}
 	if err := SyncSysAPIs(db); err != nil {
-		return err
-	}
-	if err := seedDefaultRoleAPIs(db); err != nil {
 		return err
 	}
 	return seedAdmin(db)
@@ -53,7 +51,7 @@ func seedAdmin(db *gorm.DB) error {
 		Name:         "超级管理员",
 		Phone:        "",
 		OrgID:        0,
-		RoleID:       0,
+		RoleID:       perm.SuperAdminRoleID,
 		Status:       1,
 		IsSuperAdmin: true,
 	}

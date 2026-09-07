@@ -7,6 +7,7 @@ import (
 
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
+	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
 )
@@ -44,7 +45,7 @@ func (d *Deps) GetCaptcha(c *gin.Context) {
 	response.OK(c, out)
 }
 
-// Login POST /api/auth/login — 账密 + 图形验证码登录（公开），返回 token / expires_at / user。
+// Login POST /api/auth/login — 账密 + 图形验证码（JWT 公开）。超管跳过 RBAC；其余须有 web.auth/login。
 func (d *Deps) Login(c *gin.Context) {
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -60,6 +61,16 @@ func (d *Deps) Login(c *gin.Context) {
 	user, token, exp, err := d.Auth.Login(req.Username, req.Password)
 	if err != nil {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
+		return
+	}
+	rbacOn := d.Cfg == nil || d.Cfg.RBAC.Enabled
+	allowed, permErr := perm.AllowAdminWebLogin(d.Perm, rbacOn, user.RoleID, user.IsSuperAdmin)
+	if permErr != nil {
+		response.Fail(c, 500, response.CodeServer, permErr.Error())
+		return
+	}
+	if !allowed {
+		response.Fail(c, 403, response.CodeForbid, "无权限登录管理后台")
 		return
 	}
 	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), service.UserInfoFromModel(user)))

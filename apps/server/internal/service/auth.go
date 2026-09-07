@@ -111,7 +111,7 @@ func (s *AuthService) Logout(tokenStr string) error {
 
 func (s *AuthService) checkRoleActive(roleID uint64) error {
 	if roleID == 0 {
-		return nil // 种子超管无角色绑定
+		return nil // 无角色绑定时不校验角色状态
 	}
 	var role model.SysRole
 	if err := s.DB.First(&role, roleID).Error; err != nil {

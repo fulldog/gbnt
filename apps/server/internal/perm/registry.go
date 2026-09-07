@@ -22,8 +22,10 @@ func joinEntries(groups ...[]Entry) []Entry {
 	return out
 }
 
-// Registry 需 RBAC 的受保护 API（不含白名单与 /auth/me），按模块分文件定义后在此合并。
+// Registry 需 RBAC 的受保护 API（不含 JWT 白名单中的健康检查/验证码/小程序登录，以及 /auth/me 等 skip）。
+// POST /api/auth/login 入目录：JWT 仍公开，权限在 Login handler 校验。
 var Registry = joinEntries(
+	apisAuth,
 	apisWorkbench,
 	apisRectify,
 	apisLedgerStreet,

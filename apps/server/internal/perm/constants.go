@@ -4,7 +4,7 @@ package perm
 // 用户级超管以 sys_users.is_super_admin 为准（全库仅一名），与角色 ID 无关。
 const SuperAdminRoleID uint64 = 1
 
-// PublicPaths JWT / RBAC 均跳过的公开路径（不入 sys_apis）。
+// PublicPaths JWT 跳过的公开路径。管理端登录仍在此列（无 token），RBAC 在 Login handler 内校验。
 var PublicPaths = []string{
 	"/api/health",
 	"/api/auth/captcha",
