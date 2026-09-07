@@ -31,7 +31,7 @@ type IssueQuery struct {
 	Size        int    // 每页条数，默认 20
 }
 
-// IssueInput 创建/更新入参（对齐 miniapp 上报向导；责任人接口不传，库内可空）。
+// IssueInput 创建/更新入参（对齐 miniapp 上报向导）。
 type IssueInput struct {
 	Type                    string          `json:"type"`                       // 问题类型 well/road/bridge/forest/transformer（必填）
 	ProjectYear             int             `json:"project_year"`               // 项目年度 2020–2023（新建必填）
@@ -43,6 +43,7 @@ type IssueInput struct {
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
 	ReportUserID            uint64          `json:"report_user_id"`             // 上报人用户ID：app端由登录用户注入；后台创建必填
+	AssigneeUser            uint64          `json:"assignee_user"`              // 整改责任人用户 ID，对应 issues.assignee_user；0/省略新建不写、更新不改；App 上报由服务端注入当前用户；非 0 须启用且所属组织与表单 org_id 互为上下级或同一节点
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 仅更新用 new|pending|done；新建由 quiz 推导
 }
@@ -384,6 +385,52 @@ func (s *IssueService) requireOrgID(ctx context.Context, orgID uint64) error {
 	return nil
 }
 
+// requireAssigneeInFormOrg 可选责任人：0 跳过；非 0 须启用，且用户组织与表单组织互为上下级或同一节点。
+func (s *IssueService) requireAssigneeInFormOrg(ctx context.Context, assigneeUser, formOrgID uint64) error {
+	if assigneeUser == 0 {
+		return nil
+	}
+	var user model.SysUser
+	if err := s.db(ctx).First(&user, assigneeUser).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("整改人不存在")
+		}
+		return err
+	}
+	if user.Status != 1 {
+		return errors.New("整改人已停用")
+	}
+	if user.OrgID == 0 || formOrgID == 0 {
+		return errors.New("责任人不属于所选组织")
+	}
+	var orgs []model.SysOrg
+	if err := s.db(ctx).Find(&orgs).Error; err != nil {
+		return err
+	}
+	if !orgIDsRelated(orgs, user.OrgID, formOrgID) {
+		return errors.New("责任人不属于所选组织")
+	}
+	return nil
+}
+
+// orgIDsRelated 两组织为同一节点，或一方是另一方的祖先/后代。
+func orgIDsRelated(orgs []model.SysOrg, a, b uint64) bool {
+	if a == 0 || b == 0 {
+		return false
+	}
+	for _, id := range orgSubtreeIDs(orgs, a) {
+		if id == b {
+			return true
+		}
+	}
+	for _, id := range orgSubtreeIDs(orgs, b) {
+		if id == a {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, error) {
 	typ := strings.TrimSpace(in.Type)
 	if !model.IssueType(typ).Valid() {
@@ -403,6 +450,9 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	}
 	if in.ReportUserID == 0 {
 		return nil, errors.New("请传入上报人report_user_id")
+	}
+	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, in.OrgID); err != nil {
+		return nil, err
 	}
 	if s.Attach != nil {
 		if _, err := s.Attach.EnsureFiles(ctx, []string{in.ReporterSignatureFileID}); err != nil {
@@ -437,6 +487,9 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		ReportUserID:            in.ReportUserID,
 		TypeExt:                 ext,
 	}
+	if in.AssigneeUser > 0 {
+		item.AssigneeUser = in.AssigneeUser
+	}
 	if err := s.db(ctx).Create(item).Error; err != nil {
 		return nil, err
 	}
@@ -468,6 +521,9 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 		orgID = item.OrgID
 	}
 	if err := s.requireOrgID(ctx, orgID); err != nil {
+		return nil, err
+	}
+	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, orgID); err != nil {
 		return nil, err
 	}
 
@@ -502,6 +558,9 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueInput) (*I
 			return nil, errors.New("状态无效")
 		}
 		updates["status"] = in.Status
+	}
+	if in.AssigneeUser > 0 {
+		updates["assignee_user"] = in.AssigneeUser
 	}
 	if err := s.db(ctx).Model(&item).Updates(updates).Error; err != nil {
 		return nil, err

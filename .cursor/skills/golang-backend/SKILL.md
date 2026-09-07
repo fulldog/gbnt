@@ -67,8 +67,8 @@ apps/server/
 
 - Status: `new` / `pending` / `done`; Create derives from QuizBool → `needs_rectify` (`false`→`done`, `true`→`new`)
 - Region: 单一 `org_id`（`sys_orgs.id`，新建必填且须存在）；QuizBool = `{type,value,desc,mustImg,files}` in `type_ext.checklist[]`; `mustImg=true` 时 `files` 长度须 >0
-- Create input aligned to miniapp wizard: no `project_name`/`description`/`measures`/`location_text`/`reporter_*`/`assignee_*` in API; `address` required; reporter=`created_id`; assignee=`assignee_user`（Rectify 写成当前用户）
-- Rectify: body `rectify_list[]`（`type`/`note`/`file_uuids`，type 可重复）；`Need`=checklist 需整改 QuizType；`Covered`=历史∪本次；齐全 → `done` 否则 `pending`；`Need` 空 → `done`
+- Create `IssueInput`：无 `project_name`/`description`/`measures`/`location_text`；`address` 必填；`report_user_id` 管理端必填、App 注入当前用户；`assignee_user` 选填（0 新建不写/更新不改），非 0 须启用且用户组织与表单 `org_id` 互为上下级或同一节点；App 创建覆盖为当前用户
+- Rectify: body `rectify_list[]`（`type`/`note`/`file_uuids`，type 可重复）；`Need`=checklist 需整改 QuizType；`Covered`=历史∪本次；齐全 → `done` 否则 `pending`；`Need` 空 → `done`；成功时 `assignee_user`=当前用户
 - App `GET /api/app/todos`：登录用户组织子树 ∩ query `org_id` 子树（均含自身）；用户 `OrgID=0` 不限权限范围；`status` 空/`all` 查全部，排序 `new > pending > done`
 - App rectify/re-rectify：`assignee_user>0` 且 ≠ 当前用户 → 拒绝；管理端不校验
 - Admin `POST /api/issues/:id/reassign`：body `{assignee_user}`，须启用用户；只改认领人

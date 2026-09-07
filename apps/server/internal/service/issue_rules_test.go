@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"gbnt/apps/server/internal/model"
+	"gbnt/apps/server/internal/testutil"
 )
 
 func TestQuizIndicatesIssue(t *testing.T) {
@@ -283,4 +285,99 @@ func TestReassignRequiresAssignee(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "请指定整改人") {
 		t.Fatalf("got %v", err)
 	}
+}
+
+func TestOrgIDsRelated(t *testing.T) {
+	t.Parallel()
+	orgs := []model.SysOrg{
+		{ParentID: 0},
+		{ParentID: 1},
+		{ParentID: 2},
+		{ParentID: 1},
+	}
+	orgs[0].ID = 1
+	orgs[1].ID = 2
+	orgs[2].ID = 3
+	orgs[3].ID = 9
+	if !orgIDsRelated(orgs, 2, 2) {
+		t.Fatal("same")
+	}
+	if !orgIDsRelated(orgs, 2, 3) {
+		t.Fatal("parent-child")
+	}
+	if !orgIDsRelated(orgs, 3, 2) {
+		t.Fatal("child-parent")
+	}
+	if orgIDsRelated(orgs, 9, 3) {
+		t.Fatal("cousin")
+	}
+	if orgIDsRelated(orgs, 0, 2) {
+		t.Fatal("zero")
+	}
+}
+
+func TestRequireAssigneeInFormOrg(t *testing.T) {
+	t.Parallel()
+	orgRows := [][]driver.Value{
+		{int64(1), int64(0)},
+		{int64(2), int64(1)},
+		{int64(3), int64(2)},
+		{int64(9), int64(1)},
+	}
+	orgStep := testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "parent_id"}, Rows: orgRows}
+	userStep := func(orgID int64, status int64) testutil.QueryStep {
+		return testutil.QueryStep{
+			Contains: "FROM `sys_users`",
+			Columns:  []string{"id", "org_id", "status"},
+			Rows:     [][]driver.Value{{int64(8), orgID, status}},
+		}
+	}
+
+	t.Run("省略跳过", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t)}
+		if err := s.requireAssigneeInFormOrg(context.Background(), 0, 3); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("不存在", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, testutil.QueryStep{
+			Contains: "FROM `sys_users`", Columns: []string{"id", "org_id", "status"},
+		})}
+		err := s.requireAssigneeInFormOrg(context.Background(), 8, 3)
+		if err == nil || !strings.Contains(err.Error(), "整改人不存在") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("停用", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(3, 0))}
+		err := s.requireAssigneeInFormOrg(context.Background(), 8, 3)
+		if err == nil || !strings.Contains(err.Error(), "整改人已停用") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("无关组织", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(9, 1), orgStep)}
+		err := s.requireAssigneeInFormOrg(context.Background(), 8, 3)
+		if err == nil || !strings.Contains(err.Error(), "责任人不属于所选组织") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("同组织", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(3, 1), orgStep)}
+		if err := s.requireAssigneeInFormOrg(context.Background(), 8, 3); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("上级报下级", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(2, 1), orgStep)}
+		if err := s.requireAssigneeInFormOrg(context.Background(), 8, 3); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("下级报上级", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(3, 1), orgStep)}
+		if err := s.requireAssigneeInFormOrg(context.Background(), 8, 2); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

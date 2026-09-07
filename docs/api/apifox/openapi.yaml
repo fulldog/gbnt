@@ -4,6 +4,7 @@ info:
   description: |
     统一信封 `{ code, data, message, cost_ms, trace_id }`，成功 `code=0`。
     鉴权 Bearer JWT。`/api/app/*` 仅 JWT、不做 RBAC。
+    按当前 `apps/server` 路由与 DTO 重建。
   version: 1.0.0
 servers:
   - url: http://127.0.0.1:8080
@@ -34,6 +35,18 @@ components:
       name: id
       required: true
       schema: { type: integer, format: int64 }
+    LedgerQuery:
+      in: query
+      name: street_org_id
+      schema: { type: integer, format: int64, description: 0 或省略为全部街道 }
+    LedgerDateFrom:
+      in: query
+      name: date_from
+      schema: { type: string, description: 北京时间 YYYY-MM-DD，含当日 }
+    LedgerDateTo:
+      in: query
+      name: date_to
+      schema: { type: string, description: 北京时间 YYYY-MM-DD，含当日 }
   schemas:
     Envelope:
       type: object
@@ -63,7 +76,7 @@ components:
       required: [old_password, new_password, confirm_password]
       properties:
         old_password: { type: string }
-        new_password: { type: string, minLength: 6, maxLength: 14, description: 字母+数字 }
+        new_password: { type: string, description: 长度大于 8，仅字母和数字且须同时包含 }
         confirm_password: { type: string }
     QuizBool:
       type: object
@@ -80,7 +93,10 @@ components:
           items: { $ref: "#/components/schemas/FileItem" }
     IssueInput:
       type: object
-      description: 新建须 type、project_year、org_id、address、reporter_signature_file_id、type_ext
+      description: |
+        新建须 type、project_year、org_id、address、reporter_signature_file_id、report_user_id、type_ext。
+        assignee_user 选填；0/省略新建不写、更新不改。非 0 须启用且用户组织与 org_id 互为上下级或同一节点。
+        App POST /api/app/issues 服务端将 report_user_id 与 assignee_user 覆盖为当前用户。
       properties:
         type: { type: string, enum: [well, road, bridge, forest, transformer] }
         project_year: { type: integer, enum: [2020, 2021, 2022, 2023] }
@@ -91,6 +107,8 @@ components:
         lng: { type: number }
         plan_date: { type: string, description: 需整改时必填 YYYY-MM-DD }
         reporter_signature_file_id: { type: string, format: uuid }
+        report_user_id: { type: integer, format: int64, description: 管理端新建必填；App 忽略外部值 }
+        assignee_user: { type: integer, format: int64, description: 选填，对应 issues.assignee_user }
         type_ext: { type: object, description: 含 checklist[] QuizBool }
         status: { type: string, enum: [new, pending, done], description: 仅更新 }
     RectifyInput:
@@ -109,11 +127,12 @@ components:
               file_uuids:
                 type: array
                 items: { type: string, format: uuid }
+        expected_round: { type: integer, format: int64, description: 新客户端传当前 rectify_round }
     ReassignInput:
       type: object
       required: [assignee_user]
       properties:
-        assignee_user: { type: integer, format: int64 }
+        assignee_user: { type: integer, format: int64, description: 须启用账号 }
     ImportIssuesReq:
       type: object
       required: [rows]
@@ -142,9 +161,9 @@ components:
       type: object
       properties:
         username: { type: string }
-        password: { type: string, description: 新建空则=账号；更新空则不改 }
+        password: { type: string, description: 新建空则=账号且不套复杂度；有值则大于 8 位字母+数字 }
         name: { type: string }
-        phone: { type: string }
+        phone: { type: string, description: 选填；有值须为中国大陆 11 位 }
         org_id: { type: integer, format: int64 }
         role_id: { type: integer, format: int64 }
         status: { type: integer, description: 1 启用 0 停用 }
@@ -168,20 +187,14 @@ paths:
       security: []
       summary: 健康检查
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: "{status:up}" }
   /api/auth/captcha:
     get:
       tags: [鉴权]
       security: []
       summary: 图形验证码
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: captcha_id / image_base64 }
   /api/auth/login:
     post:
       tags: [鉴权]
@@ -193,19 +206,13 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/LoginReq" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: JWT }
   /api/auth/me:
     get:
       tags: [鉴权]
       summary: 当前用户
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 含 org_id/role_id/is_super_admin/apis }
   /api/auth/password:
     put:
       tags: [鉴权]
@@ -216,19 +223,13 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ChangePasswordReq" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/auth/logout:
     post:
       tags: [鉴权]
-      summary: 退出登录
+      summary: 退出
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/attachments/images:
     post:
       tags: [附件]
@@ -241,24 +242,41 @@ paths:
               type: object
               properties:
                 files: { type: array, items: { type: string, format: binary } }
-                watermark: { type: string, description: 省略/真打水印；0 原图 }
+                watermark: { type: string }
                 lat: { type: number }
                 lng: { type: number }
                 address: { type: string }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: data.list file_id/url }
   /api/workbench/stats:
     get:
       tags: [工作台]
-      summary: 工作台统计
+      summary: 统计
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: total/new/pending/done/complete_rate/by_type }
+  /api/workbench/trend:
+    get:
+      tags: [工作台]
+      summary: 趋势
+      parameters:
+        - in: query
+          name: range
+          schema: { type: string, enum: [week7, month1, halfyear, all], default: week7 }
+      responses:
+        "200": { description: 趋势序列 }
+  /api/workbench/todos:
+    get:
+      tags: [工作台]
+      summary: 待办摘要
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        "200": { description: 分页待办 }
   /api/issues:
     get:
       tags: [专项整改]
@@ -269,11 +287,10 @@ paths:
           schema: { type: string }
         - in: query
           name: status
-          schema: { type: string, enum: [new, pending, done, all] }
+          schema: { type: string }
         - in: query
           name: org_id
           schema: { type: integer, format: int64 }
-          description: >0 含该组织及下级
         - in: query
           name: project_year
           schema: { type: integer }
@@ -282,42 +299,62 @@ paths:
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema: { type: integer }
         - in: query
           name: size
-          schema: { type: integer, default: 20 }
+          schema: { type: integer }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: list/total/page/size }
     post:
       tags: [专项整改]
-      summary: 新增问题
+      summary: 新建问题
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 问题明细 }
   /api/issues/import:
     post:
       tags: [专项整改]
-      summary: 批量导入问题
+      summary: 批量导入
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ImportIssuesReq" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: imported }
+  /api/issues/options/orgs:
+    get:
+      tags: [专项整改]
+      summary: 组织候选
+      responses:
+        "200": { description: 组织列表 }
+  /api/issues/options/reporters:
+    get:
+      tags: [专项整改]
+      summary: 上报人候选
+      parameters:
+        - in: query
+          name: org_id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
+        - in: query
+          name: selected_id
+          schema: { type: integer, format: int64 }
+      responses:
+        "200": { description: list/total/selected }
   /api/issues/{id}:
     parameters:
       - $ref: "#/components/parameters/IdPath"
@@ -325,10 +362,7 @@ paths:
       tags: [专项整改]
       summary: 问题详情
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
     put:
       tags: [专项整改]
       summary: 更新问题
@@ -338,111 +372,165 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
     delete:
       tags: [专项整改]
-      summary: 删除问题
+      summary: 软删
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
+  /api/issues/{id}/assignee-options:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [专项整改]
+      summary: 责任人候选
+      parameters:
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: size
+          schema: { type: integer }
+        - in: query
+          name: selected_id
+          schema: { type: integer, format: int64 }
+      responses:
+        "200": { description: 同组织启用人员 }
   /api/issues/{id}/rectify:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [专项整改]
       summary: 提交整改
-      description: Need⊆Covered → done 否则 pending；写入 assignee_user。管理端不校验认领。
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/issues/{id}/re-rectify:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [专项整改]
       summary: 重新整改
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/issues/{id}/reassign:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [专项整改]
-      summary: 重新指派整改人
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 重新指派
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ReassignInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/ledger/street:
     get:
       tags: [台账]
-      summary: 街道台账
+      summary: 街道台账聚合
       parameters:
-        - in: query
-          name: street_org_id
-          schema: { type: integer, format: int64 }
-          description: >0 含子树
-        - in: query
-          name: date_from
-          schema: { type: string }
-        - in: query
-          name: date_to
-          schema: { type: string }
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
       responses:
-        "200":
-          description: rows 按 org_id+type
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 按组织+类型 }
+  /api/ledger/street/report:
+    get:
+      tags: [台账]
+      summary: 街道建设项目表
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 报表 }
+  /api/ledger/street/rows:
+    get:
+      tags: [台账]
+      summary: 街道台账拆分行
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 行 }
+  /api/ledger/street/statistics:
+    get:
+      tags: [台账]
+      summary: 街道台账拆分统计
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 统计 }
+  /api/ledger/street/options/orgs:
+    get:
+      tags: [台账]
+      summary: 街道组织候选
+      responses:
+        "200": { description: 仅街道 }
   /api/ledger/survey:
     get:
       tags: [台账]
       summary: 排查汇总
       parameters:
-        - in: query
-          name: street_org_id
-          schema: { type: integer, format: int64 }
-        - in: query
-          name: date_from
-          schema: { type: string }
-        - in: query
-          name: date_to
-          schema: { type: string }
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 按类型 }
+  /api/ledger/survey/report:
+    get:
+      tags: [台账]
+      summary: 村级排查表
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 报表 }
+  /api/ledger/survey/rows:
+    get:
+      tags: [台账]
+      summary: 排查拆分行
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 行 }
+  /api/ledger/survey/statistics:
+    get:
+      tags: [台账]
+      summary: 排查拆分统计
+      parameters:
+        - $ref: "#/components/parameters/LedgerQuery"
+        - $ref: "#/components/parameters/LedgerDateFrom"
+        - $ref: "#/components/parameters/LedgerDateTo"
+      responses:
+        "200": { description: 统计 }
+  /api/ledger/survey/options/orgs:
+    get:
+      tags: [台账]
+      summary: 排查汇总街道候选
+      responses:
+        "200": { description: 仅街道 }
   /api/sys/orgs:
     get:
       tags: [组织]
       summary: 组织列表
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 扁平列表 }
     post:
       tags: [组织]
       summary: 新增组织
@@ -452,38 +540,29 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/OrgCreate" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 组织 }
   /api/sys/orgs/{id}:
     parameters:
       - $ref: "#/components/parameters/IdPath"
     put:
       tags: [组织]
-      summary: 更新组织名称
+      summary: 改组织名
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/OrgUpdate" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 组织 }
     delete:
       tags: [组织]
       summary: 删除组织
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/sys/users:
     get:
       tags: [人员]
-      summary: 用户列表
+      summary: 人员列表
       parameters:
         - in: query
           name: org_id
@@ -493,28 +572,32 @@ paths:
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema: { type: integer }
         - in: query
           name: size
-          schema: { type: integer, default: 20 }
+          schema: { type: integer }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: list/total }
     post:
       tags: [人员]
-      summary: 新增用户
+      summary: 新增人员
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 用户 }
+  /api/sys/users/by-org:
+    get:
+      tags: [人员]
+      summary: 按组织列人员
+      parameters:
+        - in: query
+          name: org_id
+          schema: { type: integer, format: int64 }
+      responses:
+        "200": { description: list/total }
   /api/sys/users/export:
     get:
       tags: [人员]
@@ -527,73 +610,53 @@ paths:
           name: keyword
           schema: { type: string }
       responses:
-        "200":
-          description: users.xlsx
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema: { type: string, format: binary }
+        "200": { description: 文件流 }
   /api/sys/users/import:
     post:
       tags: [人员]
-      summary: 导入 xlsx（仅新增）
+      summary: 导入 xlsx
       requestBody:
         required: true
         content:
           multipart/form-data:
             schema:
               type: object
-              required: [file]
               properties:
                 file: { type: string, format: binary }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: imported }
   /api/sys/users/{id}:
     parameters:
       - $ref: "#/components/parameters/IdPath"
     put:
       tags: [人员]
-      summary: 更新用户
+      summary: 更新人员
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/UserInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 用户 }
     delete:
       tags: [人员]
-      summary: 删除用户
+      summary: 删除人员
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/sys/users/{id}/reset-password:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [人员]
-      summary: 重置密码
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
+      summary: 重置密码为账号
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/sys/roles:
     get:
       tags: [角色]
       summary: 角色列表
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 列表 }
     post:
       tags: [角色]
       summary: 新增角色
@@ -603,10 +666,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 角色 }
   /api/sys/roles/{id}:
     parameters:
       - $ref: "#/components/parameters/IdPath"
@@ -619,51 +679,36 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RoleInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 角色 }
     delete:
       tags: [角色]
       summary: 删除角色
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/sys/roles/{id}/apis:
     parameters:
       - $ref: "#/components/parameters/IdPath"
     get:
       tags: [角色]
-      summary: 角色 API 权限
+      summary: 角色授权 API
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: api_ids }
     put:
       tags: [角色]
-      summary: 设置角色 API
+      summary: 覆盖角色授权
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RoleAPIsInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/sys/apis:
     get:
       tags: [角色]
       summary: API 目录
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 列表 }
   /api/sys/op-logs:
     get:
       tags: [操作日志]
@@ -674,30 +719,24 @@ paths:
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema: { type: integer }
         - in: query
           name: size
-          schema: { type: integer, default: 20 }
+          schema: { type: integer }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: list/total }
   /api/app/auth/slider/start:
     post:
       tags: [小程序]
       security: []
-      summary: 开始滑动验证
+      summary: 滑动开始
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: slider_id }
   /api/app/auth/slider/finish:
     post:
       tags: [小程序]
       security: []
-      summary: 完成滑动
+      summary: 滑动完成
       requestBody:
         required: true
         content:
@@ -707,12 +746,9 @@ paths:
               required: [slider_id, duration_ms]
               properties:
                 slider_id: { type: string }
-                duration_ms: { type: integer }
+                duration_ms: { type: integer, format: int64 }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: pass_token }
   /api/app/auth/login:
     post:
       tags: [小程序]
@@ -724,19 +760,13 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/AppLoginReq" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: JWT }
   /api/app/auth/me:
     get:
       tags: [小程序]
       summary: 当前用户
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 含 org_path }
   /api/app/auth/password:
     put:
       tags: [小程序]
@@ -747,24 +777,17 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ChangePasswordReq" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/app/auth/logout:
     post:
       tags: [小程序]
       summary: 退出
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: ok }
   /api/app/todos:
     get:
       tags: [小程序]
       summary: 待办
-      description: status 空或 all 查全部，排序 new>pending>done。用户组织子树 ∩ query org_id 子树。
       parameters:
         - in: query
           name: type
@@ -783,101 +806,78 @@ paths:
           schema: { type: string }
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema: { type: integer }
         - in: query
           name: size
-          schema: { type: integer, default: 20 }
+          schema: { type: integer }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 列表 }
   /api/app/regions:
     get:
       tags: [小程序]
       summary: 组织树
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: children }
   /api/app/issues:
     post:
       tags: [小程序]
       summary: 上报
+      description: 服务端将 report_user_id、assignee_user 覆盖为当前用户后再校验组织关系。
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/IssueInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/app/issues/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     get:
       tags: [小程序]
       summary: 问题详情
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/app/issues/{id}/rectify:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [小程序]
       summary: 整改（认领互斥）
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/RectifyInput" }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/app/issues/{id}/re-rectify:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
     post:
       tags: [小程序]
       summary: 重新整改（认领互斥）
-      parameters:
-        - $ref: "#/components/parameters/IdPath"
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 明细 }
   /api/app/mine/stats:
     get:
       tags: [小程序]
-      summary: 我的概览
+      summary: 我的统计
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: reported/pending/done }
   /api/app/mine/issues:
     get:
       tags: [小程序]
-      summary: 我的清单
+      summary: 我的列表
       parameters:
         - in: query
           name: scope
-          schema: { type: string, enum: [reported, pending, done], default: reported }
+          schema: { type: string, enum: [reported, pending, done] }
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema: { type: integer }
         - in: query
           name: size
-          schema: { type: integer, default: 20 }
+          schema: { type: integer }
       responses:
-        "200":
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Envelope" }
+        "200": { description: 列表 }
