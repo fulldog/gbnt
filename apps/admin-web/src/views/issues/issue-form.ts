@@ -35,6 +35,7 @@ export interface IssueFormDraft {
   lng?: number;
   plan_date: string;
   report_user_id?: number;
+  assignee_user?: number;
   build_kind: FacilityBuildKind;
   outlet_total: number | undefined;
   outlet_damaged: number | undefined;
@@ -51,8 +52,6 @@ export interface IssueFormDraft {
   capacity: number | undefined;
   model: string;
   voltage: TransformerVoltage;
-  keeper_name: string;
-  keeper_phone: string;
   checklist: ChecklistDraft[];
 }
 
@@ -76,6 +75,7 @@ export function createIssueDraft(reportUserId?: number): IssueFormDraft {
     lng: undefined,
     plan_date: "",
     report_user_id: reportUserId,
+    assignee_user: undefined,
     build_kind: "new",
     outlet_total: 0,
     outlet_damaged: 0,
@@ -92,8 +92,6 @@ export function createIssueDraft(reportUserId?: number): IssueFormDraft {
     capacity: 0,
     model: "",
     voltage: "10kv",
-    keeper_name: "",
-    keeper_phone: "",
     checklist: createChecklist("well"),
   };
 }
@@ -154,8 +152,10 @@ export function buildCreateInput(
     plan_date: draftNeedsRectify(draft) ? draft.plan_date : "",
     reporter_signature_file_id: reporterSignatureFileId,
     report_user_id: draft.report_user_id,
+    ...(draft.assignee_user ? { assignee_user: draft.assignee_user } : {}),
   };
   const checklist = checklistOf(draft);
+  const keeper = { keeper_name: "", keeper_phone: "" };
 
   switch (draft.type) {
     case "well":
@@ -169,8 +169,7 @@ export function buildCreateInput(
           outlet_damaged: draft.outlet_damaged ?? 0,
           casing_total: draft.casing_total ?? 0,
           casing_damaged: draft.casing_damaged ?? 0,
-          keeper_name: draft.keeper_name.trim(),
-          keeper_phone: draft.keeper_phone.trim(),
+          ...keeper,
         },
       } as AdminCreateIssueInput;
     case "road":
@@ -183,8 +182,7 @@ export function buildCreateInput(
           thickness: draft.thickness ?? 0,
           checklist: checklist as RoadTypeExt["checklist"],
           tree_survive: draft.tree_survive ?? 0,
-          keeper_name: draft.keeper_name.trim(),
-          keeper_phone: draft.keeper_phone.trim(),
+          ...keeper,
         },
       } as AdminCreateIssueInput;
     case "bridge":
@@ -196,8 +194,7 @@ export function buildCreateInput(
           length: draft.length ?? 0,
           width: draft.width ?? 0,
           checklist: checklist as BridgeTypeExt["checklist"],
-          keeper_name: draft.keeper_name.trim(),
-          keeper_phone: draft.keeper_phone.trim(),
+          ...keeper,
         },
       } as AdminCreateIssueInput;
     case "forest":
@@ -209,8 +206,7 @@ export function buildCreateInput(
           existing_count: draft.existing_count ?? 0,
           survive_rate: draft.survive_rate ?? 0,
           checklist: checklist as ForestTypeExt["checklist"],
-          keeper_name: draft.keeper_name.trim(),
-          keeper_phone: draft.keeper_phone.trim(),
+          ...keeper,
         },
       } as AdminCreateIssueInput;
     case "transformer":
@@ -222,8 +218,7 @@ export function buildCreateInput(
           model: draft.model.trim(),
           voltage: draft.voltage,
           checklist: checklist as TransformerTypeExt["checklist"],
-          keeper_name: draft.keeper_name.trim(),
-          keeper_phone: draft.keeper_phone.trim(),
+          ...keeper,
         },
       } as AdminCreateIssueInput;
   }

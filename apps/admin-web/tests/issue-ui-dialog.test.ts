@@ -77,6 +77,7 @@ describe("专项整改弹窗提交保护", () => {
     state.form.org_id = 2;
     await flushPromises();
     expect(state.form.report_user_id).toBeUndefined();
+    expect((state.form as { assignee_user?: number }).assignee_user).toBeUndefined();
     expect(wrapper.findAllComponents({ name: "ElButton" }).at(-1)!.props("disabled")).toBe(true);
     candidates.vm.$emit("ready", true);
     await wrapper.setProps({ orgsReady: false });

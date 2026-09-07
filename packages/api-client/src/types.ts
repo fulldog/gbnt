@@ -222,6 +222,8 @@ type IssueCreateByType =
 export type MiniappCreateIssueInput = IssueCreateCommon & IssueCreateByType;
 export type AdminCreateIssueInput = MiniappCreateIssueInput & {
   report_user_id: number;
+  /** 选填；非 0 须启用且所属组织与 org_id 互为上下级或同一节点。 */
+  assignee_user?: number;
 };
 
 export interface UpdateIssueInput {

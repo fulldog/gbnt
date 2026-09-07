@@ -62,8 +62,7 @@ describe("专项整改新建表单", () => {
     draft.width = 4;
     draft.thickness = 0.2;
     draft.tree_survive = 18;
-    draft.keeper_name = " 张三 ";
-    draft.keeper_phone = " 13800000000 ";
+    draft.assignee_user = 15;
     draft.checklist = answerChecklistWithoutIssues("road");
 
     expect(draftNeedsRectify(draft)).toBe(false);
@@ -79,6 +78,7 @@ describe("专项整改新建表单", () => {
       plan_date: "",
       reporter_signature_file_id: "signature-file",
       report_user_id: 9,
+      assignee_user: 15,
       type_ext: {
         length: 120,
         width: 4,
@@ -88,8 +88,8 @@ describe("专项整改新建表单", () => {
           { type: "has_ash", value: true, desc: "", mustImg: false, files: [] },
         ],
         tree_survive: 18,
-        keeper_name: "张三",
-        keeper_phone: "13800000000",
+        keeper_name: "",
+        keeper_phone: "",
       },
     });
   });

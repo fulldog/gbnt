@@ -45,6 +45,7 @@ const formRef = shallowRef<FormInstance>();
 const signatureRef = shallowRef<SignaturePadExpose>();
 const submitting = shallowRef(false);
 const reporterReady = shallowRef(false);
+const assigneeReady = shallowRef(false);
 const photoSession = shallowRef(0);
 const uploadingQuestions = shallowRef<ReadonlySet<ChecklistDraft>>(new Set());
 const photosUploading = computed(() => uploadingQuestions.value.size > 0);
@@ -75,13 +76,14 @@ function resetForm(): void {
     next.lng = issue.lng;
     next.plan_date = issue.plan_date;
     next.report_user_id = issue.report_user_id;
+    next.assignee_user = issue.assignee_user || undefined;
     next.checklist = createChecklist(issue.type);
   }
   Object.assign(form, next);
   formRef.value?.clearValidate();
 }
 
-function loadReporters(query: UserOptionQuery) {
+function loadOrgUsers(query: UserOptionQuery) {
   if (!form.org_id) return Promise.reject(new Error("请先选择组织"));
   return api.issues.listReporterOptions({ ...query, org_id: form.org_id });
 }
@@ -115,7 +117,11 @@ watch(
   () => form.org_id,
   () => {
     reporterReady.value = false;
-    if (!editing.value) form.report_user_id = undefined;
+    assigneeReady.value = false;
+    if (!editing.value) {
+      form.report_user_id = undefined;
+      form.assignee_user = undefined;
+    }
   },
   { flush: "sync" },
 );
@@ -124,6 +130,7 @@ watch(() => [visible.value, issue?.id] as const, ([open]) => {
   session += 1;
   submitting.value = false;
   reporterReady.value = false;
+  assigneeReady.value = false;
   resetPhotoUploads();
   if (open) resetForm();
 }, { immediate: true, flush: "sync" });
@@ -152,7 +159,7 @@ async function submit(): Promise<void> {
   const current = session;
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (current !== session || submitting.value || photosUploading.value) return;
-  if (!orgsReady || (!editing.value && !reporterReady.value)) {
+  if (!orgsReady || (!editing.value && (!reporterReady.value || (form.assignee_user && !assigneeReady.value)))) {
     ElMessage.error("请先成功加载组织和人员候选，并选择有效的上报人");
     return;
   }
@@ -247,8 +254,18 @@ async function submit(): Promise<void> {
               v-model="form.report_user_id"
               :active="visible && Boolean(form.org_id) && orgsReady"
               :scope-key="form.org_id ?? 0"
-              :load-options="loadReporters"
+              :load-options="loadOrgUsers"
               @ready="reporterReady = $event"
+            />
+          </ElFormItem>
+          <ElFormItem v-if="!editing" label="负责人">
+            <BusinessUserSelect
+              v-model="form.assignee_user"
+              :active="visible && Boolean(form.org_id) && orgsReady"
+              :scope-key="form.org_id ?? 0"
+              :load-options="loadOrgUsers"
+              placeholder="搜索姓名或账号（选填）"
+              @ready="assigneeReady = $event"
             />
           </ElFormItem>
           <ElFormItem label="定位地址" prop="address" class="sm:col-span-2 lg:col-span-3">
@@ -326,11 +343,6 @@ async function submit(): Promise<void> {
               </ElSelect>
             </ElFormItem>
           </div>
-
-          <div class="grid gap-x-4 sm:grid-cols-2">
-            <ElFormItem label="负责人"><ElInput v-model="form.keeper_name" maxlength="64" /></ElFormItem>
-            <ElFormItem label="联系电话"><ElInput v-model="form.keeper_phone" maxlength="32" /></ElFormItem>
-          </div>
         </section>
 
         <ElDivider />
@@ -391,7 +403,7 @@ async function submit(): Promise<void> {
     <template #footer>
       <span v-if="photosUploading" class="mr-3 text-sm text-amber-700" role="status">现场照片上传中，请完成后再提交。</span>
       <ElButton :disabled="submitting" @click="visible = false">取消</ElButton>
-      <ElButton type="primary" :loading="submitting" :disabled="photosUploading || !orgsReady || (!editing && !reporterReady)" @click="submit">
+      <ElButton type="primary" :loading="submitting" :disabled="photosUploading || !orgsReady || (!editing && (!reporterReady || Boolean(form.assignee_user && !assigneeReady)))" @click="submit">
         {{ editing ? '保存基础信息' : '提交排查记录' }}
       </ElButton>
     </template>
