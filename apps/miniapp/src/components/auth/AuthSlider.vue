@@ -157,7 +157,6 @@ defineExpose({ reset });
 }
 
 .auth-slider__track--verified {
-  box-shadow: inset 0 0 0 1px var(--gbnt-success, #197447);
   color: var(--gbnt-success, #197447);
 }
 

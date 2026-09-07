@@ -19,7 +19,7 @@ const quantityFields = ["well_inspected", "well_normal", "well_problem_count", "
         <th rowspan="4" class="ledger-sticky-col" style="left: 140px" scope="col">新村/社区</th>
         <th rowspan="4" class="ledger-sticky-col" style="left: 280px" scope="col">自然村</th>
         <th rowspan="4" class="ledger-sticky-col ledger-sticky-last" style="left: 380px" scope="col">是否全面完成排查（是/否）</th>
-        <th colspan="7" scope="colgroup">机井、桥涵、道路</th><th colspan="6" scope="colgroup">排查整改情况（个）</th><th colspan="4" scope="colgroup">运行管护排查联系人</th><th rowspan="4" scope="col">负责人签字：<br>（盖章）</th>
+        <th colspan="7" scope="colgroup">机井、桥涵、道路</th><th colspan="6" scope="colgroup">排查整改情况（个）</th><th colspan="4" scope="colgroup">运行管护排查联系人</th><th rowspan="4" scope="col" class="ledger-right-edge">负责人签字：<br>（盖章）</th>
       </tr>
       <tr>
         <th rowspan="3" scope="col">已排查机井（泵站）总数（眼）</th><th rowspan="3" scope="col">其中运行正常机井（泵站）</th><th rowspan="3" scope="col">发现问题总数（个）</th>

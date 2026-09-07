@@ -93,6 +93,49 @@ func TestAdminListHTTPEmptyArraysAndNormalizedMetadata(t *testing.T) {
 	}
 }
 
+func TestAdminIssueListAndDetailHTTPIncludeAssigneePhone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, path := range []string{"/api/issues", "/api/issues/1"} {
+		t.Run(path, func(t *testing.T) {
+			steps := []testutil.QueryStep{}
+			if path == "/api/issues" {
+				steps = append(steps, testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(1)}}})
+			}
+			steps = append(steps,
+				testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"id", "type", "type_ext", "assignee_user"}, Rows: [][]driver.Value{{int64(1), "well", `{"checklist":[]}`, int64(8)}}},
+				testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id"}},
+				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}, Rows: [][]driver.Value{{int64(8), "整改责任人", "assignee"}}},
+				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "phone"}, Rows: [][]driver.Value{{int64(8), "13800000008"}}},
+			)
+			d := &Deps{Issue: &service.IssueService{DB: testutil.NewQueryDB(t, steps...)}}
+			r := gin.New()
+			d.registerRectify(r.Group("/api"))
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+			if w.Code != http.StatusOK {
+				t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
+			}
+			var body struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			item := body.Data
+			if path == "/api/issues" {
+				var list []map[string]json.RawMessage
+				if err := json.Unmarshal(item["list"], &list); err != nil || len(list) != 1 {
+					t.Fatalf("列表结构异常：%s", w.Body.String())
+				}
+				item = list[0]
+			}
+			if string(item["assignee_user_name"]) != `"整改责任人"` || string(item["assignee_user_phone"]) != `"13800000008"` {
+				t.Fatalf("责任人与电话未同步返回：%s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestLedgerHTTPEmptyAndFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, path := range []string{"/api/ledger/street", "/api/ledger/survey"} {

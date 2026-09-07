@@ -28,7 +28,7 @@ func TestAdminIssueJSONPreservesBaseAndNullNames(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"assignee_user_name", "org_name", "org_path"} {
+	for _, key := range []string{"assignee_user_name", "assignee_user_phone", "org_name", "org_path"} {
 		if string(got[key]) != "null" {
 			t.Errorf("%s 应固定输出 null，实际 %s", key, got[key])
 		}
@@ -85,6 +85,59 @@ func TestOrgDisplayMissingAncestorsAndCycles(t *testing.T) {
 	if _, path := names.orgDisplay(8); path == nil || *path != "环" {
 		t.Fatal("环不应无限递归")
 	}
+}
+
+func TestAdminIssuePhonesAreBatchedByAssignee(t *testing.T) {
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "FROM `sys_users`", Columns: []string{"id", "phone"},
+		Rows: [][]driver.Value{{int64(8), " 13800000008 "}, {int64(9), "   "}},
+		Check: func(query string, args []driver.NamedValue) {
+			if !strings.Contains(query, "SELECT `id`,`phone`") || !strings.Contains(query, "id IN (?,?,?)") || !strings.Contains(query, "is_delete") {
+				t.Fatalf("只应按本页责任人批量查询电话，并遵循软删除：%s", query)
+			}
+			for i, want := range []int64{8, 9, 9999} {
+				if len(args) <= i || args[i].Value != want {
+					t.Fatalf("不应读取未指派或上报人的电话：%v", args)
+				}
+			}
+		},
+	})
+	items := make([]AdminIssueVO, 25)
+	for i := range items {
+		items[i].Issue = model.Issue{ReportUserID: 7, AssigneeUser: 8, ReporterPhone: "13800000007"}
+	}
+	items[1].AssigneeUser = 9
+	items[2].AssigneeUser = 9999
+	items[3].AssigneeUser = 0
+	if err := enrichAdminIssuePhones(db, items); err != nil {
+		t.Fatal(err)
+	}
+	for i, item := range items {
+		if i >= 1 && i <= 3 {
+			if item.AssigneeUserPhone != nil {
+				t.Fatalf("未填写、已删除或未指派应返回 null：%+v", item)
+			}
+		} else if item.AssigneeUserPhone == nil || *item.AssigneeUserPhone != "13800000008" {
+			t.Fatalf("电话未匹配到整改责任人：%+v", item)
+		}
+	}
+}
+
+func TestAdminIssuePhonesEmptyAndFailure(t *testing.T) {
+	t.Run("未指派不查人员", func(t *testing.T) {
+		db := testutil.NewQueryDB(t)
+		if err := enrichAdminIssuePhones(db, []AdminIssueVO{{IssueVO: IssueVO{Issue: model.Issue{ReportUserID: 7}}}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("查询失败向上传递", func(t *testing.T) {
+		want := errors.New("phone unavailable")
+		db := testutil.NewQueryDB(t, testutil.QueryStep{Contains: "FROM `sys_users`", Err: want})
+		err := enrichAdminIssuePhones(db, []AdminIssueVO{{IssueVO: IssueVO{Issue: model.Issue{AssigneeUser: 8}}}})
+		if !errors.Is(err, want) {
+			t.Fatalf("查询错误不能伪装成未填电话：%v", err)
+		}
+	})
 }
 
 func TestAdminIssueAndAppKeywordStaySeparate(t *testing.T) {

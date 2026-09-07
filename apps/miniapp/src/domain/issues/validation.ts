@@ -86,6 +86,9 @@ export function validateBasicStep(form: ReportFormState): string[] {
   if (!form.orgId) {
     errors.push("请选择行政区划");
   }
+  if (!form.code.trim()) {
+    errors.push("请填写设施编号");
+  }
   if (!form.address.trim()) {
     errors.push("请选择定位或填写详细地址");
   }

@@ -40,12 +40,12 @@ function verifyGrid(table: HTMLTableElement, columnCount: number): void {
 }
 
 describe("Excel 式台账结构", () => {
-  it("G1 黄金报表在页面与 XLSX 保留 17/22 列人工预期，街道台账携带统计口径", async () => {
+  it("G1 黄金报表在页面与 XLSX 保留 17/22 列人工预期，不展示或导出统计口径", async () => {
     const street = goldenStreetParts();
     const survey = goldenSurveyParts();
     const streetReport = mergeLedgerParts(goldenQuery, street.base, street.statistics, composeStreetRow);
     const surveyReport = mergeLedgerParts(goldenQuery, survey.base, survey.statistics, composeSurveyRow);
-    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账", notes: streetReport.notes } });
+    const streetWrapper = mount(StreetLedgerSheet, { props: { rows: streetReport.rows, title: "测试街道台账" } });
     const surveyWrapper = mount(SurveyLedgerSheet, { props: { rows: surveyReport.rows, title: "测试街道排查" } });
     expect(streetWrapper.findAll("tbody tr")).toHaveLength(2);
     expect(surveyWrapper.findAll("tbody tr")).toHaveLength(1);
@@ -60,24 +60,20 @@ describe("Excel 式台账结构", () => {
       [surveyWrapper, 22, "测试街道排查", surveyReport.notes],
     ] as const) {
       verifyGrid(wrapper.get("table").element, columns);
-      const noteRows = columns === 17 ? notes.length : 0;
-      expect(wrapper.findAll("tfoot tr")).toHaveLength(1 + noteRows);
+      expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
+      expect(wrapper.find('[title*="口径"]').exists()).toBe(false);
       const sheet = await readSpreadsheet(wrapper.get("table").element);
       expect(sheet.columnCount).toBe(columns);
       expect(sheet.columns).toHaveLength(columns);
-      expect(sheet.rowCount).toBe(7 + noteRows);
+      expect(sheet.rowCount).toBe(7);
       const exportedText: string[] = [];
       sheet.eachRow((row) => row.eachCell((cell) => exportedText.push(cell.text)));
       for (const text of [wrapper.text(), exportedText.join("\n")]) {
         expect(text).toContain(title);
         expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
         if (columns === 22) expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
-        for (const note of ["数据口径", "上报日期", ledgerDateNote(goldenQuery)]) {
+        for (const note of ["统计口径", "数据口径", "上报日期", ledgerDateNote(goldenQuery), ...notes]) {
           expect(text).not.toContain(note);
-        }
-        for (const note of notes) {
-          if (columns === 17) expect(text).toContain(note);
-          else expect(text).not.toContain(note);
         }
       }
       const lastColumn = columns === 17 ? "Q" : "V";

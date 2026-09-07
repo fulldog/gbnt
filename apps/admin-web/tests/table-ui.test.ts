@@ -2,7 +2,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { computed, defineComponent, h, inject, provide, type Component, type ComputedRef, type PropType } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElTree } from "element-plus";
 import StreetLedgerView from "@/views/ledger/StreetLedgerView.vue";
 import SurveyLedgerView from "@/views/ledger/SurveyLedgerView.vue";
 import StreetLedgerSheet from "@/components/ledger/StreetLedgerSheet.vue";
@@ -94,7 +94,7 @@ const TreeStub = defineComponent({
 });
 const AlertStub = { props: ["title"], template: "<div>{{ title }}<slot /></div>" };
 const wrappers: VueWrapper[] = [];
-function render(component: Component) {
+function render(component: Component, stubs: Record<string, Component | boolean> = {}) {
   const wrapper = mount(component, {
     global: { stubs: {
       ElTable: TableStub, ElTableColumn: ColumnStub, ElButton: ButtonStub,
@@ -103,6 +103,7 @@ function render(component: Component) {
       ElTag: passthrough, ElIcon: passthrough, ElUpload: true, ElPagination: true, ElTree: TreeStub,
       ElInputNumber: true, ElSkeleton: true, ElAlert: AlertStub, OrgTreeSelect: true,
       WorkbenchTrendChart: true,
+      ...stubs,
     } },
   });
   wrappers.push(wrapper);
@@ -186,7 +187,7 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("北城街道");
     expect(wrapper.getComponent(StreetLedgerSheet).props("rows")).toHaveLength(1);
-    expect(wrapper.get("tfoot").text()).toContain("缺少资产基表");
+    expect(wrapper.text()).not.toContain("缺少资产基表");
     expect(wrapper.text()).not.toContain("数据口径");
     expect(wrapper.text()).toContain("无候选权限");
     expect(api.orgs.list).not.toHaveBeenCalled();
@@ -230,13 +231,13 @@ describe("汇总表真实状态", () => {
     expect(wrapper.get("tfoot").text()).not.toContain("2026-01-01");
     expect(wrapper.get("tfoot").text()).not.toContain("2025-01-01");
     expect(wrapper.text()).not.toContain("上报日期范围");
-    expect(wrapper.get("tfoot").text()).toContain("非去重资产总量");
+    expect(wrapper.text()).not.toContain("非去重资产总量");
     expect(wrapper.get("thead").text()).toContain("北城街道台账");
     await click(wrapper, "导出 Excel");
     expect(exportLedgerTable).toHaveBeenLastCalledWith(wrapper.get("table").element, "街道台账_街道2_2026-01-01至2026-08-31");
   });
 
-  it.each(["street", "survey"] as const)("%s 页面与 XLSX 保持一致，街道台账导出完整统计口径", async (kind) => {
+  it.each(["street", "survey"] as const)("%s 页面与实际导出 XLSX 均不含动态口径行，保留原始备注、标题和数据", async (kind) => {
     const actualExport = await vi.importActual<typeof import("@/utils/ledger-export")>("@/utils/ledger-export");
     vi.mocked(exportLedgerTable).mockImplementation(actualExport.exportLedgerTable);
     const component = kind === "street" ? StreetLedgerView : SurveyLedgerView;
@@ -257,7 +258,7 @@ describe("汇总表真实状态", () => {
     await flushPromises();
     await click(wrapper, "查询");
     await flushPromises();
-    expect(wrapper.findAll("tfoot tr")).toHaveLength(kind === "street" ? 1 + notes.length : 1);
+    expect(wrapper.findAll("tfoot tr")).toHaveLength(1);
     await click(wrapper, "导出 Excel");
     await vi.mocked(exportLedgerTable).mock.results.at(-1)!.value;
     const label = kind === "street" ? "街道台账" : "街道排查汇总";
@@ -270,21 +271,21 @@ describe("汇总表真实状态", () => {
     const sheet = workbook.getWorksheet(1)!;
     const values: string[] = [];
     sheet.eachRow((row) => row.eachCell((cell) => values.push(cell.text)));
-    expect(wrapper.text()).toContain("按上报日期筛选");
-    for (const note of notes) {
-      if (kind === "street") expect(wrapper.text()).toContain(note);
-      else expect(wrapper.text()).not.toContain(note);
+    if (kind === "street") {
+      expect(wrapper.find(".ledger-report-notice").exists()).toBe(false);
+      expect(wrapper.text()).not.toContain("按上报日期筛选");
+      expect(wrapper.find('[title*="口径"]').exists()).toBe(false);
+    } else {
+      expect(wrapper.text()).toContain("按上报日期筛选");
     }
+    for (const note of ["统计口径", "数据口径", "上报日期范围", ...notes]) expect(wrapper.text()).not.toContain(note);
     for (const text of [wrapper.get("table").text(), values.join("\n")]) {
       expect(text).toContain("北城街道");
       expect(text).toContain(wrapper.get("thead tr:first-child th").text());
       expect(text).toContain("上报表格加盖所属街道办事处公章及主要负责人及分管负责人签字。");
       if (kind === "survey") expect(text).toContain("注：排查范围是2010年以来高标范围内所有机井、桥涵、道路。");
       else expect(text).toContain("1.25");
-      for (const note of notes) {
-        if (kind === "street") expect(text).toContain(note);
-        else expect(text).not.toContain(note);
-      }
+      for (const note of ["统计口径", "数据口径", "上报日期", ...notes]) expect(text).not.toContain(note);
     }
     const columns = kind === "street" ? 17 : 22;
     expect(sheet.columnCount).toBe(columns);
@@ -468,33 +469,40 @@ describe("工作人员展示与表单候选", () => {
 });
 
 describe("其他列表回归", () => {
-  it("打开权限后直接保存保持原 API ID，不扩展部分勾选或丢失目录外授权", async () => {
+  it("权限树只展示需要 RBAC 的接口，直接保存不扩展同组的部分勾选", async () => {
     api.roles.list.mockResolvedValue([role]);
     api.roles.listApis.mockResolvedValue([
-      { id: 1, module: "web.rectify", action: "view", name: "列表", sort: 1 },
-      { id: 2, module: "web.rectify", action: "view", name: "详情", sort: 2 },
+      { id: 1, module: "web.rectify", action: "view", name: "列表", method: "GET", path: "/api/issues", sort: 1, is_jwt: true, is_rbac: true },
+      { id: 2, module: "web.rectify", action: "view", name: "详情", method: "GET", path: "/api/issues/:id", sort: 2, is_jwt: true, is_rbac: 1 },
+      { id: 3, module: "web.auth", action: "view", name: "当前用户", method: "GET", path: "/api/me", sort: 3, is_jwt: true, is_rbac: false },
     ]);
-    api.roles.getPermissions.mockResolvedValue({ api_ids: [1, 99] });
-    const wrapper = render(RoleView);
+    api.roles.getPermissions.mockResolvedValue({ api_ids: [1] });
+    const wrapper = render(RoleView, { ElTree: false });
     await flushPromises();
     await click(wrapper, "授权");
     await flushPromises();
+    const tree = wrapper.getComponent(ElTree);
+    expect(tree.vm.getCheckedKeys(false)).toEqual([1]);
+    expect(tree.vm.getHalfCheckedKeys()).toEqual(["module:web.rectify"]);
+    expect(tree.text()).toContain("列表");
+    expect(tree.text()).toContain("详情");
+    expect(tree.text()).not.toContain("当前用户");
     await click(wrapper, "保存权限");
     await flushPromises();
-    expect(api.roles.updatePermissions).toHaveBeenCalledWith(role.id, { api_ids: [1, 99] });
+    expect(api.roles.updatePermissions).toHaveBeenCalledWith(role.id, { api_ids: [1] });
   });
 
   it.each([
-    ["组织", OrgView, api.orgs.list, [{ id: 1, parent_id: 0, type: "root", name: "测试组织", sort: 0 }]],
-    ["角色", RoleView, api.roles.list, [role]],
-    ["日志", OpLogView, api.opLogs.list, { list: [{ id: 1, username: "测试账号" }], total: 1 }],
-  ] as const)("%s 刷新失败时清除旧表并显示可重试错误", async (_, component, request, response) => {
+    ["组织", OrgView, api.orgs.list, [{ id: 1, parent_id: 0, type: "root", name: "测试组织", sort: 0 }], "刷新表格"],
+    ["角色", RoleView, api.roles.list, [role], "刷新"],
+    ["日志", OpLogView, api.opLogs.list, { list: [{ id: 1, username: "测试账号" }], total: 1 }, "刷新表格"],
+  ] as const)("%s 刷新失败时清除旧表并显示可重试错误", async (_, component, request, response, refreshLabel) => {
     request.mockResolvedValueOnce(response);
     const wrapper = render(component);
     await flushPromises();
     expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(1);
     request.mockRejectedValueOnce(new Error("刷新失败"));
-    await click(wrapper, "刷新表格");
+    await click(wrapper, refreshLabel);
     await flushPromises();
     expect(wrapper.getComponent(TableStub).props("data")).toEqual([]);
     expect(wrapper.text()).toContain("刷新失败");

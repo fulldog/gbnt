@@ -423,8 +423,8 @@ onUnload(() => {
           </view>
 
           <view class="form-field">
-            <text class="form-label">设施编号</text>
-            <input class="form-input" :value="form.code" placeholder="不填写时由后端生成" @input="updateText('code', $event)" />
+            <text class="form-label"><text class="required">*</text>设施编号</text>
+            <input class="form-input" :value="form.code" placeholder="请输入设施编号，如：01号" @input="updateText('code', $event)" />
           </view>
 
           <view class="form-field">

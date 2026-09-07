@@ -13,14 +13,20 @@ import (
 // AdminIssueVO 管理端问题读取视图；保留基础字段，关联不存在时名称固定输出 null。
 type AdminIssueVO struct {
 	IssueVO
-	ReportUserName   *string `json:"report_user_name"`   // 当前上报人姓名，空姓名回退账号；缺失为 null
-	AssigneeUserName *string `json:"assignee_user_name"` // 当前责任人姓名，空姓名回退账号；未指派或缺失为 null
-	OrgName          *string `json:"org_name"`           // 当前组织名称；缺失为 null
-	OrgPath          *string `json:"org_path"`           // 可解析祖先及本组织，以「 / 」分隔；缺失为 null
+	ReportUserName    *string `json:"report_user_name"`    // 当前上报人姓名，空姓名回退账号；缺失为 null
+	AssigneeUserName  *string `json:"assignee_user_name"`  // 当前责任人姓名，空姓名回退账号；未指派或缺失为 null
+	AssigneeUserPhone *string `json:"assignee_user_phone"` // 当前整改责任人账号的联系电话；未指派、人员缺失或电话为空时为 null，仅管理端返回
+	OrgName           *string `json:"org_name"`            // 当前组织名称；缺失为 null
+	OrgPath           *string `json:"org_path"`            // 可解析祖先及本组织，以「 / 」分隔；缺失为 null
 }
 
 // MarshalJSON 显式合并基础视图，避免匿名嵌入 IssueVO 后其序列化方法吞掉管理端名称字段。
 func (v AdminIssueVO) MarshalJSON() ([]byte, error) {
+	return v.marshalJSON(true)
+}
+
+// marshalJSON 复用关联名称序列化，按端隔离整改责任人电话字段。
+func (v AdminIssueVO) marshalJSON(includeAssigneePhone bool) ([]byte, error) {
 	base, err := v.IssueVO.MarshalJSON()
 	if err != nil {
 		return nil, err
@@ -29,10 +35,14 @@ func (v AdminIssueVO) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(base, &fields); err != nil {
 		return nil, err
 	}
-	for name, value := range map[string]*string{
+	displayFields := map[string]*string{
 		"report_user_name": v.ReportUserName, "assignee_user_name": v.AssigneeUserName,
 		"org_name": v.OrgName, "org_path": v.OrgPath,
-	} {
+	}
+	if includeAssigneePhone {
+		displayFields["assignee_user_phone"] = v.AssigneeUserPhone
+	}
+	for name, value := range displayFields {
 		encoded, err := json.Marshal(value)
 		if err != nil {
 			return nil, err
@@ -190,13 +200,42 @@ func enrichAdminIssues(db *gorm.DB, list []IssueVO) ([]AdminIssueVO, error) {
 	return out, nil
 }
 
-// ListAdmin 按管理端筛选分页后批量补全名称，不扩大小程序读取契约。
+// enrichAdminIssuePhones 仅批量读取本页已指派账号的电话，遵循软删除，不查询上报人或全量人员目录。
+func enrichAdminIssuePhones(db *gorm.DB, list []AdminIssueVO) error {
+	assigneeIDs := make([]uint64, 0, len(list))
+	for _, issue := range list {
+		assigneeIDs = append(assigneeIDs, issue.AssigneeUser)
+	}
+	ids := uniqueNonzeroIDs(assigneeIDs)
+	if len(ids) == 0 {
+		return nil
+	}
+	var users []model.SysUser
+	if err := db.Select("id", "phone").Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return err
+	}
+	phones := make(map[uint64]string, len(users))
+	for _, user := range users {
+		if phone := strings.TrimSpace(user.Phone); phone != "" {
+			phones[user.ID] = phone
+		}
+	}
+	for i := range list {
+		list[i].AssigneeUserPhone = nullableName(phones, list[i].AssigneeUser)
+	}
+	return nil
+}
+
+// ListAdmin 按管理端筛选分页后批量补全名称与整改责任人电话，不扩大小程序读取契约。
 func (s *IssueService) ListAdmin(ctx context.Context, q IssueQuery) ([]AdminIssueVO, int64, error) {
 	list, total, err := s.List(ctx, q)
 	if err != nil {
 		return nil, 0, err
 	}
 	out, err := enrichAdminIssues(s.db(ctx), list)
+	if err == nil {
+		err = enrichAdminIssuePhones(s.db(ctx), out)
+	}
 	return out, total, err
 }
 
@@ -208,6 +247,9 @@ func (s *IssueService) GetAdmin(ctx context.Context, id uint64) (*AdminIssueVO, 
 	}
 	out, err := enrichAdminIssues(s.db(ctx), []IssueVO{*item})
 	if err != nil {
+		return nil, err
+	}
+	if err := enrichAdminIssuePhones(s.db(ctx), out); err != nil {
 		return nil, err
 	}
 	return &out[0], nil

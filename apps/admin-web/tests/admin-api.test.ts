@@ -15,6 +15,7 @@ const issue = {
   id: 10, issue_key: "issue-readable", type: "well", report_user_id: 3, assignee_user: 4, org_id: 7,
   rectify_round: 0,
   report_user_name: "上报人", assignee_user_name: "整改人", org_name: "社区", org_path: "街道 / 社区",
+  assignee_user_phone: "13800000004",
   type_ext: { checklist: [{ type: "transformer_ok", photos: [{ file_id: "photo", url: "/uploads/photo" }] }] },
   reporter_signature: { file_id: "signature", url: "/uploads/signature" }, rectify_records: [],
 };
@@ -72,6 +73,16 @@ describe("管理端独立读取契约", () => {
     expect(await setup({ id: 1 }).issues.get(1)).toEqual({ id: 1, rectify_round: 0 });
     expect(await setup({ id: 1, org_path: null }).issues.get(1)).toEqual({ id: 1, org_path: null, rectify_round: 0 });
     await expect(setup({ id: 1, org_path: [] }).issues.get(1)).rejects.toThrow("关联名称格式异常");
+  });
+
+  it("保留责任人电话的空值，不混用上报人或设施负责人电话", async () => {
+    const row = { ...issue, assignee_user_phone: null, reporter_phone: "13800000003", type_ext: { keeper_phone: "13800000002" } };
+    expect((await setup(row).issues.get(10)).assignee_user_phone).toBeNull();
+    expect((await setup({ list: [row], total: 1, page: 1, size: 20 }).issues.list()).list[0]?.assignee_user_phone).toBeNull();
+  });
+
+  it.each([13800000004, [], {}, false])("责任人电话格式异常时显式失败：%j", async (phone) => {
+    await expect(setup({ ...issue, assignee_user_phone: phone }).issues.get(10)).rejects.toThrow("整改责任人联系电话格式异常");
   });
 
   it("读取人员名称并兼容旧人员列表没有 page/size", async () => {

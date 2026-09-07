@@ -21,6 +21,7 @@ function validWellForm(): ReportFormState {
   const form = createReportForm();
   form.orgId = 12;
   form.orgLabel = "开发区 / 街道 / 村";
+  form.code = "01号";
   form.address = "示例现场地址";
   form.lat = 36.45;
   form.lng = 116.02;
@@ -50,14 +51,28 @@ describe("巡查上报领域规则", () => {
 
   it("按当前后端 6 项机井契约生成 payload", () => {
     const form = validWellForm();
+    form.code = " 01号 ";
 
     const payload = buildCreateIssueInput(form);
 
     expect(payload.type).toBe("well");
+    expect(payload.code).toBe("01号");
     expect(payload.type_ext.checklist).toHaveLength(6);
     expect(payload.type_ext.checklist.at(-1)?.type).toBe("transformer_ok");
     expect(payload.reporter_signature_file_id).toBe("signature-1");
     expect(payload.plan_date).toBeUndefined();
+  });
+
+  it.each(["", " \t "])("设施编号为空或仅有空白时，下一步和最终提交均拦截：%j", (code) => {
+    const form = validWellForm();
+    form.code = code;
+
+    expect(validateBasicStep(form)).toEqual(["请填写设施编号"]);
+    expect(validateSubmitStep(form)).toEqual(["请填写设施编号"]);
+
+    form.code = "01号";
+    expect(validateBasicStep(form)).toEqual([]);
+    expect(validateSubmitStep(form)).toEqual([]);
   });
 
   it("正向题选择否时要求说明、照片和计划日期", () => {

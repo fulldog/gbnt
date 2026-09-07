@@ -40,7 +40,7 @@ func TestMiniappIssueNamesAreBatchedWithoutExposingUserFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(encoded), `"rectify_round":1`) || !strings.Contains(string(encoded), `"report_user_name":"巡查员"`) || strings.Contains(string(encoded), `"phone"`) {
+	if !strings.Contains(string(encoded), `"rectify_round":1`) || !strings.Contains(string(encoded), `"report_user_name":"巡查员"`) || strings.Contains(string(encoded), `"phone"`) || strings.Contains(string(encoded), `"assignee_user_phone"`) {
 		t.Fatalf("契约错误: %s", encoded)
 	}
 }

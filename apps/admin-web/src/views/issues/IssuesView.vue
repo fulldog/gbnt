@@ -35,9 +35,10 @@ const tablePage = useTemplateRef<HTMLElement>("tablePage");
 const filtersVisible = shallowRef(true);
 const columns = [
   { key: "type", label: "类型" }, { key: "year", label: "年度" }, { key: "code", label: "设施编号" },
-  { key: "org", label: "所属组织" }, { key: "address", label: "定位地址" }, { key: "reporter", label: "上报人" },
-  { key: "assignee", label: "整改人" }, { key: "plan", label: "计划完成" }, { key: "countdown", label: "倒计时" },
-  { key: "status", label: "状态" }, { key: "created", label: "创建时间" },
+  { key: "org", label: "行政区划" }, { key: "address", label: "定位地址" }, { key: "reporter", label: "上报人" },
+  { key: "assignee", label: "整改责任人" }, { key: "assigneePhone", label: "联系电话" },
+  { key: "created", label: "排查日期" }, { key: "plan", label: "计划完成" },
+  { key: "countdown", label: "倒计时" }, { key: "status", label: "状态" },
 ];
 const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
@@ -189,7 +190,7 @@ onMounted(() => {
       </ElFormItem>
       <template #advanced>
         <ElFormItem label="项目年度"><ElSelect v-model="filters.project_year" clearable placeholder="全部年度"><ElOption v-for="year in PROJECT_YEARS" :key="year" :label="`${year} 年`" :value="year" /></ElSelect></ElFormItem>
-        <ElFormItem label="所属组织"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部组织" /></ElFormItem>
+        <ElFormItem label="行政区划"><OrgTreeSelect v-model="filters.org_id" :orgs="orgs" :disabled="!orgsReady" placeholder="全部行政区划" /></ElFormItem>
         <ElFormItem label="关键字"><ElInput v-model="filters.keyword" clearable placeholder="问题编号、设施编号或地址" /></ElFormItem>
       </template>
     </QueryPanel>
@@ -217,12 +218,14 @@ onMounted(() => {
         </ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('year')" prop="project_year" label="年度" width="80" align="center" />
         <ElTableColumn v-if="visibleColumns.includes('code')" prop="code" label="设施编号" min-width="120" show-overflow-tooltip  align="center"/>
-        <ElTableColumn v-if="visibleColumns.includes('org')" label="所属组织" min-width="200" show-overflow-tooltip align="center">
+        <ElTableColumn v-if="visibleColumns.includes('org')" label="行政区划" min-width="200" show-overflow-tooltip align="center">
           <template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template>
         </ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('address')" prop="address" label="定位地址" min-width="220" show-overflow-tooltip  align="center"/>
         <ElTableColumn v-if="visibleColumns.includes('reporter')" label="上报人" min-width="100" align="center"><template #default="scope">{{ scope.row.reporter_name || displayUser(scope.row.report_user_id, scope.row.report_user_name) }}</template></ElTableColumn>
-        <ElTableColumn v-if="visibleColumns.includes('assignee')" label="整改人" min-width="100" align="center"><template #default="scope">{{ displayUser(scope.row.assignee_user, scope.row.assignee_user_name) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('assignee')" label="整改责任人" min-width="120" align="center"><template #default="scope">{{ displayUser(scope.row.assignee_user, scope.row.assignee_user_name) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('assigneePhone')" label="联系电话" min-width="140" align="center"><template #default="scope">{{ scope.row.assignee_user_phone?.trim() || "—" }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('created')" label="排查日期" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('plan')" label="计划完成" min-width="135" align="center">
           <template #default="scope">
             {{ issuePlanDateDisplay(scope.row.plan_date) }}
@@ -234,7 +237,6 @@ onMounted(() => {
           </template>
         </ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="100" align="center"><template #default="scope"><IssueStatusTag :status="scope.row.status" /></template></ElTableColumn>
-        <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
         <ElTableColumn label="操作" width="170" fixed="right" align="center">
           <template #default="scope">
             <div class="table-actions">

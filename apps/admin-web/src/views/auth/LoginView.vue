@@ -142,6 +142,13 @@ onMounted(() => {
 .login-form :deep(.el-input__wrapper) { min-height: 44px; border-radius: 6px; padding: 0 14px; box-shadow: 0 0 0 1px #e2e8f0 inset; }
 .login-form :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 1px var(--gbnt-primary) inset; }
 .login-form :deep(.el-input__inner) { height: 44px; font-size: 14px; }
+/* 裁剪浏览器自动填充底色，避免覆盖外层输入框描边。 */
+.login-form :deep(.el-input__inner:is(:autofill, :-webkit-autofill)) {
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: var(--el-input-text-color, var(--el-text-color-regular));
+  caret-color: var(--el-input-text-color, var(--el-text-color-regular));
+}
 .login-remember { margin: 0 0 18px; }
 .login-remember :deep(.el-checkbox) { height: 22px; color: #6b7a90; }
 .login-submit { width: 32%; height: 44px; padding: 0; }

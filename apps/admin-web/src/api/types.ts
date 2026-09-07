@@ -12,6 +12,8 @@ export interface OrgDisplayFields {
 export type AdminIssue = Issue & OrgDisplayFields & {
   report_user_name?: string | null;
   assignee_user_name?: string | null;
+  /** 整改责任人账号登记的联系电话；未指派、人员缺失或电话未填写时为 null，旧服务可缺省。 */
+  assignee_user_phone?: string | null;
 };
 export type AdminIssueListResult = Omit<IssueListResult, "list"> & { list: AdminIssue[] };
 export type AdminStreetLedgerRow = StreetLedgerRow & OrgDisplayFields;

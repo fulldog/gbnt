@@ -16,7 +16,7 @@ type MiniappIssueVO struct {
 
 // MarshalJSON 保留基础问题、附件与轮次字段，显式展开小程序关联名称。
 func (v MiniappIssueVO) MarshalJSON() ([]byte, error) {
-	base, err := v.AdminIssueVO.MarshalJSON()
+	base, err := v.AdminIssueVO.marshalJSON(false)
 	if err != nil || v.DisplayWarning == "" {
 		return base, err
 	}

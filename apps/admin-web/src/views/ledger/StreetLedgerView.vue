@@ -64,9 +64,6 @@ onMounted(() => { void Promise.all([loadOrgs(), load()]); });
       <AsyncError v-if="optionsError" :message="optionsError" @retry="loadOrgs" />
       <AsyncError v-if="loadError" :message="loadError" @retry="load" />
     </template>
-    <template #notice>
-      <p class="ledger-report-notice">按上报日期筛选，按建设年份、街道、新村/社区分组。已上报数量为记录条数，非现有设施总量；道路树木与独立林网分别统计。— 表示未知，不代表 0；完整统计口径随表导出。</p>
-    </template>
-    <StreetLedgerSheet :rows="rows" :title="title" :notes="report?.notes ?? []" :empty-text="emptyText" />
+    <StreetLedgerSheet :rows="rows" :title="title" :empty-text="emptyText" />
   </LedgerReportFrame>
 </template>

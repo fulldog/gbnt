@@ -16,6 +16,9 @@ function normalizeAdminIssue(value: unknown): AdminIssue {
   const row = responseRecord(value, "排查整改");
   responseInteger(row.id, "问题 ID", 1);
   checkDisplayFields(row, ["report_user_name", "assignee_user_name", "org_name", "org_path"]);
+  if (row.assignee_user_phone !== undefined && row.assignee_user_phone !== null && typeof row.assignee_user_phone !== "string") {
+    throw new Error("整改责任人联系电话格式异常，请刷新重试");
+  }
   // 兼容升级前服务，明确轮次后历史记录只能归属其返回的轮次。
   const normalized: Record<string, unknown> = {
     ...row,
