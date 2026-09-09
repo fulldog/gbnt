@@ -40,7 +40,7 @@ function validate(): string {
   if (newPassword.value !== confirmPassword.value) return "两次输入的新密码不一致";
   if (oldPassword.value === newPassword.value) return "新密码不能与原密码相同";
   if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,14}$/.test(newPassword.value)) {
-    return "新密码须为 6–14 位字母与数字组合";
+    return "新密码须为 6～14 位字母与数字组合";
   }
   return "";
 }
@@ -152,7 +152,7 @@ onLoad(async () => {
         </view>
       </view>
 
-      <text class="password-card__hint">新密码须为 6–14 位字母与数字组合，修改后需要重新登录。</text>
+      <text class="password-card__hint">新密码须为 6～14 位字母与数字组合，修改后需要重新登录。</text>
       <button
         class="password-card__submit"
         form-type="submit"

@@ -5,6 +5,7 @@ import { createIssuesApi } from "@/api/issues";
 import { createMineApi } from "@/api/mine";
 import { createAuthApi } from "@/api/auth";
 import { parseAuthUser, parseIssue, parseIssuePage, parseMineIssuePage, parseMineStats, parseRegions } from "@/api/response";
+import { createRegionsApi } from "@/api/regions";
 import { issueTypeInfoRows, issueAbnormalQuizzes, issueChecklistPhotos, issueReporter } from "@/utils/issue-display";
 
 function rawIssue(): Record<string, any> {
@@ -176,5 +177,14 @@ describe("formal miniapp API methods validate actual transport results", () => {
   it("rejects malformed slider results before the UI considers verification successful", async () => {
     await expect(createAuthApi(clientFor({ slider_id: "", expire_seconds: 60 }).client).startSlider()).rejects.toThrow("滑动会话");
     await expect(createAuthApi(clientFor({ pass_token: null, expire_seconds: 60 }).client).finishSlider({ slider_id: "fixture", duration_ms: 500 })).rejects.toThrow("验证凭证");
+  });
+
+  it("loads an org subtree by id using the same region envelope", async () => {
+    const region = { id: 2, name: "甲街道", type: "street", parent_id: 1, sort: 0, children: [{ id: 3, name: "乙村", type: "village", parent_id: 2, sort: 1, children: [] }] };
+    const { client, request } = clientFor({ list: [region] });
+    const result = await createRegionsApi(client).getSubtree(2);
+    expect(result.list[0].name).toBe("甲街道");
+    expect(result.list[0].children[0].name).toBe("乙村");
+    expect(request.mock.calls[0][0].url).toContain("/api/app/regions/2");
   });
 });

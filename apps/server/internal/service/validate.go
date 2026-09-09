@@ -28,16 +28,14 @@ func ValidateOptionalCNPhone(phone string) error {
 	return ValidateCNPhone(phone)
 }
 
-// ValidateSetPassword 设置/修改密码：长度大于 8，仅 ASCII 字母与数字，须同时含字母和数字。
+// ValidateSetPassword 设置/修改密码：长度 6～14 位，仅 ASCII 字母与数字，须同时含字母和数字。
 func ValidateSetPassword(pwd string) error {
 	if pwd == "" {
 		return errors.New("请填写密码")
 	}
-	if len(pwd) > 72 {
-		return errors.New("密码过长")
-	}
-	if len(pwd) <= 8 {
-		return errors.New("密码长度须大于 8 位")
+	n := len(pwd)
+	if n < 6 || n > 14 {
+		return errors.New("密码长度须为 6～14 位")
 	}
 	hasLetter, hasDigit := false, false
 	for _, r := range pwd {

@@ -8,14 +8,19 @@ func TestValidateSetPassword(t *testing.T) {
 		pwd string
 		ok  bool
 	}{
-		{"Abc123456", true},
-		{"a1B2c3D4e", true},
-		{"Abc12345", false},      // 8
-		{"Ab12", false},          // too short
-		{"abcdefghijklm", false}, // no digit
-		{"123456789", false},     // no letter
-		{"Abc12345!", false},     // special
-		{"Abc 12345", false},     // space
+		{"Ab12c3", true},           // 6
+		{"Abc123456", true},        // 9
+		{"a1B2c3D4e5f6", true},     // 12
+		{"a1B2c3D4e5f6g", true},    // 13
+		{"a1B2c3D4e5f6g7", true},   // 14
+		{"Abc12345", true},         // 8
+		{"Ab12c", false},           // 5
+		{"a1B2c3D4e5f6g7h", false}, // 15
+		{"Ab12", false},            // too short
+		{"abcdefghijklmn", false},  // 14 letters, no digit
+		{"123456789", false},       // no letter
+		{"Abc12345!", false},       // special
+		{"Abc 123", false},         // space
 		{"", false},
 	}
 	for _, tc := range cases {

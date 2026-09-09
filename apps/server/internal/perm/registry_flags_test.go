@@ -12,6 +12,7 @@ func TestRegistryAuthFlags(t *testing.T) {
 		"POST /api/attachments/images": {true, false},
 		"POST /api/app/auth/login":     {false, false},
 		"GET /api/app/todos":           {true, false},
+		"GET /api/app/regions/:id":     {true, false},
 		"GET /api/issues":              {true, true},
 		"GET /uploads/*filepath":       {false, false},
 	}

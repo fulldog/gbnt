@@ -68,7 +68,7 @@ func (s *AuthService) bumpLoginTokenVer(user *model.SysUser) error {
 // ChangePasswordReq 本人修改密码。
 type ChangePasswordReq struct {
 	OldPassword     string `json:"old_password"`     // 原密码（必填）
-	NewPassword     string `json:"new_password"`     // 新密码（必填；长度大于 8，仅字母和数字且须同时包含，区分大小写）
+	NewPassword     string `json:"new_password"`     // 新密码（必填；6～14 位，仅字母和数字且须同时包含，区分大小写）
 	ConfirmPassword string `json:"confirm_password"` // 确认新密码（必填；须与 new_password 一致）
 }
 

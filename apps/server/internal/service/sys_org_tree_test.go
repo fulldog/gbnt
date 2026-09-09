@@ -31,6 +31,14 @@ func TestBuildOrgTree(t *testing.T) {
 	if street.Children[0].Type != model.OrgTypeVillage || street.Children[0].Name != "村A1" {
 		t.Fatalf("village = %+v", street.Children[0])
 	}
+
+	sub := FindOrgSubtree(tree, 2)
+	if sub == nil || sub.Name != "区A" || len(sub.Children) != 1 || sub.Children[0].Name != "街道A" {
+		t.Fatalf("subtree = %+v", sub)
+	}
+	if FindOrgSubtree(tree, 99) != nil {
+		t.Fatal("缺失组织应返回 nil")
+	}
 }
 
 func TestBuildOrgTreeEmpty(t *testing.T) {

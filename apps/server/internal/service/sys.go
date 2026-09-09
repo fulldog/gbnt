@@ -21,6 +21,9 @@ type SysService struct {
 	Perm *perm.Service
 }
 
+// ErrOrgNotFound 指定组织不存在或已删除。
+var ErrOrgNotFound = errors.New("组织不存在")
+
 func (s *SysService) db(ctx context.Context) *gorm.DB {
 
 	if ctx == nil {
@@ -56,7 +59,7 @@ type OrgTreeNode struct {
 // UserInput 创建/更新用户入参。
 type UserInput struct {
 	Username string `json:"username"` // 登录账号（新建必填）
-	Password string `json:"password"` // 明文密码（新建空则=账户名且不套复杂度；有值则须大于 8 位字母+数字）
+	Password string `json:"password"` // 明文密码（新建空则=账户名且不套复杂度；有值则须 6～14 位字母+数字）
 	Name     string `json:"name"`     // 姓名
 	Phone    string `json:"phone"`    // 手机号（选填；有值须为中国大陆 11 位）
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
@@ -128,6 +131,36 @@ func BuildOrgTree(list []model.SysOrg) []OrgTreeNode {
 		return []OrgTreeNode{}
 	}
 	return tree
+}
+
+// ListOrgSubtree 返回指定组织及其全部下属组成的子树（含自身）。
+func (s *SysService) ListOrgSubtree(orgID uint64) (*OrgTreeNode, error) {
+	if orgID == 0 {
+		return nil, ErrOrgNotFound
+	}
+	tree, err := s.ListOrgTree()
+	if err != nil {
+		return nil, err
+	}
+	node := FindOrgSubtree(tree, orgID)
+	if node == nil {
+		return nil, ErrOrgNotFound
+	}
+	return node, nil
+}
+
+// FindOrgSubtree 在组织树中定位 id 对应节点（含其 children）；未找到返回 nil。
+func FindOrgSubtree(tree []OrgTreeNode, id uint64) *OrgTreeNode {
+	for i := range tree {
+		if tree[i].ID == id {
+			n := tree[i]
+			return &n
+		}
+		if found := FindOrgSubtree(tree[i].Children, id); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 func (s *SysService) CreateOrg(ctx context.Context, in OrgCreateInput) (*model.SysOrg, error) {

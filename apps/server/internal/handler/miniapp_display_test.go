@@ -66,3 +66,36 @@ func TestAppCommittedOperationReturnsExplicitDisplayWarning(t *testing.T) {
 		t.Fatalf("已完成写入不能诱导重复提交: %d %s", w.Code, body)
 	}
 }
+
+func TestAppRegionSubtreeReturnsSelfAndDescendants(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "FROM `sys_orgs`",
+		Columns:  []string{"id", "parent_id", "name", "type", "sort"},
+		Rows: [][]driver.Value{
+			{int64(1), int64(0), "根", "root", int64(1)},
+			{int64(2), int64(1), "区", "district", int64(2)},
+			{int64(3), int64(2), "街道", "street", int64(3)},
+		},
+	})
+	r := gin.New()
+	RegisterApp(r, &Deps{Sys: &service.SysService{DB: db}})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/app/regions/2", nil))
+	body := w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, `"name":"区"`) || !strings.Contains(body, `"name":"街道"`) || strings.Contains(body, `"name":"根"`) {
+		t.Fatalf("子树应含自身与下属、不含祖先: %d %s", w.Code, body)
+	}
+}
+
+func TestAppRegionSubtreeMissingIsNotFound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewQueryDB(t, testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "parent_id", "name", "type", "sort"}, Rows: [][]driver.Value{{int64(1), int64(0), "根", "root", int64(1)}}})
+	r := gin.New()
+	RegisterApp(r, &Deps{Sys: &service.SysService{DB: db}})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/app/regions/9", nil))
+	if w.Code != 404 || !strings.Contains(w.Body.String(), "组织不存在") {
+		t.Fatalf("缺失组织应为 404: %d %s", w.Code, w.Body.String())
+	}
+}

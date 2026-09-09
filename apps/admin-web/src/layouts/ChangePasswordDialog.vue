@@ -21,7 +21,7 @@ const rules: FormRules<typeof form> = {
   old_password: [{ required: true, message: "请输入当前密码", trigger: "blur" }],
   new_password: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "新密码至少 6 位", trigger: "blur" },
+    { min: 6, max: 14, message: "新密码须为 6～14 位", trigger: "blur" },
   ],
   confirm_password: [
     { required: true, message: "请再次输入新密码", trigger: "blur" },
@@ -69,10 +69,10 @@ async function submit(): Promise<void> {
         <ElInput v-model="form.old_password" type="password" show-password autocomplete="current-password" />
       </ElFormItem>
       <ElFormItem label="新密码" prop="new_password">
-        <ElInput v-model="form.new_password" type="password" show-password autocomplete="new-password" />
+        <ElInput v-model="form.new_password" type="password" show-password autocomplete="new-password" maxlength="14" />
       </ElFormItem>
       <ElFormItem label="确认新密码" prop="confirm_password">
-        <ElInput v-model="form.confirm_password" type="password" show-password autocomplete="new-password" />
+        <ElInput v-model="form.confirm_password" type="password" show-password autocomplete="new-password" maxlength="14" />
       </ElFormItem>
     </ElForm>
     <template #footer>

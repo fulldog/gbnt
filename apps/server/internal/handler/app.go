@@ -36,6 +36,8 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 		app.GET("/todos", d.AppListTodos)
 		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
+		// GET /api/app/regions/:id — 指定组织及其下属树
+		app.GET("/regions/:id", d.AppRegionSubtree)
 
 		issues := app.Group("/issues")
 		{
@@ -213,6 +215,28 @@ func (d *Deps) AppRegions(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"list": tree})
+}
+
+// AppRegionSubtree 按组织 ID 返回该节点及其全部下属（嵌套 children，含自身）。
+func (d *Deps) AppRegionSubtree(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if id == 0 {
+		response.Fail(c, 400, response.CodeBadReq, "无效的 id")
+		return
+	}
+	node, err := d.Sys.ListOrgSubtree(id)
+	if err != nil {
+		if errors.Is(err, service.ErrOrgNotFound) {
+			response.Fail(c, 404, response.CodeNotFound, err.Error())
+			return
+		}
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"list": []service.OrgTreeNode{*node}})
 }
 
 // AppGetIssue 小程序问题详情。

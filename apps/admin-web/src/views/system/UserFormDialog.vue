@@ -107,7 +107,7 @@ function updateStatus(value: string | number | boolean | undefined): void {
           <ElInput v-model="form.username" :disabled="Boolean(user)" maxlength="64" autocomplete="off" />
         </ElFormItem>
         <ElFormItem :label="user ? '新密码' : '初始密码'">
-          <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '留空时初始密码与账号一致'" type="password" show-password autocomplete="new-password" />
+          <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '留空时初始密码与账号一致'" type="password" show-password autocomplete="new-password" maxlength="14" />
         </ElFormItem>
         <ElFormItem label="姓名" prop="name"><ElInput v-model="form.name" maxlength="64" /></ElFormItem>
         <ElFormItem label="手机号"><ElInput v-model="form.phone" maxlength="32" /></ElFormItem>
