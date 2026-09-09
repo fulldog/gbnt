@@ -60,7 +60,12 @@ function preview(urls: readonly string[], index: number): void {
         <text class="issue-card__tag">{{ issueOrganization(issue) }}</text>
       </view>
       <view class="issue-card__location" :class="{ 'issue-card__location--muted': !hasLocation }" role="button" :aria-label="hasLocation ? '查看地图' : '暂无坐标'" @tap.stop="hasLocation && emit('map', issue.id)">
-        <view class="issue-card__pin" aria-hidden="true" />
+        <image
+          class="issue-card__pin"
+          :src="hasLocation ? '/static/icons/map-pin-primary.svg' : '/static/icons/map-pin-muted.svg'"
+          mode="aspectFit"
+          aria-hidden="true"
+        />
         <text class="issue-card__address">{{ issue.address || '未填写地址' }}</text>
       </view>
     </view>
@@ -169,24 +174,11 @@ function preview(urls: readonly string[], index: number): void {
   color: var(--gb-color-text-secondary);
 }
 .issue-card__pin {
-  position: relative;
+  display: block;
   flex: none;
-  width: 11px;
+  width: 14px;
   height: 14px;
-  margin: 2px 1px 0;
-  border: 1px solid currentColor;
-  border-radius: 7px 7px 7px 0;
-  transform: rotate(-45deg);
-}
-.issue-card__pin::after {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 3px;
-  height: 3px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  content: '';
+  margin-top: 2px;
 }
 .issue-card__address {
   display: -webkit-box;

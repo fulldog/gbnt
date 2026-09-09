@@ -3,8 +3,6 @@ import PageTopInset from "@/components/common/PageTopInset.vue";
 import type { IssueStatus, IssueType, OrgTreeNode } from "@gbnt/api-client";
 import {
   onLoad,
-  onPullDownRefresh,
-  onReachBottom,
   onShareAppMessage,
   onShareTimeline,
   onShow,
@@ -47,6 +45,7 @@ const today = useBusinessToday();
 const regionTree = shallowRef<OrgTreeNode[]>([]);
 const regionLoading = shallowRef(false);
 const regionError = shallowRef("");
+const refresherTriggered = shallowRef(false);
 let showCount = 0;
 let regionRequestSequence = 0;
 
@@ -127,6 +126,16 @@ function previewImages(urls: string[], index: number): void {
   uni.previewImage({ current: urls[index], urls });
 }
 
+async function refreshList(): Promise<void> {
+  if (refresherTriggered.value) return;
+  refresherTriggered.value = true;
+  try {
+    await Promise.all([loadRegions(), reload()]);
+  } finally {
+    refresherTriggered.value = false;
+  }
+}
+
 onShareAppMessage(() => ({
   title: "农田专项整治 · 待办任务",
   path: "/pages/todo/index",
@@ -146,20 +155,9 @@ onShow(() => {
   if (showCount > 1) void reload();
 });
 
-onPullDownRefresh(async () => {
-  try {
-    await Promise.all([loadRegions(), reload()]);
-  } finally {
-    uni.stopPullDownRefresh();
-  }
-});
-
-onReachBottom(() => {
-  void loadMore();
-});
-
 onUnload(() => {
   regionRequestSequence += 1;
+  refresherTriggered.value = false;
   invalidate();
 });
 </script>
@@ -228,62 +226,75 @@ onUnload(() => {
       </view>
     </view>
 
-    <view class="todo-page__content">
-      <view v-if="items.length && hasActiveFilters" class="todo-page__summary">
-        <text>共 {{ total }} 条记录</text>
-        <button v-if="hasActiveFilters" class="todo-page__reset" @tap="clearAllFilters">
-          清除筛选
-        </button>
-      </view>
-      <view v-if="isStale" class="todo-page__stale" role="alert">
-        刷新失败，当前显示上次加载的数据和总数。{{ error }}
-      </view>
-
-      <view v-if="isInitialLoading" class="todo-page__state">
-        <view class="todo-page__spinner" />
-        <text>正在加载待办…</text>
-      </view>
-
-      <view v-else-if="!items.length && error" class="todo-page__state">
-        <text class="todo-page__state-title">待办加载失败</text>
-        <text class="todo-page__state-text">{{ error }}</text>
-        <button class="todo-page__retry" @tap="retry()">重新加载</button>
-      </view>
-
-      <view v-else-if="!items.length" class="todo-page__state">
-        <view class="todo-page__empty-icon" aria-hidden="true">
-          <image class="todo-page__empty-check" src="/static/icons/check-primary.svg" mode="aspectFit" />
+    <scroll-view
+      class="todo-page__scroll"
+      scroll-y
+      enhanced
+      :show-scrollbar="false"
+      refresher-enabled
+      refresher-background="transparent"
+      :refresher-triggered="refresherTriggered"
+      :lower-threshold="80"
+      @refresherrefresh="refreshList"
+      @scrolltolower="loadMore()"
+    >
+      <view class="todo-page__content">
+        <view v-if="items.length && hasActiveFilters" class="todo-page__summary">
+          <text>共 {{ total }} 条记录</text>
+          <button v-if="hasActiveFilters" class="todo-page__reset" @tap="clearAllFilters">
+            清除筛选
+          </button>
         </view>
-        <text class="todo-page__state-title">暂无符合条件的记录</text>
-        <text class="todo-page__state-text">可以调整筛选条件，或下拉刷新后重试。</text>
-        <button v-if="hasActiveFilters" class="todo-page__retry" @tap="clearAllFilters">
-          清除筛选
-        </button>
-      </view>
+        <view v-if="isStale" class="todo-page__stale" role="alert">
+          刷新失败，当前显示上次加载的数据和总数。{{ error }}
+        </view>
 
-      <view v-else class="todo-page__list">
-        <IssueCard
-          v-for="issue in items"
-          :key="issue.id"
-          :issue="issue"
-          :today="today"
-          @open="openDetail"
-          @map="openMap"
-          @preview="previewImages"
-        />
-      </view>
+        <view v-if="isInitialLoading" class="todo-page__state">
+          <view class="todo-page__spinner" />
+          <text>正在加载待办…</text>
+        </view>
 
-      <view v-if="items.length" class="todo-page__footer-state">
-        <text>共 {{ total }} 条记录 · </text>
-        <text v-if="isRefreshing">正在刷新…</text>
-        <text v-else-if="isLoadingMore">正在加载更多…</text>
-        <button v-else-if="error" class="todo-page__footer-retry" @tap="retry()">
-          {{ isStale ? '刷新失败' : error }}，点击重试
-        </button>
-        <text v-else-if="!hasMore">已经到底了</text>
-        <text v-else>上拉加载更多</text>
+        <view v-else-if="!items.length && error" class="todo-page__state">
+          <text class="todo-page__state-title">待办加载失败</text>
+          <text class="todo-page__state-text">{{ error }}</text>
+          <button class="todo-page__retry" @tap="retry()">重新加载</button>
+        </view>
+
+        <view v-else-if="!items.length" class="todo-page__state">
+          <view class="todo-page__empty-icon" aria-hidden="true">
+            <image class="todo-page__empty-check" src="/static/icons/check-primary.svg" mode="aspectFit" />
+          </view>
+          <text class="todo-page__state-title">暂无符合条件的记录</text>
+          <text class="todo-page__state-text">可以调整筛选条件，或下拉刷新后重试。</text>
+          <button v-if="hasActiveFilters" class="todo-page__retry" @tap="clearAllFilters">
+            清除筛选
+          </button>
+        </view>
+
+        <view v-else class="todo-page__list">
+          <IssueCard
+            v-for="issue in items"
+            :key="issue.id"
+            :issue="issue"
+            :today="today"
+            @open="openDetail"
+            @map="openMap"
+            @preview="previewImages"
+          />
+        </view>
+
+        <view v-if="items.length" class="todo-page__footer-state">
+          <text>共 {{ total }} 条记录 · </text>
+          <text v-if="isRefreshing">正在刷新…</text>
+          <text v-else-if="isLoadingMore">正在加载更多…</text>
+          <button v-else-if="error" class="todo-page__footer-retry" @tap="retry()">
+            {{ isStale ? '刷新失败' : error }}，点击重试
+          </button>
+          <text v-else-if="!hasMore">已经到底了</text>
+          <text v-else>上拉加载更多</text>
+        </view>
       </view>
-    </view>
+    </scroll-view>
   </view>
 </template>
 
@@ -299,13 +310,17 @@ onUnload(() => {
 }
 
 .todo-page {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   background: linear-gradient(180deg, #e8f1fb 0, #f4f7fb 42%, #f4f7fb 100%);
 }
 
 .todo-page__toolbar {
   position: relative;
   z-index: 10;
+  flex: none;
   padding: 16px 16px 10px;
 }
 
@@ -418,6 +433,13 @@ onUnload(() => {
   flex: 0 0 14px;
   width: 14px;
   height: 14px;
+}
+
+.todo-page__scroll {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+  width: 100%;
 }
 
 .todo-page__content {
