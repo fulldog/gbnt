@@ -7,7 +7,7 @@ var apisApp = []Entry{
 	{Method: "POST", Path: "/api/app/auth/logout", Name: "小程序退出登录", Module: "app.session", Action: "edit", Sort: 3, IsJWT: true, IsRBAC: false},
 	{Method: "GET", Path: "/api/app/todos", Name: "小程序待办列表", Module: "app.todo", Action: "view", Sort: 1, IsJWT: true, IsRBAC: false},
 	{Method: "GET", Path: "/api/app/regions", Name: "小程序组织树", Module: "app.region", Action: "view", Sort: 1, IsJWT: true, IsRBAC: false},
-	{Method: "GET", Path: "/api/app/regions/:id", Name: "小程序组织及下属", Module: "app.region", Action: "view", Sort: 2, IsJWT: true, IsRBAC: false},
+	{Method: "GET", Path: "/api/app/regions/:id", Name: "小程序组织整树", Module: "app.region", Action: "view", Sort: 2, IsJWT: true, IsRBAC: false},
 	{Method: "POST", Path: "/api/app/issues", Name: "小程序上报问题", Module: "app.issue", Action: "create", Sort: 1, IsJWT: true, IsRBAC: false},
 	{Method: "GET", Path: "/api/app/issues/:id", Name: "小程序问题详情", Module: "app.issue", Action: "view", Sort: 2, IsJWT: true, IsRBAC: false},
 	{Method: "POST", Path: "/api/app/issues/:id/rectify", Name: "小程序提交整改", Module: "app.issue", Action: "edit", Sort: 3, IsJWT: true, IsRBAC: false},

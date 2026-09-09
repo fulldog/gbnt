@@ -179,12 +179,16 @@ describe("formal miniapp API methods validate actual transport results", () => {
     await expect(createAuthApi(clientFor({ pass_token: null, expire_seconds: 60 }).client).finishSlider({ slider_id: "fixture", duration_ms: 500 })).rejects.toThrow("验证凭证");
   });
 
-  it("loads an org subtree by id using the same region envelope", async () => {
-    const region = { id: 2, name: "甲街道", type: "street", parent_id: 1, sort: 0, children: [{ id: 3, name: "乙村", type: "village", parent_id: 2, sort: 1, children: [] }] };
-    const { client, request } = clientFor({ list: [region] });
+  it("loads a full region tree by org id using the same region envelope", async () => {
+    const root = {
+      id: 1, name: "根", type: "root", parent_id: 0, sort: 0,
+      children: [{ id: 2, name: "甲街道", type: "street", parent_id: 1, sort: 0, children: [{ id: 3, name: "乙村", type: "village", parent_id: 2, sort: 1, children: [] }] }],
+    };
+    const { client, request } = clientFor({ list: [root] });
     const result = await createRegionsApi(client).getSubtree(2);
-    expect(result.list[0].name).toBe("甲街道");
-    expect(result.list[0].children[0].name).toBe("乙村");
+    expect(result.list[0].name).toBe("根");
+    expect(result.list[0].children[0].name).toBe("甲街道");
+    expect(result.list[0].children[0].children[0].name).toBe("乙村");
     expect(request.mock.calls[0][0].url).toContain("/api/app/regions/2");
   });
 });

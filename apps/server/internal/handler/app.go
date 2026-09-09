@@ -36,7 +36,7 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 		app.GET("/todos", d.AppListTodos)
 		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
-		// GET /api/app/regions/:id — 指定组织及其下属树
+		// GET /api/app/regions/:id — 组织存在则返回完整树（含上级与全部下级）
 		app.GET("/regions/:id", d.AppRegionSubtree)
 
 		issues := app.Group("/issues")
@@ -217,7 +217,7 @@ func (d *Deps) AppRegions(c *gin.Context) {
 	response.OK(c, gin.H{"list": tree})
 }
 
-// AppRegionSubtree 按组织 ID 返回该节点及其全部下属（嵌套 children，含自身）。
+// AppRegionSubtree 校验组织存在后返回完整组织树（含该节点上级与全部下级）。
 func (d *Deps) AppRegionSubtree(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -227,7 +227,7 @@ func (d *Deps) AppRegionSubtree(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "无效的 id")
 		return
 	}
-	node, err := d.Sys.ListOrgSubtree(id)
+	tree, err := d.Sys.ListOrgSubtree(id)
 	if err != nil {
 		if errors.Is(err, service.ErrOrgNotFound) {
 			response.Fail(c, 404, response.CodeNotFound, err.Error())
@@ -236,7 +236,7 @@ func (d *Deps) AppRegionSubtree(c *gin.Context) {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	response.OK(c, gin.H{"list": []service.OrgTreeNode{*node}})
+	response.OK(c, gin.H{"list": tree})
 }
 
 // AppGetIssue 小程序问题详情。

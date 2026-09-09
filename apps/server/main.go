@@ -75,7 +75,7 @@ func main() {
 	if err := permSvc.ReloadAPIIndex(); err != nil {
 		logs.Error.Fatal("perm index", zap.Error(err))
 	}
-	sysSvc := &service.SysService{DB: db, Perm: permSvc}
+	sysSvc := &service.SysService{DB: db, Perm: permSvc, Cache: memCache}
 	deps := &handler.Deps{
 		DB:      db,
 		JWT:     jm,

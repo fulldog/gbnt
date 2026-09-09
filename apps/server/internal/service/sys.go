@@ -9,9 +9,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"gbnt/apps/server/internal/cachex"
 	"gbnt/apps/server/internal/model"
 	"gbnt/apps/server/internal/perm"
 )
+
+const cacheKeySysOrgs = "sys_orgs:list"
 
 // SysService 系统配置：组织/用户/角色。
 
@@ -19,6 +22,8 @@ type SysService struct {
 	DB *gorm.DB
 
 	Perm *perm.Service
+	// Cache 进程内缓存；组织列表键 sys_orgs:list，后台改树后删除。
+	Cache *cachex.Store
 }
 
 // ErrOrgNotFound 指定组织不存在或已删除。
@@ -36,14 +41,33 @@ func (s *SysService) db(ctx context.Context) *gorm.DB {
 
 }
 
+// ListOrgs 返回扁平组织列表；命中进程内缓存则不查库，后台改树后失效。
 func (s *SysService) ListOrgs() ([]model.SysOrg, error) {
-
+	if v, ok := s.Cache.Get(cacheKeySysOrgs); ok {
+		if list, ok := v.([]model.SysOrg); ok {
+			return cloneSysOrgs(list), nil
+		}
+	}
 	var list []model.SysOrg
+	if err := s.DB.Order("sort ASC, id ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	s.storeOrgList(list)
+	return cloneSysOrgs(list), nil
+}
 
-	err := s.DB.Order("sort ASC, id ASC").Find(&list).Error
+func (s *SysService) storeOrgList(list []model.SysOrg) {
+	s.Cache.Set(cacheKeySysOrgs, cloneSysOrgs(list), cachex.NoExpiration)
+}
 
-	return list, err
+func (s *SysService) invalidateOrgListCache() {
+	s.Cache.Delete(cacheKeySysOrgs)
+}
 
+func cloneSysOrgs(list []model.SysOrg) []model.SysOrg {
+	out := make([]model.SysOrg, len(list))
+	copy(out, list)
+	return out
 }
 
 // OrgTreeNode 组织树节点。
@@ -133,8 +157,8 @@ func BuildOrgTree(list []model.SysOrg) []OrgTreeNode {
 	return tree
 }
 
-// ListOrgSubtree 返回指定组织及其全部下属组成的子树（含自身）。
-func (s *SysService) ListOrgSubtree(orgID uint64) (*OrgTreeNode, error) {
+// ListOrgSubtree 校验组织存在后返回完整组织树（含该节点的全部上级与下级，以及树中其它节点）。
+func (s *SysService) ListOrgSubtree(orgID uint64) ([]OrgTreeNode, error) {
 	if orgID == 0 {
 		return nil, ErrOrgNotFound
 	}
@@ -142,11 +166,10 @@ func (s *SysService) ListOrgSubtree(orgID uint64) (*OrgTreeNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := FindOrgSubtree(tree, orgID)
-	if node == nil {
+	if FindOrgSubtree(tree, orgID) == nil {
 		return nil, ErrOrgNotFound
 	}
-	return node, nil
+	return tree, nil
 }
 
 // FindOrgSubtree 在组织树中定位 id 对应节点（含其 children）；未找到返回 nil。
@@ -214,6 +237,7 @@ func (s *SysService) CreateOrg(ctx context.Context, in OrgCreateInput) (*model.S
 	if err := s.db(ctx).Create(o).Error; err != nil {
 		return nil, err
 	}
+	s.invalidateOrgListCache()
 	return o, nil
 }
 
@@ -230,6 +254,7 @@ func (s *SysService) UpdateOrg(ctx context.Context, id uint64, in OrgUpdateInput
 		return nil, err
 	}
 	o.Name = name
+	s.invalidateOrgListCache()
 	return &o, nil
 }
 
@@ -248,7 +273,11 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 	if childCount > 0 {
 		return errors.New("请先删除下级组织")
 	}
-	return s.db(ctx).Delete(&model.SysOrg{}, id).Error
+	if err := s.db(ctx).Delete(&model.SysOrg{}, id).Error; err != nil {
+		return err
+	}
+	s.invalidateOrgListCache()
+	return nil
 }
 
 // ListUsers 查询工作人员基础分页；计数失败立即返回，避免伪造 total=0。

@@ -67,7 +67,7 @@ func TestAppCommittedOperationReturnsExplicitDisplayWarning(t *testing.T) {
 	}
 }
 
-func TestAppRegionSubtreeReturnsSelfAndDescendants(t *testing.T) {
+func TestAppRegionSubtreeReturnsFullTreeWithAncestorsAndDescendants(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := testutil.NewQueryDB(t, testutil.QueryStep{
 		Contains: "FROM `sys_orgs`",
@@ -76,6 +76,7 @@ func TestAppRegionSubtreeReturnsSelfAndDescendants(t *testing.T) {
 			{int64(1), int64(0), "根", "root", int64(1)},
 			{int64(2), int64(1), "区", "district", int64(2)},
 			{int64(3), int64(2), "街道", "street", int64(3)},
+			{int64(4), int64(1), "区B", "district", int64(4)},
 		},
 	})
 	r := gin.New()
@@ -83,8 +84,8 @@ func TestAppRegionSubtreeReturnsSelfAndDescendants(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/app/regions/2", nil))
 	body := w.Body.String()
-	if w.Code != 200 || !strings.Contains(body, `"name":"区"`) || !strings.Contains(body, `"name":"街道"`) || strings.Contains(body, `"name":"根"`) {
-		t.Fatalf("子树应含自身与下属、不含祖先: %d %s", w.Code, body)
+	if w.Code != 200 || !strings.Contains(body, `"name":"根"`) || !strings.Contains(body, `"name":"区"`) || !strings.Contains(body, `"name":"街道"`) || !strings.Contains(body, `"name":"区B"`) {
+		t.Fatalf("应返回含上级与全部下级的整棵树: %d %s", w.Code, body)
 	}
 }
 
