@@ -9,7 +9,6 @@ import {
   hasValidCoordinates,
   issueChecklistPhotos,
   issuePlanHint,
-  issueStatusMeta,
   issueSummary,
   issueReporter,
   issueOrganization,
@@ -27,7 +26,6 @@ const emit = defineEmits<{
 }>();
 
 const typeLabel = computed(() => issueTypeLabel(props.issue.type));
-const status = computed(() => issueStatusMeta(props.issue.status));
 const plan = computed(() => issuePlanHint(props.issue, props.today));
 const summary = computed(() => issueSummary(props.issue));
 const photoUrls = computed(() =>
@@ -44,229 +42,175 @@ function preview(urls: readonly string[], index: number): void {
 
 <template>
   <view class="issue-card" role="button" :aria-label="`查看${reporter}上报的${typeLabel}${displayCode}详情`" hover-class="issue-card--pressed" @tap="emit('open', issue.id)">
-    <view class="issue-card__header">
-      <view class="issue-card__title-wrap">
-        <text class="issue-card__avatar" aria-hidden="true">{{ issue.report_user_name?.trim().slice(0, 1) || '—' }}</text>
-        <text class="issue-card__title">{{ reporter }}</text>
+    <view class="issue-card__avatar" aria-hidden="true">{{ reporter.slice(0, 1) }}</view>
+    <view class="issue-card__main">
+      <view class="issue-card__header">
+        <view class="issue-card__who">
+          <text class="issue-card__title">{{ reporter }}</text>
+          <text class="issue-card__time" :aria-label="formatDateTime(issue.created_at)"> · {{ formatDateTime(issue.created_at).slice(5, 10) }}</text>
+        </view>
+        <text class="issue-card__plan" :class="`tone-${plan.tone}`">{{ plan.label }}</text>
       </view>
-      <text class="issue-card__status" :class="`tone-${status.tone}`">{{ status.label }}</text>
-    </view>
-
-    <view class="issue-card__facility">
-      <text class="issue-card__type">{{ typeLabel }}</text>
-      <text>{{ displayCode }}</text>
-      <text class="issue-card__org">{{ issueOrganization(issue) }}</text>
-    </view>
-    <text class="issue-card__summary">{{ summary }}</text>
-
-    <view class="issue-card__meta">
-      <text>{{ issue.project_year }} 年</text>
-      <text class="issue-card__dot">·</text>
-      <text>{{ formatDateTime(issue.created_at) }}</text>
-      <text class="issue-card__plan" :class="`tone-${plan.tone}`">{{ plan.label }}</text>
-    </view>
-
-    <IssuePhotoGrid
-      v-if="photoUrls.length"
-      :urls="photoUrls"
-      :max="3"
-      compact
-      @preview="preview(photoUrls, $event)"
-    />
-
-    <view class="issue-card__location-row">
-      <text class="issue-card__pin" aria-hidden="true">●</text>
-      <text class="issue-card__address">{{ issue.address || "未填写地址" }}</text>
-      <button
-        v-if="hasLocation"
-        class="issue-card__map-button"
-        aria-label="查看地图"
-        @tap.stop="emit('map', issue.id)"
-      >
-        地图
-      </button>
+      <text class="issue-card__facility">{{ displayCode }}</text>
+      <text class="issue-card__summary">{{ summary }}</text>
+      <IssuePhotoGrid v-if="photoUrls.length" :urls="photoUrls" @preview="preview(photoUrls, $event)" />
+      <view class="issue-card__tags">
+        <text class="issue-card__tag issue-card__tag--type">{{ typeLabel }}</text>
+        <text class="issue-card__tag">{{ issue.project_year }} 年</text>
+        <text class="issue-card__tag">{{ issueOrganization(issue) }}</text>
+      </view>
+      <view class="issue-card__location" :class="{ 'issue-card__location--muted': !hasLocation }" role="button" :aria-label="hasLocation ? '查看地图' : '暂无坐标'" @tap.stop="hasLocation && emit('map', issue.id)">
+        <view class="issue-card__pin" aria-hidden="true" />
+        <text class="issue-card__address">{{ issue.address || '未填写地址' }}</text>
+      </view>
     </view>
   </view>
 </template>
 
 <style scoped lang="scss">
-.issue-card__facility {
+.issue-card {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 24rpx;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 26rpx;
-  line-height: 1.5;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 12px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
 }
-
+.issue-card--pressed {
+  background: #f8fafc;
+}
 .issue-card__avatar {
   display: flex;
-  width: 40px;
-  height: 40px;
+  flex: none;
   align-items: center;
   justify-content: center;
-  flex: none;
+  width: 40px;
+  height: 40px;
   border-radius: 6px;
   background: #e8f1fb;
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 16px;
-  font-weight: 700;
+  color: var(--gb-color-primary);
+  font-size: 14px;
+  font-weight: 600;
 }
-
-.issue-card__org {
-  flex: 1 1 180rpx;
-  text-align: right;
+.issue-card__main {
+  flex: 1;
+  min-width: 0;
+}
+.issue-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.35;
+}
+.issue-card__who {
+  flex: 1;
+  min-width: 0;
+}
+.issue-card__title {
+  font-size: 14px;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
-
+.issue-card__time {
+  color: #8a94a3;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.issue-card__plan {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+.issue-card__facility {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .issue-card__summary {
   display: -webkit-box;
   overflow: hidden;
-  margin-top: 18rpx;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 28rpx;
-  line-height: 1.6;
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+.issue-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.issue-card__tag {
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #f0f4f8;
+  color: #5a677a;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.issue-card__tag--type {
+  color: var(--gb-color-primary);
+}
+.issue-card__location {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--gb-color-primary);
+}
+.issue-card__location--muted {
+  color: var(--gb-color-text-secondary);
+}
+.issue-card__pin {
+  position: relative;
+  flex: none;
+  width: 11px;
+  height: 14px;
+  margin: 2px 1px 0;
+  border: 1px solid currentColor;
+  border-radius: 7px 7px 7px 0;
+  transform: rotate(-45deg);
+}
+.issue-card__pin::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 3px;
+  height: 3px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  content: '';
+}
+.issue-card__address {
+  display: -webkit-box;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-
-.issue-card {
-  padding: 28rpx 28rpx 24rpx;
-  border: 1rpx solid var(--gb-color-border, #e5eaf0);
-  border-radius: var(--gb-radius-md, 16rpx);
-  background: var(--gb-color-surface, #fff);
-  transition: background-color 120ms ease;
-}
-
-.issue-card--pressed {
-  background: #f7f9fc;
-}
-
-.issue-card__header,
-.issue-card__title-wrap,
-.issue-card__meta,
-.issue-card__location-row {
-  display: flex;
-  align-items: center;
-}
-
-.issue-card__header {
-  justify-content: space-between;
-  gap: 20rpx;
-}
-
-.issue-card__title-wrap {
-  flex: 1;
-  min-width: 0;
-  gap: 14rpx;
-}
-
-.issue-card__type {
-  flex-shrink: 0;
-  padding: 5rpx 10rpx;
-  border-radius: 6rpx;
-  background: rgba(1, 92, 187, 0.1);
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 24rpx;
-  line-height: 1.3;
-}
-
-.issue-card__title {
-  overflow: hidden;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.issue-card__status {
-  flex-shrink: 0;
-  padding: 6rpx 12rpx;
-  border-radius: 999rpx;
-  font-size: 24rpx;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.issue-card__meta {
-  flex-wrap: wrap;
-  gap: 8rpx;
-  margin-top: 14rpx;
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 24rpx;
-  line-height: 1.5;
-}
-
-.issue-card__plan {
-  margin-left: auto;
-  font-weight: 600;
-}
-
-.issue-card__location-row {
-  align-items: flex-start;
-  gap: 12rpx;
-  margin-top: 22rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid var(--gb-color-border, #edf0f4);
-}
-
-.issue-card__pin {
-  margin-top: 7rpx;
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 18rpx;
-}
-
-.issue-card__address {
-  flex: 1;
-  min-width: 0;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 26rpx;
-  line-height: 1.5;
-}
-
-.issue-card__map-button {
-  flex-shrink: 0;
-  min-width: 88rpx;
-  min-height: 88rpx;
-  margin: -8rpx -8rpx -8rpx 0;
-  padding: 0 12rpx;
-  border: 0;
-  background: transparent;
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 26rpx;
-  line-height: 88rpx;
-}
-
-.issue-card__map-button::after {
-  border: 0;
-}
-
 .tone-primary {
-  background: rgba(1, 92, 187, 0.1);
-  color: var(--gb-color-primary, #015cbb);
+  color: var(--gb-color-primary);
 }
-
 .tone-success {
-  background: rgba(26, 127, 75, 0.1);
-  color: var(--gb-color-success, #1a7f4b);
+  color: var(--gb-color-success);
 }
-
 .tone-warning {
-  background: rgba(212, 136, 6, 0.1);
-  color: var(--gb-color-warning, #d48806);
+  color: var(--gb-color-warning);
 }
-
 .tone-danger {
-  background: rgba(207, 19, 34, 0.09);
-  color: var(--gb-color-danger, #cf1322);
+  color: var(--gb-color-danger);
 }
-
 .tone-muted {
-  background: transparent;
-  color: var(--gb-color-text-muted, #8490a3);
+  color: var(--gb-color-text-muted);
 }
 </style>

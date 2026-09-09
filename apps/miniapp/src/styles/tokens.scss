@@ -1,19 +1,19 @@
 page {
   --gb-color-primary: #015cbb;
-  --gb-color-primary-dark: #00488f;
-  --gb-color-primary-soft: #e8f2fc;
+  --gb-color-primary-dark: #014a96;
+  --gb-color-primary-soft: #e8f1fb;
   --gb-color-background: #f4f7fb;
   --gb-color-surface: #ffffff;
-  --gb-color-text-primary: #172033;
-  --gb-color-text-secondary: #4b5565;
-  --gb-color-text-muted: #7a8494;
-  --gb-color-border: #dfe5ee;
+  --gb-color-text-primary: #152033;
+  --gb-color-text-secondary: #6b7a90;
+  --gb-color-text-muted: #8a94a3;
+  --gb-color-border: #e2e8f0;
   --gb-color-success: #1a7f4b;
-  --gb-color-warning: #b76e00;
-  --gb-color-danger: #c93737;
-  --gb-radius-sm: 8rpx;
-  --gb-radius-md: 16rpx;
-  --gb-radius-lg: 24rpx;
+  --gb-color-warning: #c47a06;
+  --gb-color-danger: #c0392b;
+  --gb-radius-sm: 4px;
+  --gb-radius-md: 6px;
+  --gb-radius-lg: 8px;
   --gb-space-xs: 8rpx;
   --gb-space-sm: 16rpx;
   --gb-space-md: 24rpx;
@@ -46,5 +46,5 @@ page {
   --radius-sm: var(--gb-radius-sm);
   --radius-md: var(--gb-radius-md);
   --radius-lg: var(--gb-radius-lg);
-  --radius-xl: 32rpx;
+  --radius-xl: 8px;
 }

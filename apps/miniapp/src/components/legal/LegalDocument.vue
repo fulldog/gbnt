@@ -64,7 +64,7 @@ function goBack(): void {
   display: block;
   margin: 18px 0 8px;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .legal-page__back {

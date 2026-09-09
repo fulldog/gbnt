@@ -69,81 +69,61 @@ function select(type: IssueType): void {
 <style scoped lang="scss">
 .facility-types {
   position: relative;
-  padding: 4px 24rpx 0;
-  background: var(--color-surface);
+  padding: 8px 16px 4px;
+  background: #fff;
 }
-
 .facility-types__scroll {
   width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  background: transparent;
+  border-radius: 8px;
+  background: #f2f3f5;
 }
-
 .facility-types__list {
-  display: inline-flex;
+  display: flex;
   min-width: 100%;
-  justify-content: space-between;
-  vertical-align: top;
+  padding: 2px;
 }
-
 .facility-types__tab {
-  position: relative;
-  flex: 0 0 auto;
-  min-width: 44px;
-  min-height: 48px;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
   margin: 0;
-  padding: 0 10px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 48px;
+  color: #666;
+  font-size: 14px;
+  line-height: 30px;
   white-space: nowrap;
 }
-
-.facility-types__tab + .facility-types__tab { margin-left: 8px; }
-.facility-types__tab::after { border: 0; }
-.facility-types__tab::before {
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  width: 24px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--color-primary);
-  content: "";
-  opacity: 0;
-  transform: translateX(-50%);
-  transition: opacity 160ms ease;
-}
 .facility-types__tab--active {
+  background: #fff;
   color: var(--color-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
-.facility-types__tab--active::before { opacity: 1; }
-.facility-types__tab--pressed { opacity: 0.7; }
-.facility-types__tab[disabled] { opacity: 0.5; }
-
+.facility-types__tab--pressed {
+  opacity: .7;
+}
+.facility-types__tab[disabled] {
+  opacity: .5;
+}
 .facility-types__fade {
   position: absolute;
-  top: 4px;
-  bottom: 0;
+  top: 8px;
+  bottom: 4px;
   z-index: 1;
   width: 14px;
   pointer-events: none;
 }
 .facility-types__fade--left {
-  left: 24rpx;
-  background: linear-gradient(to right, var(--color-surface), rgba(255, 255, 255, 0));
+  left: 16px;
+  background: linear-gradient(to right, #f2f3f5, transparent);
 }
 .facility-types__fade--right {
-  right: 24rpx;
-  background: linear-gradient(to left, var(--color-surface), rgba(255, 255, 255, 0));
+  right: 16px;
+  background: linear-gradient(to left, #f2f3f5, transparent);
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .facility-types__tab::before { transition: none; }
-}
+@media (max-width: 340px) { .facility-types__tab { padding: 0 4px; } }
 </style>

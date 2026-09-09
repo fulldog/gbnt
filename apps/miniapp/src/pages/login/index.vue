@@ -173,13 +173,13 @@ onLoad(async () => {
           </label>
           <view class="login-agreement__text">
             <text>我已阅读并同意</text>
-            <button class="login-agreement__link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('agreement')">
+            <text class="login-agreement__link" role="link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('agreement')">
               《用户协议》
-            </button>
+            </text>
             <text>和</text>
-            <button class="login-agreement__link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('privacy')">
+            <text class="login-agreement__link" role="link" hover-class="login-agreement__link--pressed" @tap.stop="openLegal('privacy')">
               《隐私政策》
-            </button>
+            </text>
           </view>
         </checkbox-group>
 
@@ -337,8 +337,15 @@ onLoad(async () => {
   border: 0;
 }
 
-.login-field__eye { width: 18px; height: 18px; }
-.login-field__toggle--pressed { opacity: 0.65; }
+.login-field__eye {
+  width: 18px;
+  height: 18px;
+  filter: grayscale(1);
+  opacity: .6;
+}
+.login-field__toggle--pressed {
+  opacity: 0.65;
+}
 
 .login-agreement {
   display: flex;
@@ -404,21 +411,16 @@ onLoad(async () => {
 }
 
 .login-agreement__link {
-  display: inline-block;
-  min-width: 0;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  display: inline;
   color: var(--gbnt-primary, #015cbb);
   font-size: inherit;
   line-height: inherit;
   vertical-align: baseline;
 }
 
-.login-agreement__link::after { border: 0; }
-.login-agreement__link--pressed { opacity: 0.65; }
+.login-agreement__link--pressed {
+  opacity: 0.65;
+}
 
 .login-card__submit {
   display: flex;
@@ -434,10 +436,11 @@ onLoad(async () => {
   line-height: 44px;
   letter-spacing: 0.2em;
   text-indent: 0.2em;
+  font-weight: 600;
 }
 
 .login-card__submit[disabled] {
-  background: #a9bfd8;
+  background: #92acd3;
   color: rgba(255, 255, 255, 0.9);
 }
 
@@ -456,7 +459,15 @@ onLoad(async () => {
 }
 
 @media (max-height: 600px) {
-  .login-page__content { padding-top: max(76px, calc(44px + env(safe-area-inset-top, 0px))); }
-  .login-card, .login-page__checking { margin-top: 24px; }
+  .login-page__content {
+    padding-top: max(76px, calc(44px + env(safe-area-inset-top, 0px)));
+  }
+  .login-card, .login-page__checking {
+    margin-top: 24px;
+  }
+}
+.login-field__control:focus-within {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--gbnt-primary);
 }
 </style>

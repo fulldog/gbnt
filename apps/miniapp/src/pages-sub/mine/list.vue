@@ -59,7 +59,9 @@ onUnload(listState.invalidate);
       v-else-if="listState.errorMessage.value && !listState.items.value.length"
       class="mine-list-state"
     >
-      <text class="mine-list-state__mark" aria-hidden="true">!</text>
+      <view class="mine-list-state__mark" aria-hidden="true">
+        <image class="mine-list-state__icon" src="/static/icons/alert-circle-danger.svg" mode="aspectFit" />
+      </view>
       <text class="mine-list-state__title">加载失败</text>
       <text class="mine-list-state__message">{{ listState.errorMessage.value }}</text>
       <button class="mine-list-state__button" @tap="listState.retry()">
@@ -68,16 +70,14 @@ onUnload(listState.invalidate);
     </view>
 
     <view v-else-if="listState.isEmpty.value" class="mine-list-state">
-      <text class="mine-list-state__empty-mark" aria-hidden="true">□</text>
+      <view class="mine-list-state__empty-mark" aria-hidden="true">
+        <image class="mine-list-state__icon" src="/static/icons/list-muted.svg" mode="aspectFit" />
+      </view>
       <text class="mine-list-state__title">{{ listState.scopeMeta.value.empty }}</text>
       <text class="mine-list-state__message">下拉页面可重新获取数据</text>
     </view>
 
     <view v-else class="mine-list-page__content">
-      <view class="mine-list-page__summary">
-        <text>{{ listState.scopeMeta.value.title }}</text>
-        <text>共 {{ listState.total.value }} 条</text>
-      </view>
       <view v-if="listState.isStale.value" class="mine-list-page__stale" role="alert">
         刷新失败，当前显示上次加载的数据和总数。{{ listState.errorMessage.value }}
       </view>
@@ -94,6 +94,7 @@ onUnload(listState.invalidate);
       </view>
 
       <view class="mine-list-page__footer">
+        <text>共 {{ listState.total.value }} 条 · </text>
         <text v-if="listState.refreshing.value">正在刷新…</text>
         <text v-else-if="listState.loadingMore.value">正在加载更多…</text>
         <button
@@ -123,21 +124,22 @@ onUnload(listState.invalidate);
 
 .mine-list-page {
   min-height: 100vh;
-  background: var(--gbnt-bg, #eef3f8);
-  color: var(--gbnt-text, #152033);
+  background: #fff;
+  color: var(--gbnt-text);
 }
 
 .mine-list-page__content {
-  padding: 12px 14px calc(24px + env(safe-area-inset-bottom));
+  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
 }
 
 .mine-list-page__summary {
   display: flex;
-  min-height: 44px;
+  min-height: 24px;
+  padding: 0 12px;
   align-items: center;
   justify-content: space-between;
-  color: var(--gbnt-text-secondary, #526277);
-  font-size: 13px;
+  color: var(--gbnt-text-secondary);
+  font-size: 12px;
 }
 
 .mine-list-page__cards {
@@ -201,13 +203,12 @@ onUnload(listState.invalidate);
   margin-bottom: 14px;
   border-radius: 50%;
   background: #ffffff;
-  color: var(--gbnt-danger, #b42318);
-  font-size: 26px;
-  font-weight: 600;
 }
 
-.mine-list-state__empty-mark {
-  color: #8ca0b8;
+.mine-list-state__icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
 }
 
 .mine-list-state__title {

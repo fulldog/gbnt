@@ -185,42 +185,44 @@ defineExpose({
 
 <style scoped lang="scss">
 .signature-pad {
+  position: relative;
+  margin: 12px 16px;
   overflow: hidden;
-  background: var(--color-surface);
-  border: 2rpx solid var(--color-border);
-  border-radius: var(--radius-lg);
+  background: #fff;
 }
 
 .signature-pad__head {
   display: flex;
-  min-height: 88rpx;
-  padding: 0 24rpx;
-  border-bottom: 2rpx solid var(--color-border);
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .signature-pad__title {
   color: var(--color-text);
-  font-size: 28rpx;
+  font-size: 24px;
   font-weight: 600;
+  line-height: 1.35;
 }
 
 .signature-pad__required {
   margin-left: 12rpx;
   color: var(--color-danger);
-  font-size: 24rpx;
+  font-size: 12px;
 }
 
 .signature-pad__clear {
-  min-height: 72rpx;
+  flex: none;
+  height: 36px;
   margin: 0;
-  padding: 0 16rpx;
-  color: var(--color-primary);
-  font-size: 26rpx;
-  line-height: 72rpx;
-  background: transparent;
-  border: 0;
+  padding: 0 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 34px;
 }
 
 .signature-pad__clear::after {
@@ -229,21 +231,17 @@ defineExpose({
 
 .signature-pad__canvas {
   width: 100%;
-  height: 320rpx;
-  background-color: #fff;
-  background-image: linear-gradient(
-    to bottom,
-    transparent calc(100% - 2rpx),
-    #e2e8f0 calc(100% - 2rpx)
-  );
-  background-size: 100% 80rpx;
+  height: 480px;
+  border: 1px solid #e5d4a8;
+  border-radius: 8px;
+  background: #fffdf8;
 }
 
 .signature-pad__hint {
   display: block;
   padding: 16rpx 24rpx;
   color: var(--color-text-tertiary);
-  font-size: 24rpx;
+  font-size: 12px;
   line-height: 1.5;
   text-align: center;
 }

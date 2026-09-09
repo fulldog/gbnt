@@ -267,9 +267,9 @@ describe("巡查顶部设施 tabs 模板接线", () => {
     expect(expression(tab, "bind", "value")).toMatchObject({ type: "MemberExpression", object: { name: "form" }, property: { name: "type" } });
     expect(expression(tab, "bind", "disabled")).toMatchObject({ type: "LogicalExpression", operator: "||", left: { name: "typeSelectionDisabled" }, right: { name: "selectingType" } });
     expect(expression(tab, "on", "select")).toMatchObject({ type: "Identifier", name: "selectType" });
-    const hero = elements.find((element) => attribute(element, "class") === "report-hero");
-    expect(hero).toBeDefined();
-    expect(tab.loc.start.offset).toBeLessThan(hero!.loc.start.offset);
+    const progress = elements.find((element) => attribute(element, "class") === "report-progress");
+    expect(progress).toBeDefined();
+    expect(tab.loc.start.offset).toBeLessThan(progress!.loc.start.offset);
     const pickers = elements.filter((element) => element.tag === "picker");
     expect(pickers.length).toBeGreaterThan(0);
     for (const picker of pickers) {

@@ -69,7 +69,14 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
       @tap="show"
     >
       <text class="region-picker__value">{{ triggerLabel }}</text>
-      <view class="region-picker__chevron" aria-hidden="true" />
+      <image
+        v-if="props.mode === 'filter'"
+        class="region-picker__filter-chevron"
+        src="/static/icons/chevron-down.svg"
+        mode="aspectFit"
+        aria-hidden="true"
+      />
+      <view v-else class="region-picker__chevron" aria-hidden="true" />
     </button>
     <view v-if="props.error && !opened" class="region-picker__error" role="alert">
       <text>{{ props.error }}</text>
@@ -125,54 +132,79 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
 </template>
 
 <style scoped lang="scss">
-.region-picker { min-width: 0; width: 100%; }
+.region-picker {
+  min-width: 0;
+  width: 100%;
+}
 .region-picker__trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: 10px;
   width: 100%;
-  min-height: 88rpx;
+  min-height: 28px;
   margin: 0;
-  padding: 22rpx 24rpx;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 28rpx;
-  line-height: 1.5;
-  text-align: left;
-}
-.region-picker__trigger::after, .region-picker__action::after { border: 0; }
-.region-picker__trigger--placeholder { color: var(--color-text-tertiary); }
-.region-picker__trigger[disabled] { opacity: 0.6; }
-.region-picker__value { flex: 1; min-width: 0; }
-.region-picker--filter .region-picker__trigger {
-  min-height: 44px;
-  padding: 0 18rpx;
-  gap: 10rpx;
+  padding: 0;
   border: 0;
-  border-radius: var(--gb-radius-sm, 12rpx);
-  background: #f2f5f8;
-  color: var(--color-text-secondary);
-  font-size: 25rpx;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: right;
+}
+.region-picker__trigger::after, .region-picker__action::after {
+  border: 0;
+}
+.region-picker__trigger--placeholder {
+  color: var(--color-text-tertiary);
+}
+.region-picker__trigger[disabled] {
+  opacity: 0.6;
+}
+.region-picker__value {
+  flex: 1;
+  min-width: 0;
+}
+.region-picker--filter .region-picker__trigger {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px 0 10px;
+  gap: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
 }
 .region-picker--filter .region-picker__value {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.region-picker--filter .region-picker__chevron { transform: rotate(135deg); }
+.region-picker__filter-chevron {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
 .region-picker__chevron {
-  flex-shrink: 0;
-  width: 12rpx;
-  height: 12rpx;
-  border-top: 2px solid var(--color-text-tertiary);
-  border-right: 2px solid var(--color-text-tertiary);
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 2px;
+  border-top: 1px solid #8a94a3;
+  border-right: 1px solid #8a94a3;
   transform: rotate(45deg);
 }
-.region-picker__pressed { opacity: 0.65; }
-.region-picker__overlay { position: fixed; inset: 0; z-index: 80; }
+.region-picker__pressed {
+  opacity: 0.65;
+}
+.region-picker__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+}
 .region-picker__mask {
   position: absolute;
   inset: 0;
@@ -198,7 +230,11 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
   padding: 0 8px;
   border-bottom: 1px solid var(--color-border);
 }
-.region-picker__title { color: var(--color-text); font-size: 16px; font-weight: 600; }
+.region-picker__title {
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 600;
+}
 .region-picker__action {
   min-width: 60px;
   min-height: 44px;
@@ -211,11 +247,28 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
   font-size: 14px;
   line-height: 44px;
 }
-.region-picker__action--confirm { color: var(--color-primary); font-weight: 600; }
-.region-picker__action[disabled] { color: var(--color-text-tertiary); opacity: 0.55; }
-.region-picker__headings { display: flex; padding: 12px 0 4px; color: var(--color-text-secondary); font-size: 12px; }
-.region-picker__headings > text { flex: 1; text-align: center; }
-.region-picker__wheel { width: 100%; height: 220px; }
+.region-picker__action--confirm {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.region-picker__action[disabled] {
+  color: var(--color-text-tertiary);
+  opacity: 0.55;
+}
+.region-picker__headings {
+  display: flex;
+  padding: 12px 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+.region-picker__headings > text {
+  flex: 1;
+  text-align: center;
+}
+.region-picker__wheel {
+  width: 100%;
+  height: 220px;
+}
 .region-picker__item {
   display: flex;
   align-items: center;
@@ -229,13 +282,37 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
   text-align: center;
   word-break: break-all;
 }
-.region-picker__item--selected { color: var(--color-primary); font-weight: 600; }
-.region-picker__item--empty { color: var(--color-text-tertiary); font-size: 12px; }
-.region-picker__status { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 220px; padding: 0 24rpx; color: var(--color-text-secondary); font-size: 14px; }
-.region-picker__error { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; color: var(--color-danger); font-size: 24rpx; }
+.region-picker__item--selected {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.region-picker__item--empty {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+.region-picker__status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 0 24rpx;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+.region-picker__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  color: var(--color-danger);
+  font-size: 24rpx;
+}
 @keyframes region-picker-enter { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes region-picker-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .region-picker__mask, .region-picker__panel { animation: none; }
+  .region-picker__mask, .region-picker__panel {
+    animation: none;
+  }
 }
 </style>

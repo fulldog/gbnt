@@ -22,8 +22,8 @@ defineProps<{
 
 .info-list__row {
   padding: 6px 0;
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.55;
   text-align: left;
   overflow-wrap: anywhere;
   word-break: break-word;

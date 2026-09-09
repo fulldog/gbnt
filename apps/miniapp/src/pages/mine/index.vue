@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageTopInset from "@/components/common/PageTopInset.vue";
 import type { MineScope, MineStats } from "@gbnt/api-client";
 import { computed, shallowRef, watch } from "vue";
 import { onPullDownRefresh, onShow } from "@dcloudio/uni-app";
@@ -107,6 +108,7 @@ onPullDownRefresh(() => {
 
 <template>
   <view class="mine-page">
+    <PageTopInset />
     <view class="mine-page__hero">
       <view class="mine-page__profile">
         <view class="mine-page__avatar" aria-hidden="true">{{ avatarText }}</view>
@@ -134,11 +136,6 @@ onPullDownRefresh(() => {
       </view>
 
       <view class="mine-section">
-        <view class="mine-section__heading">
-          <text class="mine-section__title">工作概览</text>
-          <text v-if="loading" class="mine-section__hint">正在更新…</text>
-          <text v-else class="mine-section__hint">点击数字查看清单</text>
-        </view>
         <view class="mine-stats" :class="{ 'mine-stats--loading': loading && !stats }">
           <button class="mine-stat" @tap="openMineList('reported')">
             <text class="mine-stat__number">{{ stats?.reported ?? "—" }}</text>
@@ -156,27 +153,24 @@ onPullDownRefresh(() => {
       </view>
 
       <view class="mine-section mine-section--menu">
-        <text class="mine-section__title mine-section__title--menu">账号与安全</text>
         <button
           class="mine-menu-row"
           @tap="openPage('/pages-sub/account/change-password')"
         >
           <image class="mine-menu-row__icon" src="/static/icons/lock-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">修改密码</text>
-          <text class="mine-menu-row__caret" aria-hidden="true">›</text>
+          <image class="mine-menu-row__caret" src="/static/icons/chevron-right-muted.svg" mode="aspectFit" aria-hidden="true" />
         </button>
       </view>
 
       <view class="mine-section mine-section--menu">
-        <text class="mine-section__title mine-section__title--menu">关于与帮助</text>
         <button
           class="mine-menu-row"
           @tap="openPage('/pages-sub/legal/agreement')"
         >
           <image class="mine-menu-row__icon" src="/static/icons/ledger-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">用户协议</text>
-          <text class="mine-menu-row__tag">点击查看</text>
-          <text class="mine-menu-row__caret" aria-hidden="true">›</text>
+          <image class="mine-menu-row__caret" src="/static/icons/chevron-right-muted.svg" mode="aspectFit" aria-hidden="true" />
         </button>
         <button
           class="mine-menu-row"
@@ -184,8 +178,7 @@ onPullDownRefresh(() => {
         >
           <image class="mine-menu-row__icon" src="/static/icons/shield-primary.png" mode="aspectFit" aria-hidden="true" />
           <text class="mine-menu-row__label">隐私政策</text>
-          <text class="mine-menu-row__tag">点击查看</text>
-          <text class="mine-menu-row__caret" aria-hidden="true">›</text>
+          <image class="mine-menu-row__caret" src="/static/icons/chevron-right-muted.svg" mode="aspectFit" aria-hidden="true" />
         </button>
       </view>
 
@@ -203,35 +196,34 @@ onPullDownRefresh(() => {
 <style scoped lang="scss">
 .mine-page {
   min-height: 100vh;
-  background: var(--gbnt-bg, #eef3f8);
-  color: var(--gbnt-text, #152033);
+  background: #fff;
+  color: var(--gbnt-text);
 }
 
 .mine-page__hero {
-  padding: calc(28px + env(safe-area-inset-top)) 20px 46px;
-  background: linear-gradient(145deg, #0163c9 0%, #014a96 72%, #197447 150%);
-  color: #ffffff;
+  padding: 24px 16px 20px;
+  color: var(--gbnt-text);
 }
 
 .mine-page__profile {
   display: flex;
-  min-height: 72px;
   align-items: center;
   gap: 14px;
 }
 
 .mine-page__avatar {
   display: flex;
-  width: 62px;
-  height: 62px;
   flex: none;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  width: 56px;
+  height: 56px;
+  border: 0;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 24px;
-  font-weight: 700;
+  background: var(--gbnt-primary);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .mine-page__identity {
@@ -249,38 +241,36 @@ onPullDownRefresh(() => {
 }
 
 .mine-page__name {
-  font-size: 21px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 600;
   word-break: break-all;
 }
 
 .mine-page__role {
   max-width: 100%;
-  padding: 3px 7px;
+  padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--gbnt-primary-soft);
+  color: var(--gbnt-primary);
   font-size: 12px;
+  line-height: 16px;
 }
 
 .mine-page__meta {
-  margin-top: 5px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 13px;
-  word-break: break-all;
+  margin-top: 4px;
+  color: var(--gbnt-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .mine-page__body {
-  position: relative;
-  margin-top: -24px;
-  padding: 0 14px calc(28px + env(safe-area-inset-bottom));
+  padding: 0 16px 28px;
 }
 
 .mine-section {
-  overflow: hidden;
-  margin-bottom: 12px;
-  border: 1px solid var(--gbnt-border, #dce4ee);
-  border-radius: 8px;
-  background: #ffffff;
+  margin-bottom: 16px;
+  background: #fff;
 }
 
 .mine-section__heading {
@@ -304,7 +294,9 @@ onPullDownRefresh(() => {
 
 .mine-stats {
   display: flex;
-  padding: 16px 0;
+  padding: 14px 0;
+  border-radius: 8px;
+  background: #f0f4f8;
 }
 
 .mine-stats--loading {
@@ -314,7 +306,6 @@ onPullDownRefresh(() => {
 .mine-stat {
   display: flex;
   min-width: 0;
-  min-height: 62px;
   flex: 1;
   flex-direction: column;
   align-items: center;
@@ -337,19 +328,20 @@ onPullDownRefresh(() => {
 }
 
 .mine-stat__number {
-  color: var(--gbnt-primary, #015cbb);
-  font-size: 24px;
-  font-weight: 700;
+  color: var(--gbnt-primary);
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .mine-stat__label {
-  margin-top: 7px;
-  color: var(--gbnt-text-secondary, #526277);
+  margin-top: 6px;
+  color: var(--gbnt-text-secondary);
   font-size: 12px;
 }
 
 .mine-section--menu {
-  padding: 0 14px;
+  padding: 0;
+  margin-bottom: 0;
 }
 
 .mine-section__title--menu {
@@ -362,37 +354,31 @@ onPullDownRefresh(() => {
 .mine-menu-row {
   display: flex;
   width: 100%;
-  min-height: 54px;
+  min-height: 48px;
   align-items: center;
   gap: 10px;
   margin: 0;
-  padding: 0;
+  padding: 10px 0;
   border: 0;
   border-bottom: 1px solid #eef2f6;
   border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 14px;
-  line-height: 1.4;
+  background: #fff;
+  color: var(--gbnt-text);
   text-align: left;
+  line-height: 1.4;
 }
 
-.mine-menu-row:last-child {
-  border-bottom: 0;
-}
+
 
 .mine-menu-row:active {
   background: #f8fafc;
 }
 
 .mine-menu-row__icon {
-  display: block;
   flex: none;
-  width: 30px;
-  height: 30px;
-  padding: 5px;
-  border-radius: 5px;
-  background: var(--gbnt-primary-soft, #e8f1fb);
+  width: 20px;
+  height: 20px;
+  filter: grayscale(1) brightness(.25);
 }
 
 .mine-menu-row__label {
@@ -405,23 +391,25 @@ onPullDownRefresh(() => {
 }
 
 .mine-menu-row__caret {
-  color: #a8b2c0;
-  font-size: 24px;
+  flex: none;
+  width: 16px;
+  height: 16px;
 }
 
 .mine-page__logout {
   display: flex;
   width: 100%;
-  height: 48px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
-  margin-top: 16px;
-  border: 1px solid #f3b7b3;
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--gbnt-danger, #b42318);
-  font-size: 15px;
-  line-height: 48px;
+  margin: 8px 0 0;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: var(--gbnt-danger);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .mine-page__logout::after {

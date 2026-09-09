@@ -185,7 +185,9 @@ function submit(): void {
               aria-label="删除照片"
               @tap.stop="removePhoto(index, photoIndex)"
             >
-              ×
+              <view class="rectify-form__remove-mark" aria-hidden="true">
+                <image class="rectify-form__remove-icon" src="/static/icons/close-white.svg" mode="aspectFit" />
+              </view>
             </button>
           </view>
           <button
@@ -194,7 +196,7 @@ function submit(): void {
             :disabled="busy"
             @tap="choosePhotos(index)"
           >
-            <text class="rectify-form__add-icon">＋</text>
+            <image class="rectify-form__add-icon" src="/static/icons/plus-primary.svg" mode="aspectFit" aria-hidden="true" />
             <text>整改照片</text>
           </button>
         </view>
@@ -202,18 +204,22 @@ function submit(): void {
     </view>
 
     <text class="rectify-form__hint">可以分批提交；全部异常项完成后，记录将变为“已整改”。</text>
-    <button
-      class="rectify-form__submit"
-      :disabled="busy"
-      @tap="submit"
-    >
-      {{ submitting ? "正在提交" : "提交本次整改" }}
-    </button>
+    <view class="rectify-form__actions">
+      <button
+        class="rectify-form__submit"
+        :disabled="busy"
+        @tap="submit"
+      >
+        {{ submitting ? "正在提交" : "提交本次整改" }}
+      </button>
+    </view>
   </view>
 </template>
 
 <style scoped lang="scss">
-.rectify-form__save-error { color: #b42318; }
+.rectify-form__save-error {
+  color: #b42318;
+}
 .rectify-form__item {
   padding: 28rpx 0;
   border-bottom: 1rpx solid var(--gb-color-border, #edf0f4);
@@ -245,13 +251,13 @@ function submit(): void {
 
 .rectify-form__required {
   color: var(--gb-color-danger, #cf1322);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
 .rectify-form__item-title {
   color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
 }
@@ -273,15 +279,14 @@ function submit(): void {
 }
 
 .rectify-form__textarea {
-  box-sizing: border-box;
   width: 100%;
-  min-height: 176rpx;
-  padding: 20rpx;
-  border: 1rpx solid var(--gb-color-border, #dfe5ec);
-  border-radius: var(--gb-radius-sm, 12rpx);
-  background: #fafbfd;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f0f4f8;
+  color: var(--gb-color-text-primary);
+  font-size: 14px;
   line-height: 1.6;
 }
 
@@ -295,8 +300,8 @@ function submit(): void {
 .rectify-form__photo-wrap,
 .rectify-form__photo-button,
 .rectify-form__add-photo {
-  width: 150rpx;
-  height: 150rpx;
+  width: 72px;
+  height: 72px;
 }
 
 .rectify-form__photo-wrap {
@@ -328,20 +333,19 @@ function submit(): void {
 
 .rectify-form__remove {
   position: absolute;
-  top: -14rpx;
-  right: -14rpx;
+  top: -4px;
+  right: -4px;
   z-index: 2;
-  width: 44rpx;
-  min-width: 44px;
-  height: 44rpx;
-  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 44px;
+  height: 44px;
+  margin: 0;
   padding: 0;
-  border: 3rpx solid #fff;
-  border-radius: 50%;
-  background: rgba(23, 32, 51, 0.86);
-  color: #fff;
-  font-size: 30rpx;
-  line-height: 40px;
+  border: 0;
+  background: transparent;
+  line-height: 1;
 }
 
 .rectify-form__add-photo {
@@ -355,30 +359,31 @@ function submit(): void {
 }
 
 .rectify-form__add-icon {
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 42rpx;
-  font-weight: 300;
+  flex: none;
+  width: 24px;
+  height: 24px;
 }
 
 .rectify-form__hint {
   display: block;
-  margin-top: 24rpx;
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 14px;
+  margin-top: 12px;
+  color: var(--gb-color-text-muted);
+  font-size: 12px;
   line-height: 1.55;
 }
 
 .rectify-form__submit {
   width: 100%;
-  min-height: 88rpx;
-  margin-top: 24rpx;
+  height: 44px;
+  margin: 0;
+  padding: 0 12px;
   border: 0;
-  border-radius: var(--gb-radius-md, 16rpx);
-  background: var(--gb-color-primary, #015cbb);
+  border-radius: 8px;
+  background: var(--gb-color-primary);
   color: #fff;
   font-size: 16px;
   font-weight: 600;
-  line-height: 88rpx;
+  line-height: 44px;
 }
 
 .rectify-form__submit::after {
@@ -387,5 +392,30 @@ function submit(): void {
 
 .rectify-form__submit[disabled] {
   opacity: 0.62;
+}
+.rectify-form__remove-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+}
+.rectify-form__remove-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.rectify-form__actions {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(255, 255, 255, .86), #fff 35%);
 }
 </style>

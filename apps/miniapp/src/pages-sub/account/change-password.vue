@@ -83,13 +83,6 @@ onLoad(async () => {
 
 <template>
   <view class="password-page">
-    <view class="password-page__intro">
-      <text class="password-page__intro-title">设置新密码</text>
-      <text class="password-page__intro-text">
-        新密码须为 6–14 位字母与数字组合，区分大小写。修改成功后需要重新登录。
-      </text>
-    </view>
-
     <form class="password-card" @submit="submit">
       <view v-if="errorMessage" class="password-card__error" role="alert">
         {{ errorMessage }}
@@ -159,6 +152,7 @@ onLoad(async () => {
         </view>
       </view>
 
+      <text class="password-card__hint">新密码须为 6–14 位字母与数字组合，修改后需要重新登录。</text>
       <button
         class="password-card__submit"
         form-type="submit"
@@ -174,35 +168,18 @@ onLoad(async () => {
 <style scoped lang="scss">
 .password-page {
   min-height: 100vh;
-  padding: 18px 14px calc(28px + env(safe-area-inset-bottom));
-  background: var(--gbnt-bg, #eef3f8);
-  color: var(--gbnt-text, #152033);
-  box-sizing: border-box;
+  padding: 16px 16px calc(32px + env(safe-area-inset-bottom));
+  background: #fff;
+  color: var(--gbnt-text);
 }
 
-.password-page__intro {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 4px 16px;
-}
 
-.password-page__intro-title {
-  font-size: 19px;
-  font-weight: 700;
-}
 
-.password-page__intro-text {
-  margin-top: 8px;
-  color: var(--gbnt-text-secondary, #526277);
-  font-size: 13px;
-  line-height: 1.65;
-}
 
 .password-card {
-  padding: 18px 16px 20px;
-  border: 1px solid var(--gbnt-border, #dce4ee);
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 0;
+  border: 0;
+  background: #fff;
 }
 
 .password-card__error {
@@ -230,23 +207,24 @@ onLoad(async () => {
 .password-field__control {
   position: relative;
   display: flex;
-  height: 48px;
   align-items: center;
-  border: 1px solid var(--gbnt-border, #dce4ee);
-  border-radius: 6px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #f0f4f8;
 }
 
 .password-field__input {
-  width: 100%;
-  height: 48px;
-  padding: 0 68px 0 12px;
-  font-size: 15px;
-  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 64px 0 12px;
+  font-size: 14px;
 }
 
 .password-field__toggle {
   position: absolute;
-  top: 2px;
+  top: 0;
   right: 0;
   width: 64px;
   height: 44px;
@@ -267,18 +245,32 @@ onLoad(async () => {
 .password-card__submit {
   display: flex;
   width: 100%;
-  height: 48px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   margin-top: 24px;
-  border-radius: 6px;
-  background: var(--gbnt-primary, #015cbb);
-  font-size: 15px;
-  line-height: 48px;
+  border: 1px solid var(--gbnt-primary);
+  border-radius: 8px;
+  background: var(--gbnt-primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 42px;
 }
 
 .password-card__submit[disabled] {
-  background: #a9bfd8;
+  background: #92acd3;
   color: rgba(255, 255, 255, 0.9);
+}
+.password-card__hint {
+  display: block;
+  margin-top: 12px;
+  color: var(--gbnt-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.password-field__control:focus-within {
+  border-color: var(--gbnt-primary);
+  background: #fff;
 }
 </style>

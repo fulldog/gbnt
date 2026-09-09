@@ -209,11 +209,16 @@ onUnload(() => {
         enable-traffic
       />
 
+      <view class="map-page__actions">
+        <button class="map-page__secondary" :disabled="locating" :aria-label="locating ? '正在定位' : '重新定位'" @tap="locateCurrent">
+          <view v-if="locating" class="map-page__locating" aria-hidden="true" />
+          <image v-else class="map-page__locate-icon" src="/static/icons/locate-primary.svg" mode="aspectFit" aria-hidden="true" />
+        </button>
+        <button class="map-page__primary" aria-label="打开地图导航" @tap="openInMap">导航</button>
+      </view>
       <view class="map-page__panel">
         <view class="map-page__address-row">
-          <text class="map-page__pin" aria-hidden="true">●</text>
           <view class="map-page__address-wrap">
-            <text class="map-page__label">问题位置</text>
             <text class="map-page__address">{{ address }}</text>
           </view>
           <text class="map-page__distance">{{ distance }}</text>
@@ -223,10 +228,7 @@ onUnload(() => {
           {{ locationError }}，点击重试
         </text>
 
-        <view class="map-page__actions">
-          <button class="map-page__secondary" :disabled="locating" @tap="locateCurrent">{{ locating ? "定位中…" : "重新定位" }}</button>
-          <button class="map-page__primary" @tap="openInMap">打开地图导航</button>
-        </view>
+
       </view>
     </template>
   </view>
@@ -246,20 +248,21 @@ onUnload(() => {
 
 .map-page__panel {
   position: fixed;
-  right: 24rpx;
-  bottom: calc(24rpx + var(--gb-safe-area-bottom, 0px));
-  left: 24rpx;
+  right: 10px;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  left: 10px;
   z-index: 5;
-  padding: 28rpx;
-  border-radius: var(--gb-radius-lg, 22rpx);
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 10rpx 36rpx rgba(23, 32, 51, 0.16);
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
 }
 
 .map-page__address-row {
   display: flex;
-  align-items: flex-start;
-  gap: 14rpx;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .map-page__pin {
@@ -282,52 +285,77 @@ onUnload(() => {
 }
 
 .map-page__address {
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 28rpx;
-  font-weight: 600;
-  line-height: 1.5;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--gb-color-text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map-page__distance {
-  flex-shrink: 0;
-  padding: 7rpx 12rpx;
-  border-radius: var(--gb-radius-sm, 10rpx);
-  background: rgba(1, 92, 187, 0.09);
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 24rpx;
+  flex: none;
+  color: var(--gb-color-primary);
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .map-page__location-error {
   display: block;
-  margin-top: 18rpx;
+  margin-top: 8px;
   color: var(--gb-color-warning, #d48806);
-  font-size: 24rpx;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .map-page__actions {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 16rpx;
-  margin-top: 24rpx;
+  position: fixed;
+  right: 16px;
+  bottom: calc(100px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  gap: 8px;
 }
 
 .map-page__secondary,
 .map-page__primary,
 .map-page__retry {
-  min-height: 82rpx;
-  padding: 0 18rpx;
-  border-radius: var(--gb-radius-md, 16rpx);
-  font-size: 27rpx;
+  min-width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 80rpx;
+  line-height: 42px;
 }
 
 .map-page__secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1rpx solid var(--gb-color-primary, #015cbb);
   background: #fff;
   color: var(--gb-color-primary, #015cbb);
+}
+
+.map-page__locate-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.map-page__locating {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(1, 92, 187, 0.16);
+  border-top-color: var(--gb-color-primary, #015cbb);
+  border-radius: 50%;
+  animation: map-spin 800ms linear infinite;
 }
 
 .map-page__primary {

@@ -105,7 +105,11 @@ describe("共享行政区划组件接入", () => {
     const loader = vi.fn().mockResolvedValue({ list: [], total: 0, page: 1, size: 10 });
     let listState: ReturnType<typeof usePagedIssues>;
     const state = setupSfc("pages/todo/index.vue", {}, {
-      "@dcloudio/uni-app": { onLoad: vi.fn(), onShow: vi.fn(), onUnload: vi.fn(), onPullDownRefresh: vi.fn(), onReachBottom: vi.fn() },
+      "@/components/common/PageTopInset.vue": { default: {} },
+      "@dcloudio/uni-app": {
+        onLoad: vi.fn(), onShow: vi.fn(), onUnload: vi.fn(), onPullDownRefresh: vi.fn(),
+        onReachBottom: vi.fn(), onShareAppMessage: vi.fn(), onShareTimeline: vi.fn(),
+      },
       "@/api/runtime": { miniappApi: { regions: { list: vi.fn() } } },
       "@/components/issue/IssueCard.vue": {},
       "@/components/region/RegionPicker.vue": {},

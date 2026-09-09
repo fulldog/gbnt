@@ -189,7 +189,9 @@ onUnmounted(() => {
           :aria-label="`删除第 ${index + 1} 张照片`"
           @tap.stop="remove(index)"
         >
-          ×
+          <view class="photo-remove__mark" aria-hidden="true">
+            <image class="photo-remove__icon" src="/static/icons/close-white.svg" mode="aspectFit" />
+          </view>
         </button>
       </view>
 
@@ -208,7 +210,7 @@ onUnmounted(() => {
         :aria-label="addLabel"
         @tap="addPhoto"
       >
-        <text class="photo-add__icon">＋</text>
+        <image class="photo-add__icon" src="/static/icons/plus-muted.svg" mode="aspectFit" aria-hidden="true" />
         <text class="photo-add__label">{{ addLabel }}</text>
       </button>
     </view>
@@ -219,96 +221,113 @@ onUnmounted(() => {
 </template>
 
 <style scoped lang="scss">
-.photo-job { display: flex; flex-direction: column; justify-content: center; padding: 12rpx; min-height: 160rpx; color: #9a3412; background: #fff7ed; font-size: 24rpx; word-break: break-all; }
-.photo-job__actions { display: flex; flex-wrap: wrap; }
-.photo-job__actions button { min-height: 44px; padding: 0 10px; font-size: 13px; }
 .photo-picker {
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
+  gap: 6px;
 }
-
 .photo-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-
-.photo-item,
-.photo-add {
+.photo-item, .photo-add {
   position: relative;
-  width: 100%;
-  height: 180rpx;
+  flex: none;
+  width: 88px;
+  height: 88px;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: 6px;
 }
-
 .photo-item {
-  background: var(--color-surface-muted);
+  background: #f0f4f8;
 }
-
 .photo-image {
   display: block;
   width: 100%;
   height: 100%;
 }
-
-.photo-remove {
-  position: absolute;
-  top: 6rpx;
-  right: 6rpx;
-  display: grid;
-  width: 48rpx;
-  min-width: 44px;
-  height: 48rpx;
-  min-height: 44px;
-  padding: 0;
-  color: #fff;
-  font-size: 34rpx;
-  line-height: 44rpx;
-  background: rgba(15, 23, 42, 0.72);
-  border: 0;
-  border-radius: 50%;
-  place-items: center;
-}
-
 .photo-add {
   display: flex;
-  min-height: 180rpx;
-  margin: 0;
-  padding: 16rpx;
-  color: var(--color-text-secondary);
-  background: var(--color-surface-muted);
-  border: 2rpx dashed var(--color-border-strong);
   align-items: center;
   flex-direction: column;
   justify-content: center;
+  min-height: 88px;
+  margin: 0;
+  padding: 8px;
+  border: 1px dashed #c8d1de;
+  background: #fff;
+  color: #8a94a3;
 }
-
-.photo-add::after,
-.photo-remove::after {
-  border: 0;
-}
-
 .photo-add[disabled] {
-  opacity: 0.58;
+  opacity: .58;
 }
-
 .photo-add__icon {
-  font-size: 44rpx;
-  line-height: 1;
+  flex: none;
+  width: 28px;
+  height: 28px;
 }
-
 .photo-add__label {
-  margin-top: 8rpx;
-  font-size: 24rpx;
+  margin-top: 4px;
+  font-size: 12px;
   line-height: 1.35;
   text-align: center;
 }
-
 .photo-hint {
   color: var(--color-text-tertiary);
-  font-size: 24rpx;
+  font-size: 12px;
   line-height: 1.5;
+}
+.photo-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  line-height: 1;
+}
+.photo-remove__mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .55);
+}
+.photo-remove__icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.photo-job {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 88px;
+  min-height: 88px;
+  padding: 6px;
+  border-radius: 6px;
+  color: #9a3412;
+  background: #fff7ed;
+  font-size: 12px;
+  word-break: break-all;
+}
+.photo-job__actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.photo-job__actions button {
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 </style>

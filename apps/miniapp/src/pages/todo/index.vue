@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { IssueStatus, IssueType, OrgTreeNode, ProjectYear } from "@gbnt/api-client";
+import PageTopInset from "@/components/common/PageTopInset.vue";
+import type { IssueStatus, IssueType, OrgTreeNode } from "@gbnt/api-client";
 import {
   onLoad,
   onPullDownRefresh,
   onReachBottom,
+  onShareAppMessage,
+  onShareTimeline,
   onShow,
   onUnload,
 } from "@dcloudio/uni-app";
@@ -22,19 +25,6 @@ import {
 interface PickerChangeEvent {
   detail: { value: string | number };
 }
-
-interface FilterOption<TValue> {
-  label: string;
-  value: TValue;
-}
-
-const YEAR_OPTIONS: FilterOption<ProjectYear | undefined>[] = [
-  { label: "全部年度", value: undefined },
-  { label: "2023 年", value: 2023 },
-  { label: "2022 年", value: 2022 },
-  { label: "2021 年", value: 2021 },
-  { label: "2020 年", value: 2020 },
-];
 
 const {
   items,
@@ -66,16 +56,12 @@ const typeIndex = computed(() =>
 const statusIndex = computed(() =>
   Math.max(0, ISSUE_STATUS_OPTIONS.findIndex((option) => option.value === filters.value.status)),
 );
-const yearIndex = computed(() =>
-  Math.max(0, YEAR_OPTIONS.findIndex((option) => option.value === filters.value.projectYear)),
-);
 const isInitialLoading = computed(() => isRefreshing.value && items.value.length === 0);
 const hasActiveFilters = computed(
   () =>
     filters.value.type !== "all" ||
     filters.value.status !== "all" ||
     filters.value.orgId !== undefined ||
-    filters.value.projectYear !== undefined ||
     filters.value.keyword !== "",
 );
 
@@ -107,11 +93,6 @@ function changeType(event: PickerChangeEvent): void {
 function changeStatus(event: PickerChangeEvent): void {
   const option = ISSUE_STATUS_OPTIONS[optionIndex(event)];
   if (option) void reload({ status: option.value as IssueStatus | "all" });
-}
-
-function changeYear(event: PickerChangeEvent): void {
-  const option = YEAR_OPTIONS[optionIndex(event)];
-  if (option) void reload({ projectYear: option.value });
 }
 
 function changeRegion(option: { id: number | null; label: string }): void {
@@ -146,6 +127,16 @@ function previewImages(urls: string[], index: number): void {
   uni.previewImage({ current: urls[index], urls });
 }
 
+onShareAppMessage(() => ({
+  title: "农田专项整治 · 待办任务",
+  path: "/pages/todo/index",
+}));
+
+onShareTimeline(() => ({
+  title: "农田专项整治 · 待办任务",
+  query: "",
+}));
+
 onLoad(() => {
   void Promise.all([loadRegions(), reload()]);
 });
@@ -175,9 +166,10 @@ onUnload(() => {
 
 <template>
   <view class="todo-page">
+    <PageTopInset title="农田专项整治" />
     <view class="todo-page__toolbar">
       <view class="todo-page__search">
-        <text class="todo-page__search-icon" aria-hidden="true">⌕</text>
+        <button class="todo-page__search-icon" aria-label="搜索" @tap="applySearch"><view class="todo-page__magnifier" /></button>
         <input
           v-model="searchKeyword"
           class="todo-page__search-input"
@@ -191,13 +183,13 @@ onUnload(() => {
           aria-label="清空搜索"
           @tap="clearSearch"
         >
-          ×
+          <image class="todo-page__clear-search-icon" src="/static/icons/close-muted.svg" mode="aspectFit" aria-hidden="true" />
         </button>
-        <button class="todo-page__search-button" @tap="applySearch">搜索</button>
       </view>
 
       <view class="todo-page__filters">
         <picker
+          class="todo-page__filter-picker"
           mode="selector"
           :range="ISSUE_FILTER_TYPE_OPTIONS"
           range-key="label"
@@ -205,29 +197,8 @@ onUnload(() => {
           @change="changeType"
         >
           <view class="todo-page__filter">
-            <text>{{ ISSUE_FILTER_TYPE_OPTIONS[typeIndex]?.label }}</text><text class="todo-page__chevron">⌄</text>
-          </view>
-        </picker>
-        <picker
-          mode="selector"
-          :range="ISSUE_STATUS_OPTIONS"
-          range-key="label"
-          :value="statusIndex"
-          @change="changeStatus"
-        >
-          <view class="todo-page__filter">
-            <text>{{ ISSUE_STATUS_OPTIONS[statusIndex]?.label }}</text><text class="todo-page__chevron">⌄</text>
-          </view>
-        </picker>
-        <picker
-          mode="selector"
-          :range="YEAR_OPTIONS"
-          range-key="label"
-          :value="yearIndex"
-          @change="changeYear"
-        >
-          <view class="todo-page__filter">
-            <text>{{ YEAR_OPTIONS[yearIndex]?.label }}</text><text class="todo-page__chevron">⌄</text>
+            <text class="todo-page__filter-label">{{ ISSUE_FILTER_TYPE_OPTIONS[typeIndex]?.label }}</text>
+            <image class="todo-page__chevron" src="/static/icons/chevron-down.svg" mode="aspectFit" aria-hidden="true" />
           </view>
         </picker>
         <view class="todo-page__region-filter">
@@ -241,11 +212,24 @@ onUnload(() => {
             @retry="loadRegions"
           />
         </view>
+        <picker
+          class="todo-page__filter-picker"
+          mode="selector"
+          :range="ISSUE_STATUS_OPTIONS"
+          range-key="label"
+          :value="statusIndex"
+          @change="changeStatus"
+        >
+          <view class="todo-page__filter">
+            <text class="todo-page__filter-label">{{ ISSUE_STATUS_OPTIONS[statusIndex]?.label }}</text>
+            <image class="todo-page__chevron" src="/static/icons/chevron-down.svg" mode="aspectFit" aria-hidden="true" />
+          </view>
+        </picker>
       </view>
     </view>
 
     <view class="todo-page__content">
-      <view v-if="items.length" class="todo-page__summary">
+      <view v-if="items.length && hasActiveFilters" class="todo-page__summary">
         <text>共 {{ total }} 条记录</text>
         <button v-if="hasActiveFilters" class="todo-page__reset" @tap="clearAllFilters">
           清除筛选
@@ -267,7 +251,9 @@ onUnload(() => {
       </view>
 
       <view v-else-if="!items.length" class="todo-page__state">
-        <view class="todo-page__empty-icon" aria-hidden="true">✓</view>
+        <view class="todo-page__empty-icon" aria-hidden="true">
+          <image class="todo-page__empty-check" src="/static/icons/check-primary.svg" mode="aspectFit" />
+        </view>
         <text class="todo-page__state-title">暂无符合条件的记录</text>
         <text class="todo-page__state-text">可以调整筛选条件，或下拉刷新后重试。</text>
         <button v-if="hasActiveFilters" class="todo-page__retry" @tap="clearAllFilters">
@@ -288,6 +274,7 @@ onUnload(() => {
       </view>
 
       <view v-if="items.length" class="todo-page__footer-state">
+        <text>共 {{ total }} 条记录 · </text>
         <text v-if="isRefreshing">正在刷新…</text>
         <text v-else-if="isLoadingMore">正在加载更多…</text>
         <button v-else-if="error" class="todo-page__footer-retry" @tap="retry()">
@@ -313,40 +300,46 @@ onUnload(() => {
 
 .todo-page {
   min-height: 100vh;
-  background: var(--gb-color-background, #f4f7fa);
+  background: linear-gradient(180deg, #e8f1fb 0, #f4f7fb 42%, #f4f7fb 100%);
 }
 
 .todo-page__toolbar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 10;
-  padding: 20rpx 24rpx 18rpx;
-  border-bottom: 1rpx solid var(--gb-color-border, #e5eaf0);
-  background: rgba(255, 255, 255, 0.98);
+  padding: 16px 16px 10px;
 }
 
 .todo-page__search {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  min-height: 80rpx;
-  padding-left: 22rpx;
-  border: 1rpx solid var(--gb-color-border, #dfe5ec);
-  border-radius: var(--gb-radius-md, 16rpx);
-  background: #f7f9fc;
+  height: 40px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
 }
 
 .todo-page__search-icon {
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 34rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8a94a3;
 }
 
 .todo-page__search-input {
   flex: 1;
   min-width: 0;
-  height: 72rpx;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 28rpx;
+  height: 40px;
+  padding-right: 12px;
+  color: var(--gb-color-text-primary);
+  font-size: 14px;
 }
 
 .todo-page__clear-search,
@@ -369,11 +362,18 @@ onUnload(() => {
 }
 
 .todo-page__clear-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
   width: 56rpx;
   height: 56rpx;
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 38rpx;
-  line-height: 56rpx;
+}
+
+.todo-page__clear-search-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
 }
 
 .todo-page__search-button {
@@ -389,43 +389,49 @@ onUnload(() => {
 
 .todo-page__filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12rpx;
-  margin-top: 16rpx;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .todo-page__filter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10rpx;
-  min-height: 44px;
-  padding: 0 18rpx;
-  border-radius: var(--gb-radius-sm, 12rpx);
-  background: #f2f5f8;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 25rpx;
+  gap: 4px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 8px 0 10px;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--gb-color-text-primary);
+  font-size: 12px;
 }
 
-.todo-page__region-filter { min-width: 0; }
+.todo-page__filter-picker,
+.todo-page__region-filter {
+  min-width: 0;
+  width: 100%;
+}
 
 .todo-page__chevron {
-  flex-shrink: 0;
-  color: var(--gb-color-text-muted, #8490a3);
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
 }
 
 .todo-page__content {
-  padding: 20rpx 24rpx calc(40rpx + var(--gb-safe-area-bottom, 0px));
+  padding: 0 16px 24px;
 }
 
 .todo-page__summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 52rpx;
-  margin-bottom: 12rpx;
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 24rpx;
+  min-height: 24px;
+  margin-bottom: 6px;
+  color: var(--gb-color-text-muted);
+  font-size: 12px;
 }
 
 .todo-page__reset {
@@ -439,7 +445,7 @@ onUnload(() => {
 .todo-page__list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 10px;
 }
 
 .todo-page__state {
@@ -472,8 +478,12 @@ onUnload(() => {
   margin-bottom: 28rpx;
   border-radius: 50%;
   background: rgba(1, 92, 187, 0.08);
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 50rpx;
+}
+
+.todo-page__empty-check {
+  flex: none;
+  width: 26px;
+  height: 26px;
 }
 
 .todo-page__state-title {
@@ -520,5 +530,30 @@ onUnload(() => {
   to {
     transform: rotate(360deg);
   }
+}
+.todo-page__magnifier {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  margin: -3px 3px 0 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.todo-page__magnifier::after {
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  width: 6px;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+  content: '';
+}
+.todo-page__filter-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 </style>

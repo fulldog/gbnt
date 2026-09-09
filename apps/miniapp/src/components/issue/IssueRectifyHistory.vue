@@ -40,21 +40,13 @@ function preview(record: RectifyRecord, index: number): void {
 
 <style scoped lang="scss">
 .history__item {
-  position: relative;
-  padding: 24rpx 0 24rpx 28rpx;
-  border-bottom: 1rpx solid var(--gb-color-border, #edf0f4);
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 8px;
+  background: #eef7f2;
 }
 
-.history__item::before {
-  position: absolute;
-  top: 34rpx;
-  left: 0;
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: var(--gb-color-success, #1a7f4b);
-  content: "";
-}
+
 
 .history__item:last-child {
   border-bottom: 0;
@@ -71,16 +63,16 @@ function preview(record: RectifyRecord, index: number): void {
 .history__title {
   flex: 1 1 160px;
   min-width: 0;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
+  color: #1a7f4b;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
 }
 
 .history__time {
   flex-shrink: 0;
-  color: var(--gb-color-text-muted, #8490a3);
-  font-size: 14px;
+  color: var(--gb-color-text-secondary);
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -88,7 +80,7 @@ function preview(record: RectifyRecord, index: number): void {
   display: block;
   margin-top: 12rpx;
   color: var(--gb-color-text-secondary, #566176);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;

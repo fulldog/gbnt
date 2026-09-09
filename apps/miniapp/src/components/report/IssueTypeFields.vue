@@ -56,34 +56,31 @@ function selectVoltage(event: PickerEventLike): void {
   <view class="type-fields">
     <template v-if="type === 'well'">
       <view class="form-field">
-        <text class="form-label"><text class="required">*</text>建设类型</text>
-        <picker
-          :range="BUILD_KIND_OPTIONS"
-          range-key="label"
-          :value="BUILD_KIND_OPTIONS.findIndex((item) => item.value === details.buildKind)"
-          @change="selectBuildKind"
-        >
-          <view class="picker-value">
-            {{ BUILD_KIND_OPTIONS.find((item) => item.value === details.buildKind)?.label }}
-          </view>
-        </picker>
+        <text class="form-label">设施类型</text>
+        <view class="choice-options" role="radiogroup">
+          <button v-for="(option, index) in BUILD_KIND_OPTIONS" :key="option.value" class="choice-option" :class="{ 'choice-option--selected': details.buildKind === option.value }" role="radio" :aria-checked="details.buildKind === option.value" @tap="selectBuildKind({ detail: { value: index } })">
+            <view class="choice-mark" aria-hidden="true">
+              <image v-if="details.buildKind === option.value" class="choice-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
+            </view>{{ option.label }}
+          </button>
+        </view>
       </view>
       <view class="form-grid">
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>出水口总数</text>
-          <input class="form-input" type="number" :value="details.outletTotal" placeholder="0" @input="update('outletTotal', $event)" />
+          <text class="form-label">出水口总数</text>
+          <input class="form-input" type="number" :value="details.outletTotal" placeholder="请输入" @input="update('outletTotal', $event)" /><text class="form-unit">个</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>损坏数量</text>
-          <input class="form-input" type="number" :value="details.outletDamaged" placeholder="0" @input="update('outletDamaged', $event)" />
+          <text class="form-label">出水口损坏</text>
+          <input class="form-input" type="number" :value="details.outletDamaged" placeholder="请输入" @input="update('outletDamaged', $event)" /><text class="form-unit">个</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>护筒总数</text>
-          <input class="form-input" type="number" :value="details.casingTotal" placeholder="0" @input="update('casingTotal', $event)" />
+          <text class="form-label">护筒总数</text>
+          <input class="form-input" type="number" :value="details.casingTotal" placeholder="请输入" @input="update('casingTotal', $event)" /><text class="form-unit">个</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>损坏数量</text>
-          <input class="form-input" type="number" :value="details.casingDamaged" placeholder="0" @input="update('casingDamaged', $event)" />
+          <text class="form-label">护筒损坏</text>
+          <input class="form-input" type="number" :value="details.casingDamaged" placeholder="请输入" @input="update('casingDamaged', $event)" /><text class="form-unit">个</text>
         </view>
       </view>
     </template>
@@ -91,46 +88,43 @@ function selectVoltage(event: PickerEventLike): void {
     <template v-else-if="type === 'road'">
       <view class="form-grid">
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>长度（千米）</text>
-          <input class="form-input" type="digit" :value="details.length" placeholder="0" @input="update('length', $event)" />
+          <text class="form-label">长度</text>
+          <input class="form-input" type="digit" :value="details.length" placeholder="请输入" @input="update('length', $event)" /><text class="form-unit">千米</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>宽度（米）</text>
-          <input class="form-input" type="digit" :value="details.width" placeholder="0" @input="update('width', $event)" />
+          <text class="form-label">宽度</text>
+          <input class="form-input" type="digit" :value="details.width" placeholder="请输入" @input="update('width', $event)" /><text class="form-unit">米</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>厚度（米）</text>
-          <input class="form-input" type="digit" :value="details.thickness" placeholder="0" @input="update('thickness', $event)" />
+          <text class="form-label">厚度</text>
+          <input class="form-input" type="digit" :value="details.thickness" placeholder="请输入" @input="update('thickness', $event)" /><text class="form-unit">米</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>林网存活数（棵）</text>
-          <input class="form-input" type="digit" :value="details.treeSurvive" placeholder="0" @input="update('treeSurvive', $event)" />
+          <text class="form-label">林网存活数</text>
+          <input class="form-input" type="digit" :value="details.treeSurvive" placeholder="请输入" @input="update('treeSurvive', $event)" /><text class="form-unit">棵</text>
         </view>
       </view>
     </template>
 
     <template v-else-if="type === 'bridge'">
       <view class="form-field">
-        <text class="form-label"><text class="required">*</text>设施类型</text>
-        <picker
-          :range="BRIDGE_KIND_OPTIONS"
-          range-key="label"
-          :value="BRIDGE_KIND_OPTIONS.findIndex((item) => item.value === details.bridgeKind)"
-          @change="selectBridgeKind"
-        >
-          <view class="picker-value">
-            {{ BRIDGE_KIND_OPTIONS.find((item) => item.value === details.bridgeKind)?.label }}
-          </view>
-        </picker>
+        <text class="form-label">设施类型</text>
+        <view class="choice-options" role="radiogroup">
+          <button v-for="(option, index) in BRIDGE_KIND_OPTIONS" :key="option.value" class="choice-option" :class="{ 'choice-option--selected': details.bridgeKind === option.value }" role="radio" :aria-checked="details.bridgeKind === option.value" @tap="selectBridgeKind({ detail: { value: index } })">
+            <view class="choice-mark" aria-hidden="true">
+              <image v-if="details.bridgeKind === option.value" class="choice-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
+            </view>{{ option.label }}
+          </button>
+        </view>
       </view>
       <view class="form-grid">
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>长度（米）</text>
-          <input class="form-input" type="digit" :value="details.length" placeholder="0" @input="update('length', $event)" />
+          <text class="form-label">长度</text>
+          <input class="form-input" type="digit" :value="details.length" placeholder="请输入" @input="update('length', $event)" /><text class="form-unit">米</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>宽度（米）</text>
-          <input class="form-input" type="digit" :value="details.width" placeholder="0" @input="update('width', $event)" />
+          <text class="form-label">宽度</text>
+          <input class="form-input" type="digit" :value="details.width" placeholder="请输入" @input="update('width', $event)" /><text class="form-unit">米</text>
         </view>
       </view>
     </template>
@@ -138,41 +132,38 @@ function selectVoltage(event: PickerEventLike): void {
     <template v-else-if="type === 'forest'">
       <view class="form-grid">
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>移交株数</text>
-          <input class="form-input" type="digit" :value="details.handoverCount" placeholder="0" @input="update('handoverCount', $event)" />
+          <text class="form-label">移交株数</text>
+          <input class="form-input" type="digit" :value="details.handoverCount" placeholder="请输入" @input="update('handoverCount', $event)" /><text class="form-unit">株</text>
         </view>
         <view class="form-field">
-          <text class="form-label"><text class="required">*</text>现有株数</text>
-          <input class="form-input" type="digit" :value="details.existingCount" placeholder="0" @input="update('existingCount', $event)" />
+          <text class="form-label">现有株数</text>
+          <input class="form-input" type="digit" :value="details.existingCount" placeholder="请输入" @input="update('existingCount', $event)" /><text class="form-unit">株</text>
         </view>
       </view>
       <view class="form-field">
-        <text class="form-label"><text class="required">*</text>存活率（%）</text>
-        <input class="form-input" type="digit" :value="details.surviveRate" placeholder="0–100" @input="update('surviveRate', $event)" />
+        <text class="form-label">存活率</text>
+        <input class="form-input" type="digit" :value="details.surviveRate" placeholder="0–100" @input="update('surviveRate', $event)" /><text class="form-unit">%</text>
       </view>
     </template>
 
     <template v-else>
       <view class="form-field">
-        <text class="form-label"><text class="required">*</text>容量（kVA）</text>
-        <input class="form-input" type="digit" :value="details.capacity" placeholder="请输入容量" @input="update('capacity', $event)" />
+        <text class="form-label">容量</text>
+        <input class="form-input" type="digit" :value="details.capacity" placeholder="请输入容量" @input="update('capacity', $event)" /><text class="form-unit">kVA</text>
       </view>
       <view class="form-field">
         <text class="form-label">型号</text>
         <input class="form-input" type="text" :value="details.transformerModel" placeholder="请输入型号" @input="update('transformerModel', $event)" />
       </view>
       <view class="form-field">
-        <text class="form-label"><text class="required">*</text>电压等级</text>
-        <picker
-          :range="VOLTAGE_OPTIONS"
-          range-key="label"
-          :value="VOLTAGE_OPTIONS.findIndex((item) => item.value === details.voltage)"
-          @change="selectVoltage"
-        >
-          <view class="picker-value">
-            {{ VOLTAGE_OPTIONS.find((item) => item.value === details.voltage)?.label }}
-          </view>
-        </picker>
+        <text class="form-label">电压等级</text>
+        <view class="choice-options" role="radiogroup">
+          <button v-for="(option, index) in VOLTAGE_OPTIONS" :key="option.value" class="choice-option" :class="{ 'choice-option--selected': details.voltage === option.value }" role="radio" :aria-checked="details.voltage === option.value" @tap="selectVoltage({ detail: { value: index } })">
+            <view class="choice-mark" aria-hidden="true">
+              <image v-if="details.voltage === option.value" class="choice-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
+            </view>{{ option.label }}
+          </button>
+        </view>
       </view>
     </template>
 
@@ -188,58 +179,85 @@ function selectVoltage(event: PickerEventLike): void {
 </template>
 
 <style scoped lang="scss">
-.type-fields {
+.type-fields, .form-grid {
   display: flex;
   flex-direction: column;
-  gap: 28rpx;
 }
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20rpx;
-}
-
 .form-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+.form-label {
+  flex: none;
+  color: #000;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.form-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 28px;
+  text-align: right;
+}
+.form-unit {
+  flex: none;
+  color: #6b7a90;
+  font-size: 14px;
+  line-height: 28px;
+}
+.choice-options {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 14px;
   min-width: 0;
 }
-
-.form-label {
-  display: block;
-  margin-bottom: 12rpx;
+.choice-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--color-text);
-  font-size: 27rpx;
+  font-size: 14px;
+  line-height: 28px;
+}
+.choice-option--selected {
+  color: var(--color-primary);
   font-weight: 600;
-  line-height: 1.45;
 }
-
-.required {
-  margin-right: 6rpx;
-  color: var(--color-danger);
+.choice-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #d9d9d9;
+  border-radius: 50%;
 }
-
-.form-input,
-.picker-value {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 88rpx;
-  padding: 0 24rpx;
-  color: var(--color-text);
-  font-size: 28rpx;
-  line-height: 88rpx;
-  background: var(--color-surface-muted);
-  border: 2rpx solid transparent;
-  border-radius: var(--radius-md);
-}
-
-.form-input:focus {
-  background: var(--color-surface);
+.choice-option--selected .choice-mark {
   border-color: var(--color-primary);
+  background: var(--color-primary);
 }
-
-@media (max-width: 340px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
+.choice-mark__icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }
 </style>

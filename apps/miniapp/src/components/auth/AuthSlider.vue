@@ -71,7 +71,6 @@ defineExpose({ reset });
       <view
         v-if="state !== 'error' && state !== 'preparing'"
         class="auth-slider__handle"
-        :class="{ 'auth-slider__handle--verified': state === 'verified' }"
         :style="{ transform: `translateX(${offset}px)` }"
         role="button"
         aria-label="拖动滑块完成人机验证"
@@ -80,7 +79,12 @@ defineExpose({ reset });
         @touchend.stop="onTouchEnd"
         @touchcancel.stop="onTouchCancel"
       >
-        <text class="auth-slider__handle-icon" aria-hidden="true">{{ state === "verified" ? "✓" : "›" }}</text>
+        <image
+          class="auth-slider__handle-icon"
+          :src="state === 'verified' ? '/static/icons/check-success.svg' : '/static/icons/chevron-right.svg'"
+          mode="aspectFit"
+          aria-hidden="true"
+        />
       </view>
       <button
         v-else
@@ -109,7 +113,7 @@ defineExpose({ reset });
   border: 0;
   border-radius: 6px;
   background: #f0f4f8;
-  color: var(--gbnt-text-secondary, #526277);
+  color: #999;
   box-sizing: border-box;
 }
 
@@ -119,7 +123,7 @@ defineExpose({ reset });
   bottom: 0;
   left: 0;
   width: 24px;
-  background: #dbeafe;
+  background: #56d288;
   transition: width 80ms linear;
 }
 
@@ -139,45 +143,34 @@ defineExpose({ reset });
 
 .auth-slider__handle {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 3px;
+  left: 3px;
   display: flex;
   width: 48px;
-  height: 44px;
+  height: 38px;
   align-items: center;
   justify-content: center;
-  padding: 3px;
+  padding: 0;
   border: 0;
   border-radius: 6px;
-  background: transparent;
-  color: var(--gbnt-primary, #015cbb);
-  font-size: 30px;
-  line-height: 1;
+  background: #fff;
   box-sizing: border-box;
 }
 
 .auth-slider__track--verified {
-  color: var(--gbnt-success, #197447);
+  color: #fff;
 }
 
 .auth-slider__track--verified .auth-slider__progress {
-  background: #dcfce7;
+  background: #56d288;
 }
 
 .auth-slider__handle-icon {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  background: #fff;
-}
-
-.auth-slider__handle--verified .auth-slider__handle-icon {
-  background: var(--gbnt-success, #197447);
-  color: #ffffff;
-  font-size: 22px;
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 20px;
+  pointer-events: none;
 }
 
 .auth-slider__track--error,

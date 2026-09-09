@@ -10,7 +10,8 @@
     {
       "path": "pages/todo/index",
       "style": {
-        "navigationBarTitleText": "待办任务",
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "农田专项整治",
         "enablePullDownRefresh": true,
         "onReachBottomDistance": 80,
         "backgroundColor": "#f4f7fb"
@@ -19,6 +20,7 @@
     {
       "path": "pages/report/index",
       "style": {
+        "navigationStyle": "custom",
         "navigationBarTitleText": "巡查上报",
         "backgroundColor": "#f4f7fb"
       }
@@ -26,6 +28,7 @@
     {
       "path": "pages/mine/index",
       "style": {
+        "navigationStyle": "custom",
         "navigationBarTitleText": "我的",
         "enablePullDownRefresh": true,
         "backgroundColor": "#f4f7fb"
@@ -85,7 +88,7 @@
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
-    "color": "#6b7280",
+    "color": "#6b7a90",
     "selectedColor": "#015cbb",
     "backgroundColor": "#ffffff",
     "borderStyle": "black",

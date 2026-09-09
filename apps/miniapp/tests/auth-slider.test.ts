@@ -84,11 +84,13 @@ describe("安全验证生命周期", () => {
     expect(options.finish).toHaveBeenLastCalledWith({ slider_id: "session-current", duration_ms: 640 });
     expect(options.verified).not.toHaveBeenCalled();
     expect(slider.state.value).toBe("verifying");
+    expect(slider.progressWidth.value).not.toBe("100%");
     result.resolve({ pass_token: "verified-by-server", expire_seconds: 180 });
     await verifying;
     expect(options.verified).toHaveBeenCalledTimes(1);
     expect(options.verified).toHaveBeenLastCalledWith("verified-by-server");
     expect(slider.state.value).toBe("verified");
+    expect(slider.progressWidth.value).toBe("100%");
   });
 
   it("未拖到末端或取消手势都不调用后端完成验证", async () => {
@@ -99,6 +101,7 @@ describe("安全验证生命周期", () => {
     await slider.onTouchEnd({ changedTouches: [{ clientX: 60 }] });
     expect(slider.state.value).toBe("ready");
     expect(slider.offset.value).toBe(0);
+    expect(slider.progressWidth.value).toBe("0px");
     slider.onTouchStart({ touches: [{ clientX: 10 }] });
     slider.onTouchMove({ touches: [{ clientX: 1000 }] });
     slider.onTouchCancel();
@@ -259,17 +262,17 @@ describe("安全验证生命周期", () => {
   it("使用实际宽度限制位移，测量失败保留默认，拖动中变宽安全重置手势", async () => {
     const { slider } = setup();
     slider.setTrackWidth(null);
-    expect(slider.maxTravel.value).toBe(232);
+    expect(slider.maxTravel.value).toBe(226);
     slider.setTrackWidth(240);
-    expect(slider.maxTravel.value).toBe(192);
+    expect(slider.maxTravel.value).toBe(186);
     await slider.prepare();
     slider.onTouchStart({ touches: [{ clientX: 0 }] });
     slider.onTouchMove({ touches: [{ clientX: 1000 }] });
-    expect(slider.offset.value).toBe(192);
+    expect(slider.offset.value).toBe(186);
     slider.setTrackWidth(260);
     expect(slider.state.value).toBe("ready");
     expect(slider.offset.value).toBe(0);
-    expect(slider.maxTravel.value).toBe(212);
+    expect(slider.maxTravel.value).toBe(206);
   });
 });
 

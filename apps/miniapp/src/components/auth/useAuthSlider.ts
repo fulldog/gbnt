@@ -19,6 +19,7 @@ interface SliderOptions {
 }
 
 const HANDLE_WIDTH = 48;
+const HANDLE_INSET = 3;
 const COMPLETE_TOLERANCE = 6;
 
 /** 只管理本次滑动验证；过期、重置及卸载后，旧请求不得签发页面可用的凭证。 */
@@ -28,8 +29,12 @@ export function useAuthSlider(options: SliderOptions) {
   const trackWidth = shallowRef(280);
   const errorMessage = shallowRef("");
   const busy = computed(() => state.value === "preparing" || state.value === "verifying");
-  const maxTravel = computed(() => Math.max(trackWidth.value - HANDLE_WIDTH, 1));
-  const progressWidth = computed(() => `${Math.min(offset.value + HANDLE_WIDTH / 2, trackWidth.value)}px`);
+  const maxTravel = computed(() => Math.max(trackWidth.value - HANDLE_WIDTH - HANDLE_INSET * 2, 1));
+  const progressWidth = computed(() => {
+    if (state.value === "verified") return "100%";
+    if (offset.value === 0) return "0px";
+    return `${Math.min(offset.value + HANDLE_INSET + HANDLE_WIDTH / 2, trackWidth.value)}px`;
+  });
   const stateText = computed(() => {
     if (state.value === "preparing") return "正在准备验证…";
     if (state.value === "verifying") return "正在验证…";

@@ -52,7 +52,6 @@ function updateDescription(event: Event | InputEventLike): void {
 <template>
   <view class="quiz-card" :class="{ 'quiz-card--issue': indicatesIssue }">
     <view class="quiz-card__head">
-      <view class="quiz-card__number">{{ definition.type === "water_out" ? "重点" : "检查" }}</view>
       <view class="quiz-card__copy">
         <text class="quiz-card__title">{{ definition.label }}</text>
         <text class="quiz-card__help">{{ definition.help }}</text>
@@ -67,7 +66,10 @@ function updateDescription(event: Event | InputEventLike): void {
         :disabled="disabled"
         @tap="emit('answer', true)"
       >
-        是
+        <view class="answer-mark" aria-hidden="true">
+          <image v-if="item.value === true" class="answer-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
+        </view>
+        <text>是</text>
       </button>
       <button
         class="answer-button"
@@ -76,7 +78,10 @@ function updateDescription(event: Event | InputEventLike): void {
         :disabled="disabled"
         @tap="emit('answer', false)"
       >
-        否
+        <view class="answer-mark" aria-hidden="true">
+          <image v-if="item.value === false" class="answer-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
+        </view>
+        <text>否</text>
       </button>
     </view>
 
@@ -112,120 +117,100 @@ function updateDescription(event: Event | InputEventLike): void {
 
 <style scoped lang="scss">
 .quiz-card {
-  padding: 28rpx;
-  background: var(--color-surface);
-  border: 2rpx solid var(--color-border);
-  border-radius: var(--radius-lg);
-  transition: border-color 180ms ease, background-color 180ms ease;
+  background: #fff;
 }
-
-.quiz-card--issue {
-  background: var(--color-warning-soft);
-  border-color: var(--color-warning-border);
-}
-
-.quiz-card__head {
-  display: flex;
-  gap: 20rpx;
-}
-
-.quiz-card__number {
-  display: grid;
-  min-width: 72rpx;
-  height: 48rpx;
-  padding: 0 12rpx;
-  color: var(--color-primary);
-  font-size: 22rpx;
-  font-weight: 700;
-  background: var(--color-primary-soft);
-  border-radius: 24rpx;
-  place-items: center;
-}
-
 .quiz-card__copy {
   display: flex;
   min-width: 0;
-  flex: 1;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 8px;
 }
-
 .quiz-card__title {
   color: var(--color-text);
-  font-size: 30rpx;
-  font-weight: 650;
-  line-height: 1.45;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.35;
 }
-
 .quiz-card__help {
   color: var(--color-text-secondary);
-  font-size: 24rpx;
+  font-size: 12px;
   line-height: 1.55;
 }
-
 .answer-row {
-  display: grid;
-  margin-top: 24rpx;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20rpx;
+  display: flex;
+  gap: 12px;
+  margin: 20px 0 16px;
 }
-
 .answer-button {
-  min-height: 88rpx;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  height: 56px;
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 29rpx;
-  font-weight: 600;
-  line-height: 88rpx;
-  background: var(--color-surface-muted);
-  border: 2rpx solid transparent;
-  border-radius: var(--radius-md);
-}
-
-.answer-button::after {
+  padding: 0 12px;
   border: 0;
+  border-radius: 8px;
+  background: #f0f4f8;
+  color: var(--color-text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
 }
-
+.answer-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #d9d9d9;
+  border-radius: 50%;
+  background: #fff;
+}
+.answer-mark__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
 .answer-button--selected {
   color: var(--color-primary);
   background: var(--color-primary-soft);
+}
+.answer-button--selected .answer-mark {
   border-color: var(--color-primary);
+  background: var(--color-primary);
 }
-
 .quiz-field {
-  margin-top: 28rpx;
+  margin-top: 16px;
 }
-
 .quiz-field__label {
   display: block;
-  margin-bottom: 12rpx;
+  margin-bottom: 10px;
   color: var(--color-text);
-  font-size: 27rpx;
-  font-weight: 600;
-}
-
-.quiz-field__aside {
-  margin-left: 12rpx;
-  color: var(--color-text-tertiary);
-  font-size: 23rpx;
+  font-size: 14px;
   font-weight: 400;
 }
-
+.quiz-field__aside {
+  margin-left: 6px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
 .required {
-  margin-right: 6rpx;
+  margin-right: 3px;
   color: var(--color-danger);
 }
-
 .quiz-field__textarea {
-  box-sizing: border-box;
   width: 100%;
-  min-height: 176rpx;
-  padding: 20rpx 24rpx;
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f0f4f8;
   color: var(--color-text);
-  font-size: 28rpx;
+  font-size: 14px;
   line-height: 1.6;
-  background: var(--color-surface);
-  border: 2rpx solid var(--color-border-strong);
-  border-radius: var(--radius-md);
 }
 </style>

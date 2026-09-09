@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import PageTopInset from "@/components/common/PageTopInset.vue";
 import { computed, reactive, ref, shallowRef, watch } from "vue";
-import { onHide, onLoad, onUnload } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShareAppMessage, onShareTimeline, onUnload } from "@dcloudio/uni-app";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import SignaturePad from "@/components/media/SignaturePad.vue";
 import RecoverableImage from "@/components/common/RecoverableImage.vue";
@@ -34,11 +35,8 @@ import {
   validateSubmitStep,
 } from "@/domain/issues/validation";
 import { inputEventValue, type InputEventLike } from "@/utils/events";
+import { hasValidCoordinates } from "@/utils/issue-display";
 import { useAuthStore } from "@/stores/auth";
-
-interface PickerEventLike {
-  detail: { value: string | number };
-}
 
 type SignaturePadInstance = InstanceType<typeof SignaturePad>;
 
@@ -82,11 +80,8 @@ const locationInput = computed(() => ({
   lng: form.lng,
   address: form.address,
 }));
-const yearPickerIndex = computed(() =>
-  Math.max(
-    0,
-    PROJECT_YEAR_OPTIONS.findIndex((item) => item.value === form.projectYear),
-  ),
+const hasLocation = computed(() =>
+  form.lat !== null && form.lng !== null && hasValidCoordinates(form.lat, form.lng),
 );
 const typeSelectionDisabled = computed(() =>
   !draftReady.value || step.value !== 1 || hasPendingPhotos.value ||
@@ -123,13 +118,6 @@ function blockForPhotos(): boolean {
   if (!hasPendingPhotos.value) return false;
   uni.showToast({ title: "请等待照片上传完成，失败照片请重试或移除", icon: "none" });
   return true;
-}
-
-function selectYear(event: PickerEventLike): void {
-  const option = PROJECT_YEAR_OPTIONS[Number(event.detail.value)];
-  if (option) {
-    form.projectYear = option.value;
-  }
 }
 
 function selectRegion(option: { id: number | null; label: string }): void {
@@ -334,6 +322,16 @@ function restoreDraft(): void {
   });
 }
 
+onShareAppMessage(() => ({
+  title: "农田专项整治 · 巡查上报",
+  path: "/pages/report/index",
+}));
+
+onShareTimeline(() => ({
+  title: "农田专项整治 · 巡查上报",
+  query: "",
+}));
+
 onLoad(async () => {
   await authStore.restore();
   if (!active) return;
@@ -370,6 +368,7 @@ onUnload(() => {
 
 <template>
   <view class="report-page page-shell">
+    <PageTopInset />
     <view v-if="!draftReady" class="section-card">正在恢复登录状态与上报草稿…</view>
     <template v-else>
     <FacilityTypeTabs
@@ -378,15 +377,12 @@ onUnload(() => {
       :disabled="typeSelectionDisabled || selectingType"
       @select="selectType"
     />
-    <view class="report-hero">
-      <view class="report-hero__eyebrow">现场巡查</view>
-      <text class="report-hero__title">{{ stepTitle }}</text>
-      <text class="report-hero__subtitle">第 {{ step }} 步，共 {{ totalSteps }} 步</text>
-      <button class="draft-status" :class="{ 'draft-status--failed': saveState === 'failed' }" @tap="saveDraft(form)">{{ draftHint }}</button>
-      <view class="progress" aria-label="上报进度">
+    <view v-if="step > 1" class="report-progress">
+      <view class="progress" :aria-label="`${stepTitle}，第 ${step} 步，共 ${totalSteps} 步`">
         <view class="progress__value" :style="{ width: progress }" />
       </view>
     </view>
+    <button v-if="saveState === 'failed'" class="draft-status draft-status--failed" @tap="saveDraft(form)">{{ draftHint }}</button>
 
     <view v-if="errors.length" class="error-summary" role="alert">
       <text class="error-summary__title">请检查以下内容</text>
@@ -394,77 +390,52 @@ onUnload(() => {
     </view>
 
     <template v-if="step === 1">
-      <view class="section-card">
-        <view class="section-heading">
-          <text class="section-heading__title">基本信息</text>
-          <text class="section-heading__desc">带 * 的内容为必填项</text>
-        </view>
-
-        <view class="form-stack">
-          <view class="form-field">
-            <text class="form-label"><text class="required">*</text>行政区划</text>
+      <view class="report-fields">
+        <view class="form-field">
+          <text class="form-label">区划</text>
+          <view class="form-control">
             <RegionPicker
-              :tree="regionTree"
-              :value="form.orgId"
-              :label="form.orgLabel"
-              :loading="regionsLoading"
-              :error="regionsError"
-              :disabled="!draftReady || submitting"
-              @select="selectRegion"
-              @retry="load"
+              :tree="regionTree" :value="form.orgId" :label="form.orgLabel"
+              :loading="regionsLoading" :error="regionsError" :disabled="!draftReady || submitting"
+              @select="selectRegion" @retry="load"
             />
-          </view>
-
-          <view class="form-field">
-            <text class="form-label"><text class="required">*</text>项目年度</text>
-            <picker :range="PROJECT_YEAR_OPTIONS" range-key="label" :value="yearPickerIndex" @change="selectYear">
-              <view class="picker-value">{{ form.projectYear }} 年</view>
-            </picker>
-          </view>
-
-          <view class="form-field">
-            <text class="form-label"><text class="required">*</text>设施编号</text>
-            <input class="form-input" :value="form.code" placeholder="请输入设施编号，如：01号" @input="updateText('code', $event)" />
-          </view>
-
-          <view class="form-field">
-            <view class="form-label-row">
-              <text class="form-label"><text class="required">*</text>现场位置</text>
-              <button class="location-button" :disabled="choosingLocation" @tap="chooseLocation">
-                {{ choosingLocation ? "正在打开地图…" : form.lat === null ? "选择位置" : "重新选择" }}
-              </button>
-            </view>
-            <textarea
-              class="form-textarea"
-              :value="form.address"
-              maxlength="300"
-              auto-height
-              placeholder="先选择地图位置，再补充详细地址"
-              @input="updateText('address', $event)"
-            />
-            <text v-if="form.lat !== null && form.lng !== null" class="coordinate">
-              GCJ-02：{{ form.lat.toFixed(6) }}, {{ form.lng.toFixed(6) }}
-            </text>
           </view>
         </view>
-      </view>
-
-      <view class="section-card">
-        <view class="section-heading">
-          <text class="section-heading__title">{{ issueTypeLabel(form.type) }}信息</text>
-          <text class="section-heading__desc">字段严格对应当前后端契约</text>
+        <view class="form-field">
+          <text class="form-label">项目年度</text>
+          <view class="year-options" role="radiogroup" aria-label="项目年度">
+            <button v-for="option in PROJECT_YEAR_OPTIONS" :key="option.value" class="year-option"
+              :class="{ 'year-option--selected': form.projectYear === option.value }"
+              role="radio" :aria-checked="form.projectYear === option.value"
+              @tap="form.projectYear = option.value">{{ option.value }}</button>
+          </view>
+        </view>
+        <view class="form-field">
+          <text class="form-label">设施编号</text>
+          <input class="form-input" :value="form.code" placeholder="请输入设施编号" @input="updateText('code', $event)" />
         </view>
         <IssueTypeFields :type="form.type" :details="form.details" @update-field="updateDetail" />
+        <view class="location-row">
+          <template v-if="hasLocation">
+            <view class="location-pin" aria-hidden="true">
+              <image class="location-icon" src="/static/icons/map-pin-primary.svg" mode="aspectFit" />
+            </view>
+            <textarea class="location-address" :value="form.address" maxlength="300" auto-height
+              placeholder="可补充详细地址" @input="updateText('address', $event)" />
+            <button class="location-button" :disabled="choosingLocation"
+              :aria-label="choosingLocation ? '正在获取定位' : '重新获取定位'" @tap="chooseLocation">
+              <image class="location-icon" :class="{ 'location-icon--loading': choosingLocation }"
+                src="/static/icons/refresh-primary.svg" mode="aspectFit" aria-hidden="true" />
+            </button>
+          </template>
+          <button v-else class="location-acquire" :disabled="choosingLocation" :loading="choosingLocation" @tap="chooseLocation">
+            {{ choosingLocation ? '正在获取定位…' : '获取定位' }}
+          </button>
+        </view>
       </view>
     </template>
 
     <template v-else-if="step < totalSteps">
-      <view class="section-intro">
-        <text class="section-intro__title">{{ issueTypeLabel(form.type) }}排查清单</text>
-        <text class="section-intro__desc">
-          当前第 {{ step - 1 }} 题，共 {{ definitions.length }} 题；完成本题后进入下一题。
-        </text>
-      </view>
       <view class="quiz-list">
         <QuizCard
           v-if="currentQuiz && currentDefinition"
@@ -486,7 +457,7 @@ onUnload(() => {
       <view class="section-card review-card">
         <view class="section-heading">
           <text class="section-heading__title">上报确认</text>
-          <text class="section-heading__desc">提交后将进入正式问题台账</text>
+          <text class="section-heading__desc">请核对现场信息后签名确认</text>
         </view>
         <view class="review-list">
           <view class="review-row"><text>设施类型</text><text>{{ issueTypeLabel(form.type) }}</text></view>
@@ -514,10 +485,10 @@ onUnload(() => {
       <SignaturePad ref="signatureRef" :disabled="submitting" @changed="resetSignatureUpload" @cleared="resetSignatureUpload" />
       <view v-if="form.signaturePreviewUrl" class="signature-confirmed">
         <view class="signature-preview"><RecoverableImage :src="toAssetUrl(form.signaturePreviewUrl)" mode="aspectFit" alt="已确认的电子签名" /></view>
-        <text>签名已上传；重新书写后需要再次确认。</text>
+        <text>签名已确认，重新书写后请再次确认。</text>
       </view>
       <button class="secondary-button signature-button" :disabled="uploadingSignature || submitting" @tap="uploadSignature">
-        {{ uploadingSignature ? "正在上传签名…" : form.signatureFileId ? "重新确认签名" : "确认并上传签名" }}
+        {{ uploadingSignature ? "正在上传签名…" : form.signatureFileId ? "重新确认签名" : "确认签名" }}
       </button>
     </template>
 
@@ -537,345 +508,311 @@ onUnload(() => {
 </template>
 
 <style scoped lang="scss">
-.draft-status { padding: 8rpx 0; margin: 8rpx 0 0; min-height: 44px; background: transparent; color: #e6efff; text-align: left; font-size: 24rpx; line-height: 1.5; }
-.draft-status::after { border: 0; }
-.draft-status--failed { color: #fff2b3; }
 .report-page {
-  padding-bottom: calc(150rpx + env(safe-area-inset-bottom));
+  min-height: 100vh;
+  padding-bottom: 92px;
+  background: #fff;
 }
-
-.report-hero {
-  padding: 36rpx 32rpx 34rpx;
-  color: #fff;
-  background: linear-gradient(145deg, #014f9f, #0872c9);
+.report-progress {
+  padding: 12px 16px 4px;
 }
-
-.report-hero__eyebrow {
-  display: inline-flex;
-  padding: 8rpx 18rpx;
-  color: #dbeafe;
-  font-size: 22rpx;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.14);
-  border: 2rpx solid rgba(255, 255, 255, 0.2);
-  border-radius: 999rpx;
-}
-
-.report-hero__title {
-  display: block;
-  margin-top: 20rpx;
-  font-size: 40rpx;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.report-hero__subtitle {
-  display: block;
-  margin-top: 10rpx;
-  color: #dbeafe;
-  font-size: 25rpx;
-  line-height: 1.5;
-}
-
 .progress {
-  height: 10rpx;
-  margin-top: 28rpx;
+  height: 6px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 999rpx;
+  border-radius: 3px;
+  background: #e8edf3;
 }
-
 .progress__value {
   height: 100%;
-  background: #fff;
   border-radius: inherit;
+  background: var(--color-primary);
   transition: width 200ms ease;
 }
-
-.section-card,
-.section-intro,
-.error-summary,
-.signature-confirmed {
-  margin: 24rpx 24rpx 0;
+.draft-status {
+  width: calc(100% - 32px);
+  min-height: 44px;
+  margin: 8px 16px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #8c4c00;
+  background: #fff3e0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
 }
-
-.section-card {
-  padding: 30rpx;
-  background: var(--color-surface);
-  border: 2rpx solid var(--color-border);
-  border-radius: var(--radius-xl);
+.report-fields {
+  margin: 0 16px 8px;
 }
-
-.section-heading {
+.form-field {
   display: flex;
-  margin-bottom: 30rpx;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.section-heading__title,
-.section-intro__title {
-  color: var(--color-text);
-  font-size: 32rpx;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.section-heading__desc,
-.section-intro__desc {
-  color: var(--color-text-secondary);
-  font-size: 24rpx;
-  line-height: 1.55;
-}
-
-.form-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 28rpx;
-}
-
-.form-label-row {
-  display: flex;
-  margin-bottom: 12rpx;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef2f6;
 }
-
 .form-label {
-  display: block;
-  margin-bottom: 12rpx;
-  color: var(--color-text);
-  font-size: 27rpx;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.form-label-row .form-label {
-  margin-bottom: 0;
-}
-
-.required {
-  margin-right: 6rpx;
-  color: var(--color-danger);
-}
-
-.form-input,
-.picker-value,
-.form-textarea {
-  box-sizing: border-box;
-  width: 100%;
-  color: var(--color-text);
-  font-size: 28rpx;
-  background: var(--color-surface-muted);
-  border: 2rpx solid transparent;
-  border-radius: var(--radius-md);
-}
-
-.form-input,
-.picker-value {
-  min-height: 88rpx;
-  padding: 0 24rpx;
-  line-height: 88rpx;
-}
-
-.form-textarea {
-  min-height: 148rpx;
-  padding: 20rpx 24rpx;
-  line-height: 1.6;
-}
-
-.picker-value--placeholder {
-  color: var(--color-text-tertiary);
-}
-
-.location-button,
-.text-button {
-  min-height: 72rpx;
-  margin: 0;
-  padding: 0 18rpx;
-  color: var(--color-primary);
-  font-size: 25rpx;
-  line-height: 72rpx;
-  background: var(--color-primary-soft);
-  border: 0;
-  border-radius: var(--radius-sm);
-}
-
-.location-button::after,
-.text-button::after {
-  border: 0;
-}
-
-.coordinate {
-  display: block;
-  margin-top: 12rpx;
-  color: var(--color-text-tertiary);
-  font-size: 23rpx;
-  font-variant-numeric: tabular-nums;
-}
-
-.inline-error {
-  display: flex;
-  margin-top: 12rpx;
-  color: var(--color-danger);
-  font-size: 24rpx;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.section-intro {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.quiz-list {
-  display: flex;
-  margin: 24rpx;
-  flex-direction: column;
-  gap: 20rpx;
-}
-
-.error-summary {
-  display: flex;
-  padding: 24rpx;
-  color: #991b1b;
-  background: #fef2f2;
-  border: 2rpx solid #fecaca;
-  border-radius: var(--radius-lg);
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.error-summary__title {
-  font-size: 27rpx;
-  font-weight: 700;
-}
-
-.error-summary__item {
-  font-size: 24rpx;
+  flex: none;
+  color: #000;
+  font-size: 14px;
   line-height: 1.5;
 }
-
-.review-list {
-  display: flex;
-  flex-direction: column;
+.form-control {
+  flex: 1;
+  min-width: 0;
 }
-
-.review-row {
-  display: grid;
-  min-height: 80rpx;
-  padding: 16rpx 0;
-  color: var(--color-text-secondary);
-  font-size: 26rpx;
-  line-height: 1.5;
-  border-bottom: 2rpx solid var(--color-border);
-  align-items: center;
-  grid-template-columns: 180rpx 1fr;
-  gap: 20rpx;
-}
-
-.review-row > text:last-child {
+.form-input, .picker-value {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0;
+  background: transparent;
   color: var(--color-text);
+  font-size: 14px;
+  line-height: 28px;
   text-align: right;
 }
-
+.year-options {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.year-option {
+  flex: 1;
+  max-width: 52px;
+  height: 32px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: #f0f4f8;
+  color: #666;
+  font-size: 14px;
+  line-height: 32px;
+}
+.year-option--selected {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.location-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 0 8px;
+}
+.location-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+.location-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.location-icon--loading {
+  animation: location-spin 1s linear infinite;
+}
+@keyframes location-spin {
+  to { transform: rotate(360deg); }
+}
+.location-address {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  padding-top: 2px;
+  color: #5a677a;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.location-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-primary);
+  line-height: 32px;
+}
+.location-button[disabled] {
+  opacity: .6;
+}
+.location-acquire {
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 14px;
+  line-height: 40px;
+}
+.location-acquire[disabled] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  opacity: .6;
+}
+.quiz-list {
+  margin: 12px 16px 20px;
+}
+.section-card {
+  margin: 12px 16px 16px;
+  padding: 0;
+  background: #fff;
+}
+.section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.section-heading__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.section-heading__desc {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.error-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 16px;
+  padding: 12px;
+  border-radius: 6px;
+  color: #991b1b;
+  background: #fef2f2;
+}
+.error-summary__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.error-summary__item {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.review-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef2f6;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.review-row > text:first-child {
+  flex: none;
+}
+.review-row > text:last-child {
+  min-width: 0;
+  color: var(--color-text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
 .review-plan {
-  margin-top: 30rpx;
+  justify-content: space-between;
 }
-
+.review-plan picker {
+  flex: 1;
+  min-width: 0;
+}
+.required {
+  margin-right: 3px;
+  color: var(--color-danger);
+}
+.picker-value--placeholder {
+  color: #b0b8c4;
+}
 .status-pill {
-  display: inline-flex;
-  justify-self: end;
-  width: fit-content;
-  padding: 8rpx 18rpx;
-  font-size: 24rpx;
-  font-weight: 650;
-  border-radius: 999rpx;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
 }
-
 .status-pill--warning {
   color: #92400e !important;
-  background: #fef3c7;
+  background: #fff3e0;
 }
-
 .status-pill--success {
   color: #166534 !important;
-  background: #dcfce7;
+  background: #e8f6ee;
 }
-
 .signature-confirmed {
   display: flex;
-  padding: 20rpx;
-  color: #166534;
-  font-size: 24rpx;
-  line-height: 1.5;
-  background: #f0fdf4;
-  border: 2rpx solid #bbf7d0;
-  border-radius: var(--radius-lg);
   align-items: center;
-  gap: 20rpx;
+  gap: 10px;
+  margin: 12px 16px;
+  padding: 10px;
+  border-radius: 6px;
+  color: #166534;
+  background: #eef7f2;
+  font-size: 12px;
+  line-height: 1.5;
 }
-
 .signature-preview {
-  width: 128rpx;
-  height: 44px;
   flex: none;
+  width: 64px;
+  height: 44px;
   background: #fff;
-  border-radius: var(--radius-sm);
 }
-
 .signature-button {
-  width: calc(100% - 48rpx);
-  margin: 20rpx 24rpx 0;
+  width: calc(100% - 32px);
+  margin: 10px 16px 0 !important;
 }
-
 .sticky-actions {
   position: fixed;
   z-index: 20;
   right: 0;
   bottom: 0;
   left: 0;
-  display: grid;
-  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.96);
-  border-top: 2rpx solid var(--color-border);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20rpx;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px 10px;
+  background: #fff;
 }
-
-.sticky-actions > button:only-child {
-  grid-column: 1 / -1;
-}
-
-.primary-button,
-.secondary-button {
-  min-height: 92rpx;
+.primary-button, .secondary-button {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
   margin: 0;
-  font-size: 29rpx;
-  font-weight: 650;
-  line-height: 92rpx;
-  border-radius: var(--radius-md);
+  padding: 0 12px;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 44px;
 }
-
 .primary-button {
   color: #fff;
   background: var(--color-primary);
 }
-
 .secondary-button {
   color: var(--color-primary);
-  background: var(--color-surface);
-  border: 2rpx solid var(--color-primary);
+  background: #fff;
 }
-
-.primary-button::after,
-.secondary-button::after {
-  border: 0;
+.primary-button[disabled], .secondary-button[disabled] {
+  opacity: .45;
 }
-
-.primary-button[disabled],
-.secondary-button[disabled] {
-  opacity: 0.5;
-}
+@media (prefers-reduced-motion: reduce) { .progress__value { transition: none; } }
 </style>

@@ -56,7 +56,7 @@ function preview(urls: readonly string[], index: number): void {
 
 <style scoped lang="scss">
 .checklist__item {
-  padding: 24rpx 0;
+  padding: 12px 0;
   border-bottom: 1rpx solid var(--gb-color-border, #edf0f4);
 }
 
@@ -80,21 +80,22 @@ function preview(urls: readonly string[], index: number): void {
   flex: 1;
   min-width: 0;
   color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
 }
 
 .checklist__answer {
-  flex-shrink: 0;
-  min-width: 64rpx;
-  padding: 6rpx 14rpx;
-  border-radius: var(--gb-radius-sm, 10rpx);
-  background: rgba(26, 127, 75, 0.1);
-  color: var(--gb-color-success, #1a7f4b);
+  flex: none;
+  min-width: 36px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: #e8f1fb;
+  color: var(--gb-color-primary);
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 28px;
   text-align: center;
 }
 
@@ -105,9 +106,9 @@ function preview(urls: readonly string[], index: number): void {
 
 .checklist__description {
   display: block;
-  margin-top: 14rpx;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 16px;
+  margin-top: 8px;
+  color: #333;
+  font-size: 14px;
   line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;

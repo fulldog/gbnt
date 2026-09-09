@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { OrgTreeNode } from "@gbnt/api-client";
 import type { MiniappIssue as Issue } from "@/api/types";
-import { onLoad, onPullDownRefresh, onUnload } from "@dcloudio/uni-app";
+import { onLoad, onPullDownRefresh, onShareAppMessage, onShareTimeline, onUnload } from "@dcloudio/uni-app";
 import { computed, shallowRef } from "vue";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import IssueChecklist from "@/components/issue/IssueChecklist.vue";
@@ -33,6 +33,9 @@ interface PageQuery {
 
 const issueId = shallowRef(0);
 const issue = shallowRef<Issue>();
+const shareTitle = computed(() =>
+  `农田专项整治 · ${issue.value ? issueTypeLabel(issue.value.type) : "问题"}详情`,
+);
 const organizationName = shallowRef("");
 const loading = shallowRef(false);
 const error = shallowRef("");
@@ -73,23 +76,31 @@ const hasLocation = computed(() =>
 const signatureUrl = computed(() =>
   issue.value?.reporter_signature?.url ? toAssetUrl(issue.value.reporter_signature.url) : "",
 );
+const showAdditionalInfo = shallowRef(false);
 const infoRows = computed<IssueInfoRow[]>(() => {
   const item = issue.value;
   if (!item) return [];
   return [
-    {
-      label: "所属区域",
-      value: item.org_path || item.org_name || organizationName.value || (item.org_id ? `组织 #${item.org_id}` : "—"),
-    },
+    { label: "行政区划", value: item.org_path || item.org_name || organizationName.value || (item.org_id ? `组织 #${item.org_id}` : "—") },
     { label: "项目年度", value: `${item.project_year} 年` },
     { label: "设施编号", value: item.code.trim() || "—" },
+    { label: "排查日期", value: formatDateTime(item.created_at).slice(0, 10) },
+    ...issueTypeInfoRows(item).slice(0, -2),
+  ];
+});
+const additionalInfoRows = computed<IssueInfoRow[]>(() => {
+  const item = issue.value;
+  if (!item) return [];
+  return [
+    { label: "设施类型", value: issueTypeLabel(item.type) },
+    { label: "当前状态", value: status.value?.label || "—" },
     { label: "业务编号", value: item.issue_key || `#${item.id}` },
     { label: "排查时间", value: formatDateTime(item.created_at) },
     { label: "计划完成日期", value: formatDate(item.plan_date) },
     { label: "上报人", value: item.report_user_name || "未提供" },
     { label: "整改责任人", value: item.assignee_user_name || "未指派或信息缺失" },
     { label: "整改轮次", value: `第 ${(item.rectify_round ?? 0) + 1} 轮` },
-    ...issueTypeInfoRows(item),
+    ...issueTypeInfoRows(item).slice(-2),
   ];
 });
 
@@ -235,6 +246,16 @@ function requestReRectify(): void {
   });
 }
 
+onShareAppMessage(() => ({
+  title: shareTitle.value,
+  path: issueId.value > 0 ? `/pages-sub/issue/detail?id=${issueId.value}` : "/pages/todo/index",
+}));
+
+onShareTimeline(() => ({
+  title: shareTitle.value,
+  query: issueId.value > 0 ? `id=${issueId.value}` : "",
+}));
+
 onLoad((rawQuery) => {
   const query = (rawQuery ?? {}) as PageQuery;
   issueId.value = Number(query.id);
@@ -269,7 +290,7 @@ onUnload(() => {
 </script>
 
 <template>
-  <view class="detail-page">
+  <view class="detail-page" :class="{ 'detail-page--rectify': canRectify }">
     <view v-if="issue && error" class="detail-page__warning" role="alert">
       <text>更新失败，当前显示上次数据：{{ error }}</text>
       <button @tap="loadDetail">重新加载</button>
@@ -286,31 +307,31 @@ onUnload(() => {
     </view>
 
     <template v-else>
-      <view class="detail-page__hero">
-        <view class="detail-page__hero-main">
-          <text class="detail-page__type">{{ issueTypeLabel(issue.type) }}</text>
-          <text class="detail-page__code">{{ issue.code || issue.issue_key || `#${issue.id}` }}</text>
+      <view class="detail-page__section detail-page__section--basic">
+        <view class="detail-page__section-heading">
+          <text class="detail-page__section-title">基本信息</text>
+          <text v-if="plan" class="detail-page__section-note" :class="`tone-text-${plan.tone}`">{{ plan.label }}</text>
         </view>
-        <text v-if="status" class="detail-page__status" :class="`tone-${status.tone}`">
-          {{ status.label }}
-        </text>
-        <view class="detail-page__hero-meta">
-          <text>{{ formatDateTime(issue.created_at) }}</text>
-          <text v-if="plan" :class="`tone-text-${plan.tone}`">{{ plan.label }}</text>
-        </view>
-      </view>
-
-      <view class="detail-page__section">
-        <text class="detail-page__section-title">基本信息</text>
         <IssueInfoList :rows="infoRows" />
+        <button class="detail-page__more" :aria-expanded="showAdditionalInfo" @tap="showAdditionalInfo = !showAdditionalInfo">
+          <text>补充信息</text>
+          <view class="detail-page__more-action">
+            <text>{{ showAdditionalInfo ? '收起' : '展开' }}</text>
+            <image class="detail-page__more-icon" :class="{ 'detail-page__more-icon--expanded': showAdditionalInfo }" src="/static/icons/chevron-down.svg" mode="aspectFit" aria-hidden="true" />
+          </view>
+        </button>
+        <IssueInfoList v-if="showAdditionalInfo" :rows="additionalInfoRows" />
         <button
           class="detail-page__location"
           :disabled="!hasLocation"
           @tap="openMap"
         >
-          <text class="detail-page__location-dot" aria-hidden="true">●</text>
+          <image class="detail-page__location-icon" src="/static/icons/map-pin-primary.svg" mode="aspectFit" aria-hidden="true" />
           <text class="detail-page__location-text">{{ issue.address || "未填写地址" }}</text>
-          <text v-if="hasLocation" class="detail-page__location-action">查看地图 ›</text>
+          <view v-if="hasLocation" class="detail-page__location-action">
+            <text>查看地图</text>
+            <image class="detail-page__location-chevron" src="/static/icons/chevron-right-primary.svg" mode="aspectFit" aria-hidden="true" />
+          </view>
           <text v-else class="detail-page__location-action detail-page__location-action--muted">暂无坐标</text>
         </button>
       </view>
@@ -320,7 +341,7 @@ onUnload(() => {
         <IssueChecklist :issue="issue" />
       </view>
 
-      <view class="detail-page__section">
+      <view class="detail-page__section detail-page__section--signature">
         <text class="detail-page__section-title">排查电子签名</text>
         <view
           v-if="signatureUrl"
@@ -374,114 +395,59 @@ onUnload(() => {
 <style scoped lang="scss">
 .detail-page {
   min-height: 100vh;
-  padding-bottom: calc(48rpx + var(--gb-safe-area-bottom, 0px));
-  background: var(--gb-color-background, #f4f7fa);
-  font-size: 16px;
-  line-height: 1.6;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-.detail-page__hero {
-  position: relative;
-  padding: 32rpx 28rpx 28rpx;
-  background: linear-gradient(135deg, var(--gb-color-primary-dark, #004a98), var(--gb-color-primary, #015cbb));
-  color: #fff;
-}
-
-.detail-page__hero-main,
-.detail-page__hero-meta,
 .detail-page__section-heading {
   display: flex;
-  align-items: center;
-}
-
-.detail-page__hero-main {
-  gap: 16rpx;
-  padding-right: 160rpx;
-}
-
-.detail-page__type {
-  flex-shrink: 0;
-  padding: 5rpx 12rpx;
-  border-radius: 8rpx;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 14px;
-}
-
-.detail-page__code {
-  overflow: hidden;
-  font-size: 18px;
-  font-weight: 650;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-page__status {
-  position: absolute;
-  top: 32rpx;
-  right: 28rpx;
-  padding: 7rpx 14rpx;
-  border-radius: 999rpx;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.detail-page__hero-meta {
   flex-wrap: wrap;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 20rpx;
-  margin-top: 22rpx;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 14px;
+  gap: 8px;
 }
 
 .detail-page__section {
-  margin-top: 10px;
-  padding: 16px;
-  background: var(--gb-color-surface, #fff);
+  padding: 14px 16px 16px;
+  border-top: 10px solid #f5f7fb;
+  background: #fff;
 }
 
 .detail-page__section--rectify {
   padding-bottom: 32rpx;
 }
 
-.detail-page__section-heading {
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 20rpx;
-}
-
 .detail-page__section-title {
   display: block;
-  color: var(--gb-color-text-primary, #172033);
-  font-size: 16px;
+  color: #000;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .detail-page__section > .detail-page__section-title,
-.detail-page__section-heading {
-  margin-bottom: 8px;
-}
 
 .detail-page__section-note {
-  color: var(--gb-color-text-muted, #8490a3);
+  color: var(--gb-color-text-secondary);
   font-size: 14px;
 }
 
 .detail-page__location {
   display: flex;
   align-items: flex-start;
-  gap: 12rpx;
+  gap: 8px;
   width: 100%;
-  min-height: 80rpx;
-  margin-top: 16rpx;
-  padding: 18rpx 0 0;
+  min-height: 0;
+  margin-top: 10px;
+  padding: 10px 0 0;
   border: 0;
-  border-top: 1rpx solid var(--gb-color-border, #edf0f4);
+  border-top: 1px solid #eef1f5;
   border-radius: 0;
   background: transparent;
-  color: inherit;
+  color: var(--gb-color-primary);
+  font-size: 14px;
   line-height: 1.5;
   text-align: left;
 }
@@ -493,24 +459,37 @@ onUnload(() => {
   border: 0;
 }
 
-.detail-page__location-dot {
-  margin-top: 8rpx;
-  color: var(--gb-color-primary, #015cbb);
-  font-size: 18rpx;
+.detail-page__location-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
 }
 
 .detail-page__location-text {
   flex: 1;
   min-width: 0;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 16px;
-  word-break: break-all;
+  color: var(--gb-color-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .detail-page__location-action {
-  flex-shrink: 0;
-  color: var(--gb-color-primary, #015cbb);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--gb-color-primary-soft);
+  color: var(--gb-color-primary);
   font-size: 14px;
+}
+
+.detail-page__location-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }
 
 .detail-page__location-action--muted {
@@ -519,20 +498,20 @@ onUnload(() => {
 
 .detail-page__signature-button {
   width: 100%;
-  height: 220rpx;
-  margin-top: 22rpx;
+  height: 160px;
+  margin-top: 8px;
   padding: 0;
   overflow: hidden;
-  border: 1rpx solid var(--gb-color-border, #e5eaf0);
-  border-radius: var(--gb-radius-sm, 12rpx);
-  background: #fcfaf4;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
   line-height: 1;
 }
 
 .detail-page__signature {
   display: block;
   width: 100%;
-  height: 220rpx;
+  height: 160px;
 }
 
 .detail-page__empty-text {
@@ -643,22 +622,62 @@ onUnload(() => {
 }
 
 .tone-text-danger {
-  color: #ffd1d5;
+  color: var(--gb-color-danger);
 }
 
 .tone-text-warning {
-  color: #ffe4a3;
+  color: var(--gb-color-warning);
 }
 
-.tone-text-primary,
-.tone-text-muted,
+.tone-text-primary {
+  color: var(--gb-color-primary);
+}
+.tone-text-muted {
+  color: var(--gb-color-text-secondary);
+}
 .tone-text-success {
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--gb-color-success);
 }
 
 @keyframes detail-spin {
   to {
     transform: rotate(360deg);
   }
+}
+.detail-page__section--basic {
+  border-top: 0;
+}
+.detail-page__section--signature {
+  border-top: 0;
+}
+.detail-page--rectify {
+  padding-bottom: calc(112px + env(safe-area-inset-bottom));
+}
+.detail-page__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: var(--gb-color-text-secondary);
+  font-size: 12px;
+  line-height: 36px;
+}
+.detail-page__more-action {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.detail-page__more-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.detail-page__more-icon--expanded {
+  transform: rotate(180deg);
 }
 </style>
