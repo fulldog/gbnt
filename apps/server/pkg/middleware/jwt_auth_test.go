@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +14,7 @@ import (
 	"gbnt/apps/server/internal/model"
 	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/pkg/jwtutil"
+	"gbnt/apps/server/pkg/response"
 )
 
 func TestJWTAuthSkipsWhenIsJWTFalse(t *testing.T) {
@@ -52,5 +55,111 @@ func TestJWTAuthRequiresTokenWhenUnindexed(t *testing.T) {
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/known", nil))
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("未入目录默认要 JWT，got %d", w.Code)
+	}
+}
+
+func TestJWTAuthRejectsStaleTokenVerAfterRelogin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jm := jwtutil.New("jwt-kick-test", 72, 24)
+	oldToken, _, err := jm.Sign(1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newToken, _, err := jm.Sign(1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := perm.NewStaticService(nil, []model.SysAPI{
+		{Method: http.MethodGet, Path: "/api/me", IsJWT: true, IsRBAC: false},
+	})
+	var currentVer atomic.Int64
+	currentVer.Store(2) // 模拟第二次登录已递增
+	r := gin.New()
+	r.Use(JWTAuth(jm, func(context.Context, uint64) (*database.UserInfo, error) {
+		return &database.UserInfo{ID: 1, TokenVer: int(currentVer.Load())}, nil
+	}, nil, svc))
+	r.GET("/api/me", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	oldReq := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	oldReq.Header.Set("Authorization", "Bearer "+oldToken)
+	oldW := httptest.NewRecorder()
+	r.ServeHTTP(oldW, oldReq)
+	var body response.Body
+	if err := json.Unmarshal(oldW.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if oldW.Code != http.StatusUnauthorized || body.Message != "账号已在其他设备登录" {
+		t.Fatalf("旧 token 应被踢下线: %d %s", oldW.Code, oldW.Body.String())
+	}
+
+	newReq := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	newReq.Header.Set("Authorization", "Bearer "+newToken)
+	newW := httptest.NewRecorder()
+	r.ServeHTTP(newW, newReq)
+	if newW.Code != http.StatusOK {
+		t.Fatalf("新 token 应通过: %d %s", newW.Code, newW.Body.String())
+	}
+}
+
+func TestJWTAuthPasswordBumpSameAsKick(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jm := jwtutil.New("jwt-kick-pwd", 72, 24)
+	token, _, err := jm.Sign(1, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := perm.NewStaticService(nil, []model.SysAPI{
+		{Method: http.MethodGet, Path: "/api/me", IsJWT: true, IsRBAC: false},
+	})
+	r := gin.New()
+	r.Use(JWTAuth(jm, func(context.Context, uint64) (*database.UserInfo, error) {
+		return &database.UserInfo{ID: 1, TokenVer: 5}, nil // 改密后版本升高
+	}, nil, svc))
+	r.GET("/api/me", func(c *gin.Context) { c.Status(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var body response.Body
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusUnauthorized || body.Message != "账号已在其他设备登录" {
+		t.Fatalf("改密后旧 token 应失效: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestJWTAuthRenewKeepsTokenVer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jm := jwtutil.New("jwt-renew-ver", 1, 1) // 签发后立即进入续期窗口
+	token, _, err := jm.Sign(1, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := perm.NewStaticService(nil, []model.SysAPI{
+		{Method: http.MethodGet, Path: "/api/me", IsJWT: true, IsRBAC: false},
+	})
+	r := gin.New()
+	r.Use(JWTAuth(jm, func(context.Context, uint64) (*database.UserInfo, error) {
+		return &database.UserInfo{ID: 1, TokenVer: 9}, nil
+	}, nil, svc))
+	r.GET("/api/me", func(c *gin.Context) { c.Status(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("当前会话续期应成功: %d %s", w.Code, w.Body.String())
+	}
+	renewed := w.Header().Get("X-New-Token")
+	if renewed == "" {
+		t.Fatal("应下发滑动续期头")
+	}
+	claims, err := jm.Parse(renewed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.TokenVer != 9 || claims.UserID != 1 {
+		t.Fatalf("续期不得改变 token_ver: %+v", claims)
 	}
 }

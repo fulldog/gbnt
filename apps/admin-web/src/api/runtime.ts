@@ -1,3 +1,4 @@
+import { ElMessage } from "element-plus";
 import { inject } from "vue";
 import type { InjectionKey } from "vue";
 import { createAdminApi } from "./index";
@@ -15,7 +16,10 @@ export const adminApi = createAdminApi({
   timeoutMs: 30_000,
   getAccessToken: readAccessToken,
   onTokenRenewed: (token, expiresAt) => writeAccessToken(token, expiresAt),
-  onUnauthorized: () => {
+  onUnauthorized: (context) => {
+    if (context.message === "账号已在其他设备登录") {
+      ElMessage.warning(context.message);
+    }
     clearSession();
     redirectToLogin();
   },

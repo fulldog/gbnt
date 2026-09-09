@@ -131,7 +131,8 @@ type TokenDenier interface {
 
 // JWTAuth 校验 Bearer Token；sys_apis.is_jwt=0 的接口跳过。
 // 未入目录或 FullPath 为空时默认校验 JWT。
-// 解析 JWT 后校验 jti 黑名单与 token_ver，再按 user_id 查库加载 UserInfo，失败则 401。
+// 解析 JWT 后校验 jti 黑名单与 token_ver，再按 user_id 查库加载 UserInfo，失败则 401；
+// token_ver 不匹配时返回「账号已在其他设备登录」。
 // 滑动续期：剩余有效期进入 renew 窗口时，签发新 token，经响应头带回：
 //
 //	X-New-Token / X-Token-Expires-At
@@ -171,7 +172,8 @@ func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, s
 			return
 		}
 		if claims.TokenVer != info.TokenVer {
-			response.Fail(c, 401, response.CodeUnauth, "未登录或凭证无效")
+			// 改密、重置或他处登录已递增 token_ver，旧票视为被踢下线。
+			response.Fail(c, 401, response.CodeUnauth, "账号已在其他设备登录")
 			c.Abort()
 			return
 		}

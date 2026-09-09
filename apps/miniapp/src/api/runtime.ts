@@ -77,7 +77,10 @@ export const miniappApi = createMiniappApi({
   uploadFile,
   getAccessToken: readAccessToken,
   onTokenRenewed: (token, expiresAt) => writeAccessToken(token, expiresAt),
-  onUnauthorized: () => {
+  onUnauthorized: (context) => {
+    if (context.message === "账号已在其他设备登录") {
+      uni.showToast({ title: context.message, icon: "none", duration: 2500 });
+    }
     clearSession();
     redirectToLogin();
   },

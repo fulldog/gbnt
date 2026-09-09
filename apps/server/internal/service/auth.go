@@ -25,6 +25,7 @@ type AuthService struct {
 }
 
 // Login 校验账密并签发 JWT。
+// [PRD] 登录成功后递增 token_ver，使该账号此前所有 JWT 立即失效（重复登录踢下线）。
 func (s *AuthService) Login(username, password string) (*model.SysUser, string, time.Time, error) {
 	var user model.SysUser
 	if err := s.DB.Where("username = ? AND status = 1", username).First(&user).Error; err != nil {
@@ -36,11 +37,32 @@ func (s *AuthService) Login(username, password string) (*model.SysUser, string, 
 	if err := s.checkRoleActive(user.RoleID); err != nil {
 		return nil, "", time.Time{}, err
 	}
+	if err := s.bumpLoginTokenVer(&user); err != nil {
+		return nil, "", time.Time{}, err
+	}
 	token, exp, err := s.JWT.Sign(user.ID, user.TokenVer)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
 	return &user, token, exp, nil
+}
+
+// bumpLoginTokenVer 事务内递增令牌版本并写回 user.TokenVer，供签发使用。
+func (s *AuthService) bumpLoginTokenVer(user *model.SysUser) error {
+	if user == nil || user.ID == 0 {
+		return errors.New("账号或密码不正确")
+	}
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Update("token_ver", gorm.Expr("token_ver + 1")).Error; err != nil {
+			return err
+		}
+		var ver int
+		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Select("token_ver").Scan(&ver).Error; err != nil {
+			return err
+		}
+		user.TokenVer = ver
+		return nil
+	})
 }
 
 // ChangePasswordReq 本人修改密码。

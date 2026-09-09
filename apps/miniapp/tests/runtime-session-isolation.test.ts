@@ -6,12 +6,14 @@ const storage = new Map<string, unknown>();
 let requestOptions: UniRequestOptions | undefined;
 let uploadOptions: UniUploadFileOptions | undefined;
 const reLaunch = vi.fn();
+const showToast = vi.fn();
 
 beforeEach(() => {
   vi.resetModules();
   vi.stubEnv("VITE_API_BASE_URL", "https://api.example.test");
   storage.clear();
   reLaunch.mockClear();
+  showToast.mockClear();
   vi.stubGlobal("uni", {
     getStorageSync: (key: string) => storage.get(key) ?? "",
     setStorageSync: (key: string, value: unknown) => storage.set(key, value),
@@ -19,6 +21,7 @@ beforeEach(() => {
     request: (options: UniRequestOptions) => { requestOptions = options; },
     uploadFile: (options: UniUploadFileOptions) => { uploadOptions = options; },
     reLaunch,
+    showToast,
   });
 });
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -61,5 +64,32 @@ describe("old-session HTTP callbacks", () => {
     await expect(pending).rejects.toThrow("会话已变更，请重新上传");
     expect(session.readAccessToken()).toBe("new-token");
     expect(reLaunch).not.toHaveBeenCalled();
+  });
+});
+
+describe("kicked-offline toast", () => {
+  it("shows toast then relaunches login when token_ver mismatch message arrives", async () => {
+    const { session, runtime } = await setup();
+    const pending = runtime.miniappApi.mine.getStats();
+    requestOptions!.success({
+      statusCode: 401,
+      data: { code: 401, data: null, message: "账号已在其他设备登录", trace_id: "kick", cost_ms: 0 },
+    });
+    await expect(pending).rejects.toMatchObject({ message: "账号已在其他设备登录" });
+    expect(session.readAccessToken()).toBeNull();
+    expect(showToast).toHaveBeenCalledWith({ title: "账号已在其他设备登录", icon: "none", duration: 2500 });
+    expect(reLaunch).toHaveBeenCalledWith(expect.objectContaining({ url: "/pages/login/index" }));
+  });
+
+  it("does not toast generic unauthorized", async () => {
+    const { runtime } = await setup();
+    const pending = runtime.miniappApi.mine.getStats();
+    requestOptions!.success({
+      statusCode: 401,
+      data: { code: 401, data: null, message: "未登录或凭证无效", trace_id: "plain", cost_ms: 0 },
+    });
+    await expect(pending).rejects.toMatchObject({ message: "未登录或凭证无效" });
+    expect(showToast).not.toHaveBeenCalled();
+    expect(reLaunch).toHaveBeenCalled();
   });
 });

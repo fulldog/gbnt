@@ -74,7 +74,7 @@ type SysUser struct {
 	RoleID       uint64 `gorm:"column:role_id;index;default:0;comment:角色主键ID" json:"role_id"`
 	Status       int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
 	IsSuperAdmin bool   `gorm:"column:is_super_admin;index;default:0;comment:是否超级管理员 全库仅允许一名" json:"is_super_admin"`
-	TokenVer     int    `gorm:"column:token_ver;default:0;comment:令牌版本 改密或强制下线时递增" json:"-"`
+	TokenVer     int    `gorm:"column:token_ver;default:0;comment:令牌版本 登录、改密或强制下线时递增" json:"-"`
 	Base
 }
 
