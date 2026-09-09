@@ -12,8 +12,8 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "农田专项整治",
-        "enablePullDownRefresh": true,
-        "onReachBottomDistance": 80,
+        "disableScroll": true,
+        "enablePullDownRefresh": false,
         "backgroundColor": "#f4f7fb"
       }
     },
