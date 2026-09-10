@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 安装 Oracle MySQL 8 Community（免费 GPL，不是 Enterprise，也不是 MariaDB）。
-# 用法：sudo MYSQL_ROOT_PASSWORD='强密码' ./install-mysql8.sh
+# 用法：
+#   sudo MYSQL_ROOT_PASSWORD='root强密码' MYSQL_APP_PASSWORD='应用账号密码' ./install-mysql8.sh
 set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
@@ -18,7 +19,14 @@ if [[ "${MYSQL_ROOT_PASSWORD}" == *"'"* ]]; then
 fi
 
 MYSQL_DB="${MYSQL_DB:-gbnt}"
-MYSQL_BIND="${MYSQL_BIND:-127.0.0.1}"
+MYSQL_APP_USER="${MYSQL_APP_USER:-gbnt}"
+MYSQL_APP_PASSWORD="${MYSQL_APP_PASSWORD:-${MYSQL_ROOT_PASSWORD}}"
+if [[ "${MYSQL_APP_PASSWORD}" == *"'"* ]]; then
+  echo "MYSQL_APP_PASSWORD 不能包含单引号" >&2
+  exit 1
+fi
+# 应用账号允许远程时必须监听非 loopback；未显式指定则改为 0.0.0.0
+MYSQL_BIND="${MYSQL_BIND:-0.0.0.0}"
 # Community 8.0；仓库没有时脚本会再试 8.4 LTS（同属免费社区版）
 MYSQL_SERIES="${MYSQL_SERIES:-8.0}"
 
@@ -210,24 +218,73 @@ EOF
 
 systemctl restart mysqld 2>/dev/null || systemctl restart mysql
 
+# Community MySQL 8 首次初始化会把临时 root 密码写进错误日志，空密码无法登录。
+find_temp_root_password() {
+  local f
+  for f in /var/log/mysqld.log /var/log/mysql/error.log /var/log/mysql/mysqld.log; do
+    [[ -f "${f}" ]] || continue
+    # 取最后一次生成的临时密码（重装/多次启动时日志可能有多条）
+    grep -oE 'temporary password is generated for root@localhost:[[:space:]]*[^[:space:]]+' "${f}" \
+      | tail -n1 \
+      | sed -E 's/.*temporary password is generated for root@localhost:[[:space:]]*//' \
+      && return 0
+  done
+  return 1
+}
+
 SQL="ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+ALTER USER 'root'@'127.0.0.1' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
 CREATE DATABASE IF NOT EXISTS \`${MYSQL_DB}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${MYSQL_APP_USER}'@'%' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+CREATE USER IF NOT EXISTS '${MYSQL_APP_USER}'@'localhost' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+CREATE USER IF NOT EXISTS '${MYSQL_APP_USER}'@'127.0.0.1' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+ALTER USER '${MYSQL_APP_USER}'@'%' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+ALTER USER '${MYSQL_APP_USER}'@'localhost' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+ALTER USER '${MYSQL_APP_USER}'@'127.0.0.1' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DB}\`.* TO '${MYSQL_APP_USER}'@'%';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DB}\`.* TO '${MYSQL_APP_USER}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DB}\`.* TO '${MYSQL_APP_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;"
 
+# 用指定密码尝试执行初始化 SQL；失败返回非 0。
+try_sql_with_password() {
+  local pass="$1"
+  if [[ -z "${pass}" ]]; then
+    mysql --protocol=socket -uroot --connect-expired-password -e "${SQL}"
+  else
+    mysql --protocol=socket -uroot -p"${pass}" --connect-expired-password -e "${SQL}"
+  fi
+}
+
 run_sql() {
-  mysql --protocol=socket -uroot -e "${SQL}" \
-    || mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" -e "${SQL}" \
-    || mysql -h127.0.0.1 -uroot -p"${MYSQL_ROOT_PASSWORD}" -e "${SQL}"
+  # 1) 已是目标密码（重跑脚本）
+  try_sql_with_password "${MYSQL_ROOT_PASSWORD}" && return 0
+  # 2) 无密码（极少数发行版）
+  try_sql_with_password "" && return 0
+  # 3) 错误日志里的临时密码（EL/RHEL Community 默认路径）
+  local temp_pass=""
+  if temp_pass="$(find_temp_root_password)"; then
+    echo "使用错误日志中的临时 root 密码完成初始化…"
+    try_sql_with_password "${temp_pass}" && return 0
+  fi
+  return 1
 }
 
 if ! run_sql; then
-  echo "设置 root 密码或建库失败。可手动：" >&2
-  echo "  sudo mysql -e \"CREATE DATABASE IF NOT EXISTS ${MYSQL_DB} DEFAULT CHARACTER SET utf8mb4;\"" >&2
+  echo "设置 root 密码或建库失败。Community MySQL 8 首次安装需用临时密码登录。" >&2
+  echo "可手动：" >&2
+  echo "  sudo grep 'temporary password' /var/log/mysqld.log" >&2
+  echo "  mysql -uroot -p'临时密码' --connect-expired-password" >&2
+  echo "  然后执行：ALTER USER 'root'@'localhost' IDENTIFIED BY '你的密码';" >&2
+  echo "  CREATE DATABASE IF NOT EXISTS ${MYSQL_DB} DEFAULT CHARACTER SET utf8mb4;" >&2
   exit 1
 fi
 
 echo "已安装/配置 MySQL Community 8（免费）。库: ${MYSQL_DB}  bind: ${MYSQL_BIND}"
+echo "应用账号: ${MYSQL_APP_USER}（${MYSQL_DB}.* 全部权限，允许远程 %）"
 echo "$(mysqld --version 2>/dev/null || mysql --version)"
-echo "应用 DSN 示例: root:***@tcp(127.0.0.1:3306)/${MYSQL_DB}?charset=utf8mb4&parseTime=True&loc=Local"
+echo "本机 DSN: ${MYSQL_APP_USER}:***@tcp(127.0.0.1:3306)/${MYSQL_DB}?charset=utf8mb4&parseTime=True&loc=Local"
+echo "远程 DSN: ${MYSQL_APP_USER}:***@tcp(服务器IP:3306)/${MYSQL_DB}?charset=utf8mb4&parseTime=True&loc=Local"
+echo "远程还需放行防火墙 3306，例如: firewall-cmd --permanent --add-port=3306/tcp && firewall-cmd --reload"
