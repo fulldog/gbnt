@@ -39,16 +39,31 @@ is_mysql8_community() {
   return 1
 }
 
+# Oracle 轮换过仓库签名钥；8.0.46+ 需 2025 钥，旧仓库包只带 5072E1F5。
+MYSQL_GPG_KEYS=(
+  https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+  https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
+  https://repo.mysql.com/RPM-GPG-KEY-mysql-2025
+)
+
+import_mysql_gpg_files() {
+  local dest="$1"
+  : >"${dest}"
+  local url
+  for url in "${MYSQL_GPG_KEYS[@]}"; do
+    wget -qO- "${url}" >>"${dest}"
+  done
+}
+
 install_deb() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
   apt-get install -y wget gnupg lsb-release ca-certificates
   mkdir -p /etc/apt/keyrings
-  wget -qO- https://repo.mysql.com/RPM-GPG-KEY-mysql-2022 > /tmp/mysql-gpg-2022
-  wget -qO- https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 > /tmp/mysql-gpg-2023
-  cat /tmp/mysql-gpg-2022 /tmp/mysql-gpg-2023 | gpg --dearmor -o /etc/apt/keyrings/mysql.gpg
+  import_mysql_gpg_files /tmp/mysql-gpg-all
+  gpg --dearmor -o /etc/apt/keyrings/mysql.gpg </tmp/mysql-gpg-all
   chmod 644 /etc/apt/keyrings/mysql.gpg
-  rm -f /tmp/mysql-gpg-2022 /tmp/mysql-gpg-2023
+  rm -f /tmp/mysql-gpg-all
 
   local dist="ubuntu"
   [[ "${ID}" == "debian" ]] && dist="debian"
@@ -91,12 +106,39 @@ install_rpm() {
   if command -v dnf >/dev/null; then
     dnf -y install wget ca-certificates
     dnf -y module disable mysql mariadb 2>/dev/null || true
-    dnf -y install "https://dev.mysql.com/get/mysql80-community-release-el${major}-1.noarch.rpm" \
-      || dnf -y install "https://repo.mysql.com/mysql80-community-release-el${major}-1.noarch.rpm"
-    dnf -y install mysql-community-server mysql-community-client
   else
     yum -y install wget ca-certificates
+  fi
+
+  local keydir="/etc/pki/rpm-gpg"
+  mkdir -p "${keydir}"
+  local url f
+  for url in "${MYSQL_GPG_KEYS[@]}"; do
+    f="${keydir}/$(basename "${url}")"
+    wget -qO "${f}" "${url}"
+    rpm --import "${f}"
+  done
+
+  if command -v dnf >/dev/null; then
+    dnf -y install "https://dev.mysql.com/get/mysql80-community-release-el${major}-1.noarch.rpm" \
+      || dnf -y install "https://repo.mysql.com/mysql80-community-release-el${major}-1.noarch.rpm"
+  else
     yum -y install "https://dev.mysql.com/get/mysql80-community-release-el${major}-1.noarch.rpm"
+  fi
+
+  # 旧版 mysql80-community-release 只写 RPM-GPG-KEY-mysql，补上新钥路径。
+  local repo
+  for repo in /etc/yum.repos.d/mysql-community.repo /etc/yum.repos.d/mysql-community-source.repo; do
+    [[ -f "${repo}" ]] || continue
+    if grep -q 'RPM-GPG-KEY-mysql-2025' "${repo}"; then
+      continue
+    fi
+    sed -i 's|^gpgkey=.*|gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql-2025\n       file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql-2023\n       file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql-2022\n       file:///etc/pki/rpm-gpg/RPM-GPG-KEY-mysql|' "${repo}"
+  done
+
+  if command -v dnf >/dev/null; then
+    dnf -y install mysql-community-server mysql-community-client
+  else
     yum -y install mysql-community-server mysql-community-client
   fi
 }

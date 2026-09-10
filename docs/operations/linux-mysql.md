@@ -29,7 +29,15 @@ sudo MYSQL_ROOT_PASSWORD='你的强密码' bash install-mysql8.sh
 sudo MYSQL_ROOT_PASSWORD='...' MYSQL_BIND=0.0.0.0 bash install-mysql8.sh
 ```
 
-脚本会从 **Oracle 社区版仓库** 安装 `mysql-community-server`（免费 MySQL 8），`enable --now` 服务、写入 utf8mb4 + binlog、创建库 `gbnt`、设置 root 密码。系统源里的 `mysql-server` 在不少发行版会变成 MariaDB，因此不再用系统源。
+脚本会从 **Oracle 社区版仓库** 安装 `mysql-community-server`（免费 MySQL 8），`enable --now` 服务、写入 utf8mb4 + binlog、创建库 `gbnt`、设置 root 密码。EL8/EL9 上若 `dnf` 报 `GPG check FAILED` / `Public key ... is not installed`，是仓库签名钥已换成 `RPM-GPG-KEY-mysql-2025`，把仓库里的新脚本拉下来再跑即可；临时也可：
+
+```bash
+sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
+sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023
+sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2025
+```
+
+然后再执行安装脚本。系统源里的 `mysql-server` 在不少发行版会变成 MariaDB，因此不再用系统源。
 
 密码不要包含单引号。装完 `mysqld --version` 应类似 `Ver 8.0.x` / `Ver 8.4.x`，且不含 `MariaDB`。若机器上已有 MariaDB，先卸载再跑脚本。
 
