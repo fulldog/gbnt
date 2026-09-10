@@ -26,6 +26,8 @@ SERVICE_NAME="${SERVICE_NAME:-gbnt}"
 RUN_USER="${RUN_USER:-gbnt}"
 TIMER_NAME="${TIMER_NAME:-gbnt-pull}"
 GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
+# 小内存机默认单包编译；并行 compile 易被 OOM 打成 signal: killed。机器内存充足可 GOMAXPROCS=4。
+GOMAXPROCS="${GOMAXPROCS:-1}"
 BUILD_ADMIN="${BUILD_ADMIN:-1}"
 FORCE="${FORCE:-0}"
 
@@ -64,7 +66,7 @@ as_deploy() {
     if [[ "${owner}" == "${RUN_USER}" ]]; then
       local home
       home="$(getent passwd "${RUN_USER}" | cut -d: -f6)"
-      sudo -H -u "${RUN_USER}" env HOME="${home}" GOPROXY="${GOPROXY}" PATH="${PATH}" CI="${CI:-true}" "$@"
+      sudo -H -u "${RUN_USER}" env HOME="${home}" GOPROXY="${GOPROXY}" GOMAXPROCS="${GOMAXPROCS}" PATH="${PATH}" CI="${CI:-true}" "$@"
       return
     fi
   fi
@@ -76,6 +78,7 @@ run_job() {
   deploy_home="$(getent passwd "${RUN_USER}" | cut -d: -f6 || true)"
   export PATH="/usr/local/go/bin:/usr/lib/go-1.27/bin:${deploy_home:+${deploy_home}/go/bin:}/usr/local/bin:/usr/bin:/bin:${PATH:-}"
   export GOPROXY
+  export GOMAXPROCS
   export CI=true
 
   if [[ ! -d "${REPO_DIR}/.git" ]]; then
@@ -133,9 +136,9 @@ run_job() {
       log "未找到 go，中止（不重启 ${SERVICE_NAME}）"
       exit 1
     fi
-    log "开始编译 ${BIN}"
+    log "开始编译 ${BIN}（GOMAXPROCS=${GOMAXPROCS}）"
     TMP="${BIN}.new"
-    as_deploy bash -c "cd $(printf '%q' "${APP_DIR}") && go build -o $(printf '%q' "${TMP}") ."
+    as_deploy bash -c "cd $(printf '%q' "${APP_DIR}") && go build -p $(printf '%q' "${GOMAXPROCS}") -o $(printf '%q' "${TMP}") ."
     chmod +x "${TMP}"
     mv -f "${TMP}" "${BIN}"
     log "Go 编译成功"
@@ -226,6 +229,7 @@ Environment=ADMIN_DIR=${ADMIN_DIR}
 Environment=BUILD_ADMIN=${BUILD_ADMIN}
 Environment=HOME=${home}
 Environment=GOPROXY=${GOPROXY}
+Environment=GOMAXPROCS=${GOMAXPROCS}
 Environment=CI=true
 Environment=PATH=/usr/local/go/bin:/usr/lib/go-1.27/bin:${home}/go/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/bin/bash ${SELF} run

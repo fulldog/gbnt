@@ -58,10 +58,11 @@ ensure_bin() {
     echo "请安装 Go 后重试，或设置 BIN=已编译二进制的绝对路径" >&2
     exit 1
   fi
-  echo "未找到 ${BIN}，正在编译：cd ${APP_DIR} && go build -o ${BIN} ."
+  export GOMAXPROCS="${GOMAXPROCS:-1}"
+  echo "未找到 ${BIN}，正在编译：cd ${APP_DIR} && go build -p ${GOMAXPROCS} -o ${BIN} ."
   (
     cd "${APP_DIR}"
-    go build -o "${BIN}" .
+    go build -p "${GOMAXPROCS}" -o "${BIN}" .
   )
   chmod +x "${BIN}"
   if [[ ! -x "${BIN}" ]]; then
