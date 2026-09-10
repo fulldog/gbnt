@@ -52,13 +52,14 @@ type JWTConfig struct {
 	RenewBeforeHours int    `mapstructure:"renew_before_hours"` // 剩余不足此时长则滑动续期
 }
 
+// LogConfig 文件日志。release 模式下不向 stdout 打印，只写入 Dir。
 type LogConfig struct {
-	Dir        string `mapstructure:"dir"`
-	MaxSizeMB  int    `mapstructure:"max_size_mb"`
-	MaxBackups int    `mapstructure:"max_backups"`
-	MaxAgeDays int    `mapstructure:"max_age_days"`
-	Level      string `mapstructure:"level"`
-	SlowSQLMs  int    `mapstructure:"slow_sql_ms"`
+	Dir        string `mapstructure:"dir"`          // 日志根目录，其下再分 info/access/error/slow/sql
+	MaxSizeMB  int    `mapstructure:"max_size_mb"`  // 单文件超过此大小切割
+	MaxBackups int    `mapstructure:"max_backups"`  // 保留的旧文件个数
+	MaxAgeDays int    `mapstructure:"max_age_days"` // 旧文件保留天数
+	Level      string `mapstructure:"level"`        // 级别，如 info
+	SlowSQLMs  int    `mapstructure:"slow_sql_ms"`  // 慢 SQL 阈值（毫秒）
 }
 
 type UploadConfig struct {

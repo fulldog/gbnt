@@ -24,6 +24,7 @@ log:
   max_age_days: 30
   level: info
   slow_sql_ms: 200      # 慢 SQL 阈值（毫秒）
+  # server.mode=release 时只写上述目录的文本文件，不向控制台打印；debug/dev 同时输出控制台
 
 upload:
   root: "storage/uploads"

@@ -3,8 +3,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logs, err := logger.Init(cfg.Log)
+	logs, err := logger.Init(cfg.Log, cfg.Server.Mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "init logger: %v\n", err)
 		os.Exit(1)
@@ -94,6 +96,10 @@ func main() {
 	}
 
 	gin.SetMode(cfg.Server.Mode)
+	if strings.EqualFold(strings.TrimSpace(cfg.Server.Mode), "release") {
+		gin.DefaultWriter = io.Discard
+		gin.DefaultErrorWriter = io.Discard
+	}
 	r := gin.New()
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS(middleware.CORSOptions{

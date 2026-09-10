@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,7 +27,8 @@ type Loggers struct {
 var global *Loggers
 
 // Init 初始化全局日志；文件名含日期，单文件超过 MaxSizeMB 自动滚动。
-func Init(cfg config.LogConfig) (*Loggers, error) {
+// serverMode=release 时只写文件，不向控制台输出；debug/dev 同时打控制台便于本地调试。
+func Init(cfg config.LogConfig, serverMode string) (*Loggers, error) {
 	types := []string{"info", "access", "error", "slow", "sql"}
 	for _, t := range types {
 		dir := filepath.Join(cfg.Dir, t)
@@ -39,18 +41,23 @@ func Init(cfg config.LogConfig) (*Loggers, error) {
 	_ = level.UnmarshalText([]byte(cfg.Level))
 
 	date := time.Now().Format("2006-01-02")
+	toConsole := !isReleaseMode(serverMode)
 	l := &Loggers{
-		Info:   newLogger(cfg, "info", date, level),
-		Access: newLogger(cfg, "access", date, level),
-		Error:  newLogger(cfg, "error", date, zapcore.ErrorLevel),
-		Slow:   newLogger(cfg, "slow", date, level),
-		SQL:    newLogger(cfg, "sql", date, level),
+		Info:   newLogger(cfg, "info", date, level, toConsole),
+		Access: newLogger(cfg, "access", date, level, toConsole),
+		Error:  newLogger(cfg, "error", date, zapcore.ErrorLevel, toConsole),
+		Slow:   newLogger(cfg, "slow", date, level, toConsole),
+		SQL:    newLogger(cfg, "sql", date, level, toConsole),
 	}
 	global = l
 	return l, nil
 }
 
-func newLogger(cfg config.LogConfig, typ, date string, level zapcore.Level) *zap.Logger {
+func isReleaseMode(mode string) bool {
+	return strings.EqualFold(strings.TrimSpace(mode), "release")
+}
+
+func newLogger(cfg config.LogConfig, typ, date string, level zapcore.Level, toConsole bool) *zap.Logger {
 	filename := filepath.Join(cfg.Dir, typ, fmt.Sprintf("%s-%s.log", typ, date))
 	w := zapcore.AddSync(&lumberjack.Logger{
 		Filename:   filename,
@@ -64,15 +71,17 @@ func newLogger(cfg config.LogConfig, typ, date string, level zapcore.Level) *zap
 	encCfg := zap.NewProductionEncoderConfig()
 	encCfg.TimeKey = "time"
 	encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	core := zapcore.NewCore(zapcore.NewJSONEncoder(encCfg), w, level)
-
-	// 同时输出到控制台，便于本地调试
-	console := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encCfg),
-		zapcore.AddSync(os.Stdout),
-		level,
-	)
-	return zap.New(zapcore.NewTee(core, console), zap.AddCaller())
+	fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(encCfg), w, level)
+	core := zapcore.Core(fileCore)
+	if toConsole {
+		console := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encCfg),
+			zapcore.AddSync(os.Stdout),
+			level,
+		)
+		core = zapcore.NewTee(fileCore, console)
+	}
+	return zap.New(core, zap.AddCaller())
 }
 
 // L 返回全局日志集合。
