@@ -125,6 +125,8 @@ describe("业务候选接口", () => {
     });
     await issues.listAssigneeOptions(10, { page: 2, size: 20 });
     expect(request).toHaveBeenLastCalledWith("/api/issues/10/assignee-options", { query: { page: 2, size: 20, keyword: undefined } });
+    await issues.listAssigneeOptions(10, { org_id: 12, selected_id: 1001, keyword: " 新 " });
+    expect(request).toHaveBeenLastCalledWith("/api/issues/10/assignee-options", { query: { org_id: 12, selected_id: 1001, keyword: "新" } });
   });
 
   it("空候选有明确selected:null，接口缺失selected不假装可提交", async () => {

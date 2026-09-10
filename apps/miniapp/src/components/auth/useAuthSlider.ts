@@ -26,6 +26,7 @@ const COMPLETE_TOLERANCE = 6;
 export function useAuthSlider(options: SliderOptions) {
   const state = shallowRef<SliderState>("preparing");
   const offset = shallowRef(0);
+  const handleRevision = shallowRef(0);
   const trackWidth = shallowRef(280);
   const errorMessage = shallowRef("");
   const busy = computed(() => state.value === "preparing" || state.value === "verifying");
@@ -44,6 +45,7 @@ export function useAuthSlider(options: SliderOptions) {
   });
   let sliderId = "";
   let startX = 0;
+  let nativeOffset = 0;
   let startedAt = 0;
   let expiresAt = 0;
   let generation = 0;
@@ -63,6 +65,7 @@ export function useAuthSlider(options: SliderOptions) {
     clearExpiry();
     sliderId = "";
     offset.value = 0;
+    handleRevision.value += 1;
     errorMessage.value = message;
     state.value = "error";
     options.invalidated();
@@ -98,6 +101,7 @@ export function useAuthSlider(options: SliderOptions) {
     clearExpiry();
     sliderId = "";
     offset.value = 0;
+    handleRevision.value += 1;
     errorMessage.value = "";
     state.value = "preparing";
     options.invalidated();
@@ -142,21 +146,30 @@ export function useAuthSlider(options: SliderOptions) {
     if (x === null) return;
     state.value = "dragging";
     startX = x - offset.value;
+    nativeOffset = offset.value;
     startedAt = Date.now();
   }
 
   function onTouchMove(event: SliderTouchEvent): void {
     if (disposed || options.disabled() || checkExpiry() || state.value !== "dragging") return;
     const x = touchX(event);
-    if (x !== null) offset.value = Math.min(Math.max(x - startX, 0), maxTravel.value);
+    if (x !== null) nativeOffset = offset.value = Math.min(Math.max(x - startX, 0), maxTravel.value);
+  }
+
+  /** 原生 movable-view 在视图层跟手移动，逻辑层仅记录最终偏移。 */
+  function onNativeChange(event: { detail: { x: number; source?: string } }): void {
+    if (disposed || options.disabled() || state.value !== "dragging" || event.detail.source !== "touch") return;
+    // 不逐帧回写绑定的 x，避免逻辑层旧位置打断原生视图层的连续拖动。
+    if (Number.isFinite(event.detail.x)) nativeOffset = Math.min(Math.max(event.detail.x, 0), maxTravel.value);
   }
 
   async function onTouchEnd(event: SliderTouchEvent): Promise<void> {
     if (disposed || options.disabled() || checkExpiry() || state.value !== "dragging") return;
     const x = touchX(event, true);
-    if (x !== null) offset.value = Math.min(Math.max(x - startX, 0), maxTravel.value);
+    offset.value = x !== null ? Math.min(Math.max(x - startX, 0), maxTravel.value) : nativeOffset;
     if (offset.value < maxTravel.value - COMPLETE_TOLERANCE) {
       offset.value = 0;
+      handleRevision.value += 1;
       state.value = "ready";
       return;
     }
@@ -182,6 +195,7 @@ export function useAuthSlider(options: SliderOptions) {
   function onTouchCancel(): void {
     if (disposed || checkExpiry() || state.value !== "dragging") return;
     offset.value = 0;
+    handleRevision.value += 1;
     state.value = "ready";
   }
 
@@ -199,6 +213,6 @@ export function useAuthSlider(options: SliderOptions) {
     clearExpiry();
   }
 
-  return { state, offset, errorMessage, busy, maxTravel, progressWidth, stateText, prepare, reset,
+  return { state, offset, handleRevision, trackWidth, errorMessage, busy, maxTravel, progressWidth, stateText, prepare, reset, onNativeChange,
     onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, setTrackWidth, checkExpiry, dispose };
 }

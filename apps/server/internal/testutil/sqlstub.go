@@ -94,6 +94,14 @@ func (c connection) Begin() (driver.Tx, error) {
 	}
 	return transaction{script: c.script}, nil
 }
+
+// BeginTx 允许服务显式使用 READ COMMITTED；事务顺序仍由脚本验证。
+func (c connection) BeginTx(_ context.Context, options driver.TxOptions) (driver.Tx, error) {
+	if options.Isolation != driver.IsolationLevel(sql.LevelDefault) && options.Isolation != driver.IsolationLevel(sql.LevelReadCommitted) {
+		return nil, errors.New("不支持的测试隔离级别")
+	}
+	return c.Begin()
+}
 func (c connection) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	step, err := c.script.next("query", query, args)
 	if err != nil {

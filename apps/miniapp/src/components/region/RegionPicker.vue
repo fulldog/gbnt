@@ -8,31 +8,35 @@ const props = withDefaults(defineProps<{
   tree: readonly OrgTreeNode[];
   value: number | null;
   label?: string;
-  mode?: "leaf" | "filter";
+  mode?: "leaf" | "filter" | "village";
+  startLevel?: "district" | "street";
   loading?: boolean;
   error?: string;
+  showInlineError?: boolean;
   disabled?: boolean;
-}>(), { label: "", mode: "leaf", loading: false, error: "", disabled: false });
+}>(), { label: "", mode: "leaf", startLevel: "district", loading: false, error: "", showInlineError: true, disabled: false });
 const emit = defineEmits<{
   select: [selection: { id: number | null; label: string }];
   retry: [];
 }>();
-const headings = ["区县", "街道", "村（社区）"];
+const headings = computed(() => props.startLevel === "street" ? ["街道", "村（社区）"] : ["区县", "街道", "村（社区）"]);
 const rolling = shallowRef(false);
 const { opened, indices, columns, selection, selectedLabel, selectedName, open, cancel, change, confirm } = useRegionPicker(
   () => props.tree,
   () => props.value,
   (value) => emit("select", value),
   () => props.mode,
+  () => props.startLevel,
 );
 // 展示已确认值；滚轮中的临时候选不会改动输入栏或筛选条件。
-const fullLabel = computed(() => props.label || selectedLabel.value ||
+const fullLabel = computed(() => (props.startLevel === "street" ? selectedLabel.value : props.label.replace(/\s*\/\s*/g, "") || selectedLabel.value) ||
   (props.value !== null ? "所选行政区划已失效" : ""));
 const triggerLabel = computed(() => {
   if (props.loading && !props.label) return "正在加载…";
   if (props.mode === "filter") return selectedName.value || fullLabel.value || "全部区域";
   return fullLabel.value || "请选择行政区划";
 });
+const confirmDisabled = computed(() => !selection.value || rolling.value || props.loading || !!props.error || props.disabled);
 
 function show(): void {
   if (props.loading || props.disabled) return;
@@ -42,9 +46,9 @@ function show(): void {
 }
 
 function onChange(event: { detail?: { value?: unknown } }): void {
-  // 只接受完整三列的原生索引，避免迟到或异常事件污染候选路径。
+  // 只接受与当前可见列数一致的原生索引，避免迟到或异常事件污染候选路径。
   const value = event.detail?.value;
-  if (!Array.isArray(value) || value.length !== 3 ||
+  if (!Array.isArray(value) || value.length !== headings.value.length ||
     !value.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)) return;
   change(value);
 }
@@ -58,10 +62,10 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
 </script>
 
 <template>
-  <view class="region-picker" :class="{ 'region-picker--filter': props.mode === 'filter' }">
+  <view class="region-picker" :class="{ 'region-picker--filter': props.mode !== 'leaf' }">
     <button
       class="region-picker__trigger"
-      :class="{ 'region-picker__trigger--placeholder': !fullLabel && props.mode === 'leaf' }"
+      :class="{ 'region-picker__trigger--placeholder': !fullLabel && props.mode === 'leaf', 'region-picker__trigger--disabled': props.loading || props.disabled }"
       :disabled="props.loading || props.disabled"
       :aria-label="`选择行政区划，${fullLabel || '尚未选择'}`"
       :aria-expanded="opened"
@@ -70,7 +74,7 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
     >
       <text class="region-picker__value">{{ triggerLabel }}</text>
       <image
-        v-if="props.mode === 'filter'"
+        v-if="props.mode !== 'leaf'"
         class="region-picker__filter-chevron"
         src="/static/icons/chevron-down.svg"
         mode="aspectFit"
@@ -78,7 +82,7 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
       />
       <view v-else class="region-picker__chevron" aria-hidden="true" />
     </button>
-    <view v-if="props.error && !opened" class="region-picker__error" role="alert">
+    <view v-if="props.error && props.showInlineError && !opened" class="region-picker__error" role="alert">
       <text>{{ props.error }}</text>
       <button class="region-picker__action" @tap="emit('retry')">重新加载</button>
     </view>
@@ -91,13 +95,14 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
           <text class="region-picker__title">行政区划</text>
           <button
             class="region-picker__action region-picker__action--confirm"
-            :disabled="!selection || rolling || props.loading || !!props.error || props.disabled"
+            :class="{ 'region-picker__action--disabled': confirmDisabled }"
+            :disabled="confirmDisabled"
             hover-class="region-picker__pressed"
             @tap="commit"
           >确定</button>
         </view>
         <view class="region-picker__headings">
-          <text v-for="heading in headings" :key="heading">{{ heading }}</text>
+          <text v-for="heading in headings" :key="heading" class="region-picker__heading">{{ heading }}</text>
         </view>
         <view v-if="props.loading" class="region-picker__status">行政区划加载中…</view>
         <view v-else-if="props.error" class="region-picker__status" role="alert">
@@ -159,7 +164,7 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
 .region-picker__trigger--placeholder {
   color: var(--color-text-tertiary);
 }
-.region-picker__trigger[disabled] {
+.region-picker__trigger--disabled {
   opacity: 0.6;
 }
 .region-picker__value {
@@ -251,7 +256,7 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
   color: var(--color-primary);
   font-weight: 600;
 }
-.region-picker__action[disabled] {
+.region-picker__action--disabled {
   color: var(--color-text-tertiary);
   opacity: 0.55;
 }
@@ -261,7 +266,7 @@ watch(() => props.disabled, (disabled) => { if (disabled) cancel(); });
   color: var(--color-text-secondary);
   font-size: 12px;
 }
-.region-picker__headings > text {
+.region-picker__heading {
   flex: 1;
   text-align: center;
 }

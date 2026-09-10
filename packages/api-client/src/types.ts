@@ -56,6 +56,10 @@ export const ISSUE_TYPES = [
 ] as const;
 export type IssueType = (typeof ISSUE_TYPES)[number];
 
+export type FacilityCodeMode = "auto" | "manual";
+export const FACILITY_CODE_CONFLICT = 40901;
+export const ISSUE_REQUEST_CONFLICT = 40902;
+
 export const PROJECT_YEARS = [2020, 2021, 2022, 2023] as const;
 export type ProjectYear = (typeof PROJECT_YEARS)[number];
 
@@ -218,6 +222,10 @@ type IssueByType =
 export type Issue = IssueBase & IssueByType;
 
 interface IssueCreateCommon {
+  /** 新端明确指定；旧端省略时，非空 code 按手动、空值按自动处理。 */
+  code_mode?: FacilityCodeMode;
+  /** 同次提交网络重试复用，内容修改后使用新 ID；旧端可省略。 */
+  request_id?: string;
   project_year: ProjectYear;
   org_id: number;
   code?: string;
@@ -241,7 +249,7 @@ export type AdminCreateIssueInput = IssueCreateCommon & IssueCreateByType & {
   report_user_id?: number;
   reporter_name?: string;
   reporter_phone?: string;
-  /** 选填；非 0 须启用且所属组织与 org_id 互为上下级或同一节点。 */
+  /** 需整改时必填；须启用且所属组织与 org_id 互为上下级或同一节点。 */
   assignee_user?: number;
 };
 
@@ -262,6 +270,7 @@ export interface UpdateIssueInput {
   status?: IssueStatus;
   reporter_signature_file_id?: string;
   report_user_id?: number;
+  /** 待整改/整改中不允许为 0；省略保留原责任人，非 0 须启用且属于相关组织。 */
   assignee_user?: number;
   type_ext?: IssueTypeExt;
 }
@@ -486,6 +495,8 @@ export interface SliderFinishResult {
 }
 
 export interface MiniappLoginInput {
+  /** 用户已主动勾选同意协议；小程序登录必填。 */
+  agreed: true;
   username: string;
   password: string;
   pass_token?: string;

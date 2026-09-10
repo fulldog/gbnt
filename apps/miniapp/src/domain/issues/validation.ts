@@ -1,3 +1,4 @@
+import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import type { IssueType, QuizType } from "@gbnt/api-client";
 import { QUIZ_DEFINITIONS, quizIndicatesIssue } from "./definitions";
 import type { QuizFormItem, ReportFormState } from "./form";
@@ -83,10 +84,13 @@ function validateDetails(form: ReportFormState, errors: string[]): void {
 
 export function validateBasicStep(form: ReportFormState): string[] {
   const errors: string[] = [];
+  if (form.projectYear === null || ![2020, 2021, 2022, 2023].includes(form.projectYear)) {
+    errors.push("请选择项目年度");
+  }
   if (!form.orgId) {
     errors.push("请选择行政区划");
   }
-  if (!form.code.trim()) {
+  if (resolveFacilityCodeMode(form) === "manual" && !form.code.trim()) {
     errors.push("请填写设施编号");
   }
   if (!form.address.trim()) {
@@ -198,7 +202,7 @@ export function validateQuizItem(issueType: IssueType, item: QuizFormItem): stri
   return errors;
 }
 
-export function validateSubmitStep(form: ReportFormState): string[] {
+export function validateSubmitStep(form: ReportFormState, requireSignature = true): string[] {
   const errors = [...validateBasicStep(form), ...validateQuizStep(form)];
   if (reportNeedsRectify(form) && !form.planDate) {
     errors.push("存在待整改问题时必须选择计划完成日期");
@@ -208,7 +212,7 @@ export function validateSubmitStep(form: ReportFormState): string[] {
       new Date(`${form.planDate}T00:00:00Z`).toISOString().slice(0, 10) !== form.planDate)) {
     errors.push("计划完成日期无效，请重新选择");
   }
-  if (!form.signatureFileId) {
+  if (requireSignature && !form.signatureFileId) {
     errors.push("请完成排查人电子签名并上传");
   }
   return Array.from(new Set(errors));

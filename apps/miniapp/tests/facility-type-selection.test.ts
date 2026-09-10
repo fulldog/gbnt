@@ -1,282 +1,100 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { computed, reactive, shallowRef } from "vue";
-import { babelParse, parse } from "vue/compiler-sfc";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IssueType } from "@gbnt/api-client";
-import { useFacilityTypeSelection } from "@/composables/report/useFacilityTypeSelection";
-import { ISSUE_TYPE_OPTIONS, QUIZ_DEFINITIONS } from "@/domain/issues/definitions";
-import { createReportDetails, createReportForm, replaceIssueType, type ReportFormState } from "@/domain/issues/form";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createReportWorkspace, createTypeDraft, selectWorkspaceType, useReportWorkspace, workspaceStorageKey } from "@/composables/report/useReportWorkspace";
+import { ISSUE_TYPE_OPTIONS } from "@/domain/issues/definitions";
+import { useReportDraft } from "@/composables/report/useReportDraft";
 
-const facilityTypes = [
-  ["well", "机井"], ["road", "道路"], ["bridge", "桥涵闸"], ["forest", "林网"], ["transformer", "变压器"],
-] as const;
-type ModalResult = { confirm: boolean; cancel: boolean };
-const confirmed: ModalResult = { confirm: true, cancel: false };
-const cancelled: ModalResult = { confirm: false, cancel: true };
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((success, failure) => { resolve = success; reject = failure; });
-  return { promise, resolve, reject };
-}
-
-function snapshot(form: ReportFormState): ReportFormState {
-  return JSON.parse(JSON.stringify(form)) as ReportFormState;
-}
-
-function fixture(initialType: IssueType = "well") {
-  const form = reactive(createReportForm());
-  replaceIssueType(form, initialType);
-  Object.assign(form, {
-    projectYear: 2022, orgId: 23, orgLabel: "测试街道 / 测试新村", code: "001号",
-    address: "测试新村北侧", lat: 36.48, lng: 116.03, planDate: "2026-10-01",
-    signatureFileId: "old-signature", signaturePreviewUrl: "/uploads/old-signature.png",
-  });
-  form.details.length = "10.5";
-  form.details.keeperName = "测试管护人";
-  form.details.keeperPhone = "0013800000000";
-  form.quizzes.forEach((item) => {
-    item.value = false;
-    item.desc = "已有排查描述";
-    item.photos = [{ fileId: "old-photo", url: "/uploads/old-photo.png" }];
-  });
-  const disabled = shallowRef(false);
-  const modal = vi.fn(async (): Promise<ModalResult> => confirmed);
-  vi.stubGlobal("uni", { showModal: modal });
-  const commit = vi.fn((type: IssueType) => replaceIssueType(form, type));
-  const selection = useFacilityTypeSelection({ currentType: () => form.type, disabled: () => disabled.value, commit });
-  // 高亮与正式组件一样只取表单的已提交类型，不维护乐观选中副本。
-  const selectedLabel = computed(() => ISSUE_TYPE_OPTIONS.find((item) => item.value === form.type)?.label);
-  return { form, disabled, modal, commit, selectedLabel, ...selection };
-}
-
+const storage = new Map<string, unknown>();
+beforeEach(() => {
+  storage.clear();
+  vi.stubGlobal("uni", { getStorageSync: (key: string) => storage.get(key), setStorageSync: (key: string, value: unknown) => storage.set(key, value), removeStorageSync: (key: string) => storage.delete(key), showModal: vi.fn() });
+});
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe("巡查设施类型确认切换", () => {
-  it("五类顺序与标签和原型保持一致", () => {
-    expect(ISSUE_TYPE_OPTIONS).toEqual(facilityTypes.map(([value, label]) => ({ value, label })));
+describe("五类巡查独立草稿", () => {
+  it("旧编号和手动清空迁移为手动，旧建议值迁移为自动，模式随类型保存", () => {
+    const workspace = createReportWorkspace();
+    workspace.drafts.well!.form.code = "01";
+    selectWorkspaceType(workspace, "road");
+    workspace.drafts.road!.form.codeSource = "manual";
+    selectWorkspaceType(workspace, "bridge");
+    Object.assign(workspace.drafts.bridge!.form, { code: "03", codeSource: "auto" });
+    const draft = useReportWorkspace(() => 7);
+    draft.save(workspace);
+    const restored = draft.load();
+    expect(restored.drafts.well!.form).toMatchObject({ code: "01", codeMode: "manual" });
+    expect(restored.drafts.road!.form).toMatchObject({ code: "", codeMode: "manual" });
+    expect(restored.drafts.bridge!.form).toMatchObject({ code: "", codeMode: "auto" });
+    expect(restored.drafts.bridge!.form.codeSource).toBeUndefined();
   });
-
-  it.each(facilityTypes)("确认切换到 %s/%s 后保留基础信息并重建当前类型排查项", async (type, label) => {
-    const f = fixture(type === "well" ? "road" : "well");
-    const before = snapshot(f.form);
-    const oldDetails = f.form.details;
-    const oldQuizzes = f.form.quizzes;
-    await f.selectType(type);
-    expect(f.modal).toHaveBeenCalledTimes(1);
-    expect(f.modal).toHaveBeenCalledWith(expect.objectContaining({ title: "切换设施类型", confirmText: "继续切换" }));
-    expect(f.commit).toHaveBeenCalledTimes(1);
-    expect(f.commit).toHaveBeenCalledWith(type);
-    expect(f.selectedLabel.value).toBe(label);
-    expect(f.form).toMatchObject({
-      type, projectYear: before.projectYear, orgId: before.orgId, orgLabel: before.orgLabel, code: before.code,
-      address: before.address, lat: before.lat, lng: before.lng,
-      planDate: "", signatureFileId: "", signaturePreviewUrl: "",
-    });
-    expect(f.form.details).toEqual(createReportDetails());
-    expect(f.form.details).not.toBe(oldDetails);
-    expect(f.form.quizzes).not.toBe(oldQuizzes);
-    expect(f.form.quizzes).toEqual(QUIZ_DEFINITIONS[type].map((item) => ({ type: item.type, value: null, desc: "", photos: [] })));
-    expect(f.selectingType.value).toBe(false);
-  });
-
-  it("等待确认期间保持原高亮与全部数据，取消不提交或清空", async () => {
-    const f = fixture();
-    const answer = deferred<ModalResult>();
-    f.modal.mockReturnValueOnce(answer.promise);
-    const before = snapshot(f.form);
-    const pending = f.selectType("road");
-    expect(f.selectingType.value).toBe(true);
-    expect(f.selectedLabel.value).toBe("机井");
-    expect(f.form).toEqual(before);
-    expect(f.commit).not.toHaveBeenCalled();
-    answer.resolve(cancelled);
-    await pending;
-    expect(f.form).toEqual(before);
-    expect(f.selectedLabel.value).toBe("机井");
-    expect(f.selectingType.value).toBe(false);
-    expect(f.commit).not.toHaveBeenCalled();
-  });
-
-  it("点击当前项不弹确认、不清空数据", async () => {
-    const f = fixture("forest");
-    const before = snapshot(f.form);
-    await f.selectType("forest");
-    expect(f.modal).not.toHaveBeenCalled();
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.form).toEqual(before);
-    expect(f.selectingType.value).toBe(false);
-  });
-
-  it("快速点击相同或不同项只保留第一份确认，结束后允许下次切换", async () => {
-    const f = fixture();
-    const answer = deferred<ModalResult>();
-    f.modal.mockReturnValueOnce(answer.promise);
-    const pending = f.selectType("road");
-    await Promise.all([f.selectType("road"), f.selectType("bridge"), f.selectType("forest")]);
-    expect(f.modal).toHaveBeenCalledTimes(1);
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.form.type).toBe("well");
-    answer.resolve(confirmed);
-    await pending;
-    expect(f.form.type).toBe("road");
-    expect(f.commit).toHaveBeenCalledTimes(1);
-    await f.selectType("transformer");
-    expect(f.modal).toHaveBeenCalledTimes(2);
-    expect(f.commit).toHaveBeenCalledTimes(2);
-    expect(f.form.type).toBe("transformer");
-  });
-
-  it("已禁用时不弹窗且不修改表单", async () => {
-    const f = fixture();
-    const before = snapshot(f.form);
-    f.disabled.value = true;
-    await f.selectType("bridge");
-    expect(f.modal).not.toHaveBeenCalled();
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.form).toEqual(before);
-    expect(f.selectingType.value).toBe(false);
-  });
-
-  it("确认期间因上传、提交或页面失效而禁用，迟到确认不得清空数据", async () => {
-    const f = fixture();
-    const answer = deferred<ModalResult>();
-    f.modal.mockReturnValueOnce(answer.promise);
-    const before = snapshot(f.form);
-    const pending = f.selectType("bridge");
-    f.disabled.value = true;
-    answer.resolve(confirmed);
-    await pending;
-    expect(f.form).toEqual(before);
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.selectingType.value).toBe(false);
-    f.disabled.value = false;
-    await f.selectType("bridge");
-    expect(f.commit).toHaveBeenCalledTimes(1);
-    expect(f.form.type).toBe("bridge");
-  });
-
-  it("外部已恢复为另一类型时，旧确认不能覆盖新的类型和内容", async () => {
-    const f = fixture();
-    const answer = deferred<ModalResult>();
-    f.modal.mockReturnValueOnce(answer.promise);
-    const pending = f.selectType("road");
-    replaceIssueType(f.form, "transformer");
-    f.form.details.capacity = "250";
-    f.form.quizzes[0]!.desc = "恢复草稿后的新内容";
-    const restored = snapshot(f.form);
-    answer.resolve(confirmed);
-    await pending;
-    expect(f.form).toEqual(restored);
-    expect(f.selectedLabel.value).toBe("变压器");
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.selectingType.value).toBe(false);
-  });
-
-  it.each(["reject", "throw"] as const)("弹窗 %s 时保留数据并释放锁，后续重试正常", async (failure) => {
-    const f = fixture();
-    const before = snapshot(f.form);
-    if (failure === "reject") f.modal.mockRejectedValueOnce(new Error("showModal:fail"));
-    else f.modal.mockImplementationOnce(() => { throw new Error("showModal unavailable"); });
-    await expect(f.selectType("forest")).resolves.toBeUndefined();
-    expect(f.form).toEqual(before);
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.selectingType.value).toBe(false);
-    await f.selectType("forest");
-    expect(f.commit).toHaveBeenCalledTimes(1);
-    expect(f.form.type).toBe("forest");
-  });
-
-  it("非法类型不进入确认或修改流程", async () => {
-    const f = fixture();
-    const before = snapshot(f.form);
-    await f.selectType("unsupported" as IssueType);
-    expect(f.modal).not.toHaveBeenCalled();
-    expect(f.commit).not.toHaveBeenCalled();
-    expect(f.form).toEqual(before);
-  });
-});
-
-type TemplateAst = NonNullable<NonNullable<ReturnType<typeof parse>["descriptor"]["template"]>["ast"]>;
-type TemplateElement = Extract<TemplateAst["children"][number], { type: 1 }>;
-
-/** 读取真实 SFC 的模板 AST；注释、脚本字符串不能伪装成已接线组件。 */
-function templateElements(relativePath: string): TemplateElement[] {
-  const filename = fileURLToPath(new URL(relativePath, import.meta.url));
-  const parsed = parse(readFileSync(filename, "utf8"), { filename });
-  expect(parsed.errors).toEqual([]);
-  const ast = parsed.descriptor.template?.ast;
-  if (!ast) throw new Error("目标 SFC 缺少模板 AST");
-  const elements: TemplateElement[] = [];
-  const visit = (children: TemplateAst["children"]): void => {
-    for (const child of children) {
-      if (child.type === 1) { elements.push(child); visit(child.children); }
+  it("往返切换保留各自字段、照片、签名和步骤，不询问或清空", () => {
+    const workspace = createReportWorkspace();
+    for (const { value: type } of ISSUE_TYPE_OPTIONS) {
+      selectWorkspaceType(workspace, type);
+      const draft = workspace.drafts[type]!;
+      draft.form.address = `${type} 的地址`;
+      draft.form.quizzes[0]!.photos = [{ fileId: type, url: `/${type}.jpg` }];
+      draft.form.signatureStrokes = [[{ x: .2, y: .3 }]];
+      draft.step = 3;
     }
-  };
-  visit(ast.children);
-  return elements;
-}
-
-function directive(element: TemplateElement, name: string, argument?: string) {
-  const result = element.props.find((prop) => prop.type === 7 && prop.name === name &&
-    (argument === undefined || (prop.arg?.type === 4 && prop.arg.content === argument)));
-  return result?.type === 7 ? result : undefined;
-}
-
-function expression(element: TemplateElement, name: string, argument?: string) {
-  const exp = directive(element, name, argument)?.exp;
-  if (exp?.type !== 4) throw new Error(`缺少 ${element.tag} 的 ${name}:${argument ?? ""} 表达式`);
-  const statement = babelParse(`(${exp.content})`, { sourceType: "module" }).program.body[0];
-  if (statement?.type !== "ExpressionStatement") throw new Error("模板绑定不是可验证的表达式");
-  return statement.expression;
-}
-
-function attribute(element: TemplateElement, name: string): string | undefined {
-  const result = element.props.find((prop) => prop.type === 6 && prop.name === name);
-  return result?.type === 6 ? result.value?.content : undefined;
-}
-
-describe("巡查顶部设施 tabs 模板接线", () => {
-  it("使用横向 scroll-view 与受控选中项、真实 tab 按钮和触摸选择事件", () => {
-    const elements = templateElements("../src/components/report/FacilityTypeTabs.vue");
-    const scroll = elements.find((element) => element.tag === "scroll-view");
-    const tab = elements.find((element) => element.tag === "button" && attribute(element, "role") === "tab");
-    if (!scroll || !tab) throw new Error("缺少真实 scroll-view 或 tab 按钮");
-    expect(expression(scroll, "bind", "scroll-x")).toMatchObject({ type: "BooleanLiteral", value: true });
-    expect(expression(scroll, "bind", "show-scrollbar")).toMatchObject({ type: "BooleanLiteral", value: false });
-    expect(directive(scroll, "bind", "scroll-into-view")).toBeDefined();
-    expect(directive(tab, "for")?.forParseResult?.source).toMatchObject({ type: 4, content: "ISSUE_TYPE_OPTIONS" });
-    expect(expression(tab, "bind", "aria-selected")).toMatchObject({
-      type: "BinaryExpression", operator: "===",
-      left: { type: "MemberExpression", object: { name: "props" }, property: { name: "value" } },
-      right: { type: "MemberExpression", object: { name: "option" }, property: { name: "value" } },
-    });
-    expect(expression(tab, "on", "tap")).toMatchObject({ type: "CallExpression", callee: { name: "select" }, arguments: [{ type: "MemberExpression", object: { name: "option" }, property: { name: "value" } }] });
-    expect(expression(tab, "bind", "disabled")).toMatchObject({ type: "MemberExpression", object: { name: "props" }, property: { name: "disabled" } });
-    expect(elements.some((element) => element.tag === "picker")).toBe(false);
-  });
-
-  it("正式巡查页在步骤区前接入 tabs，仅第一步显示，以 form.type 作为高亮来源并移除主类型 picker", () => {
-    const elements = templateElements("../src/pages/report/index.vue");
-    const tabs = elements.filter((element) => element.tag === "FacilityTypeTabs");
-    expect(tabs).toHaveLength(1);
-    const tab = tabs[0]!;
-    expect(expression(tab, "if")).toMatchObject({ type: "BinaryExpression", operator: "===", left: { type: "Identifier", name: "step" }, right: { type: "NumericLiteral", value: 1 } });
-    expect(expression(tab, "bind", "value")).toMatchObject({ type: "MemberExpression", object: { name: "form" }, property: { name: "type" } });
-    expect(expression(tab, "bind", "disabled")).toMatchObject({ type: "LogicalExpression", operator: "||", left: { name: "typeSelectionDisabled" }, right: { name: "selectingType" } });
-    expect(expression(tab, "on", "select")).toMatchObject({ type: "Identifier", name: "selectType" });
-    const progress = elements.find((element) => attribute(element, "class") === "report-progress");
-    expect(progress).toBeDefined();
-    expect(tab.loc.start.offset).toBeLessThan(progress!.loc.start.offset);
-    const pickers = elements.filter((element) => element.tag === "picker");
-    expect(pickers.length).toBeGreaterThan(0);
-    for (const picker of pickers) {
-      if (directive(picker, "bind", "range")) {
-        expect(expression(picker, "bind", "range")).not.toMatchObject({ type: "Identifier", name: "ISSUE_TYPE_OPTIONS" });
-      }
-      expect(directive(picker, "on", "change")?.exp).not.toMatchObject({ content: "selectType" });
+    for (const { value: type } of [...ISSUE_TYPE_OPTIONS].reverse()) {
+      selectWorkspaceType(workspace, type);
+      expect(workspace.drafts[type]).toMatchObject({ step: 3, form: { address: `${type} 的地址`, signatureStrokes: [[{ x: .2, y: .3 }]] } });
+      expect(workspace.drafts[type]!.form.quizzes[0]!.photos[0]!.fileId).toBe(type);
     }
+    expect(uni.showModal).not.toHaveBeenCalled();
+  });
+  it("重新进入恢复最后类型和步骤，按账号隔离", () => {
+    const workspace = createReportWorkspace();
+    selectWorkspaceType(workspace, "bridge");
+    workspace.drafts.bridge!.step = 3;
+    workspace.drafts.bridge!.form.projectYear = 2021;
+    const drafts = useReportWorkspace(() => 7);
+    expect(drafts.save(workspace)).toBe(true);
+    expect(drafts.load()).toMatchObject({ activeType: "bridge", drafts: { bridge: { step: 3, form: { projectYear: 2021 } } } });
+    expect(useReportWorkspace(() => 8).load().drafts.bridge).toBeUndefined();
+  });
+  it("提交清理只作用于成功类型，其余草稿继续保留", () => {
+    const workspace = createReportWorkspace();
+    workspace.drafts.well!.form.address = "机井草稿";
+    selectWorkspaceType(workspace, "road");
+    workspace.drafts.road!.form.address = "道路草稿";
+    const drafts = useReportWorkspace(() => 7);
+    drafts.clearType(workspace, "road");
+    expect(drafts.load().drafts.well!.form.address).toBe("机井草稿");
+    expect(drafts.load().drafts.road!.form.address).toBe("");
+    expect(drafts.load().drafts.road!.form.projectYear).toBeNull();
+  });
+  it("切换后原类型上传回调不会写入当前类型", () => {
+    const workspace = createReportWorkspace();
+    const well = workspace.drafts.well!;
+    selectWorkspaceType(workspace, "road");
+    well.form.quizzes[0]!.photos.push({ fileId: "well-upload", url: "/watermarked.jpg" });
+    expect(workspace.drafts.road!.form.quizzes[0]!.photos).toEqual([]);
+    expect(workspace.drafts.well!.form.quizzes[0]!.photos[0]!.fileId).toBe("well-upload");
+  });
+  it("旧草稿静默迁移，旧默认年份不视为已选择", () => {
+    const legacy = useReportDraft(7);
+    const form = createTypeDraft("forest").form;
+    form.address = "旧草稿"; form.projectYear = 2023;
+    legacy.saveDraft(form);
+    const workspace = useReportWorkspace(() => 7).load();
+    expect(workspace.activeType).toBe("forest");
+    expect(workspace.drafts.forest!.form.address).toBe("旧草稿");
+    expect(workspace.drafts.forest!.form.projectYear).toBeNull();
+    expect(storage.has(workspaceStorageKey(7))).toBe(true);
+    expect(uni.showModal).not.toHaveBeenCalled();
+  });
+  it("损坏或跨类型草稿不能作为当前表单恢复", () => {
+    storage.set(workspaceStorageKey(7), { version: 3, ownerUserId: 7, workspace: { activeType: "road", drafts: { road: createTypeDraft("bridge") } } });
+    expect(useReportWorkspace(() => 7).load().drafts.road!.form.type).toBe("road");
+  });
+  it("存储失败返回失败状态，保留内存中的各类内容供重试", () => {
+    vi.spyOn(uni, "setStorageSync").mockImplementationOnce(() => { throw new Error("quota"); });
+    const workspace = createReportWorkspace(); workspace.drafts.well!.form.address = "待保存";
+    const drafts = useReportWorkspace(() => 7);
+    expect(drafts.save(workspace)).toBe(false);
+    expect(drafts.saveState.value).toBe("failed");
+    expect(workspace.drafts.well!.form.address).toBe("待保存");
+    expect(drafts.save(workspace)).toBe(true);
   });
 });

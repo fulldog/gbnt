@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, vi } from "vitest";
 import * as vue from "vue";
+import * as apiClient from "@gbnt/api-client";
 import { compileScript, parse } from "vue/compiler-sfc";
 import ts from "typescript";
 
@@ -19,6 +20,7 @@ export function setupSfc(path: string, props: object, imports: Record<string, un
   const module = { exports: {} as { default: { setup: (props: object, context: object) => Record<string, unknown> } } };
   const require = (name: string) => {
     if (name === "vue") return vue;
+    if (name === "@gbnt/api-client") return apiClient;
     if (name in imports) return imports[name];
     throw new Error(`Unexpected component import: ${name}`);
   };

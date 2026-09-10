@@ -38,6 +38,33 @@ afterEach(() => {
 });
 
 describe("安全验证生命周期", () => {
+  it("原生拖动不逐帧回写位置，结束时使用最后的原生偏移完成验证", async () => {
+    const { slider, options } = setup();
+    await slider.prepare();
+    slider.onTouchStart({ touches: [{ clientX: 10 }] });
+    for (const x of [40, 80, 160, slider.maxTravel.value]) {
+      slider.onNativeChange({ detail: { x, source: "touch" } });
+      expect(slider.offset.value).toBe(0);
+    }
+    vi.advanceTimersByTime(600);
+    await slider.onTouchEnd({});
+    expect(options.finish).toHaveBeenCalledTimes(1);
+    expect(slider.state.value).toBe("verified");
+  });
+
+  it("原生拖动未到末端时重建滑块回到起点且不请求验证", async () => {
+    const { slider, options } = setup();
+    await slider.prepare();
+    const revision = slider.handleRevision.value;
+    slider.onTouchStart({ touches: [{ clientX: 10 }] });
+    slider.onNativeChange({ detail: { x: 80, source: "touch" } });
+    await slider.onTouchEnd({});
+    expect(slider.offset.value).toBe(0);
+    expect(slider.handleRevision.value).toBeGreaterThan(revision);
+    expect(slider.state.value).toBe("ready");
+    expect(options.finish).not.toHaveBeenCalled();
+  });
+
   it("未配置地址时不发请求，短状态与完整恢复原因分开", async () => {
     const { slider, options } = setup();
     options.configured.mockReturnValue(false);

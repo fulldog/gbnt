@@ -196,4 +196,11 @@ func TestReporterOptionsInvalidArguments(t *testing.T) {
 			t.Errorf("无效参数 %s 应为 400：%s", query, w.Body.String())
 		}
 	}
+	for _, query := range []string{"org_id=0", "org_id=-1", "org_id=abc"} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest("GET", "/api/issues/1/assignee-options?"+query, nil))
+		if w.Code != 400 {
+			t.Errorf("无效新组织 %s 应为 400：%s", query, w.Body.String())
+		}
+	}
 }

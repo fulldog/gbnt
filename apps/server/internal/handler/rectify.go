@@ -77,6 +77,9 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
+		if issueWriteConflict(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -97,6 +100,9 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Update(c.Request.Context(), id, req)
 	if err != nil {
+		if issueWriteConflict(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -188,6 +194,9 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 
 	n, err := d.Issue.Import(c.Request.Context(), req.Rows)
 	if err != nil {
+		if issueWriteConflict(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

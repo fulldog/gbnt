@@ -19,6 +19,7 @@ function photo(fileId: string, capturedAt?: number) {
 
 function validWellForm(): ReportFormState {
   const form = createReportForm();
+  form.projectYear = 2023;
   form.orgId = 12;
   form.orgLabel = "开发区 / 街道 / 村";
   form.code = "01号";
@@ -63,9 +64,10 @@ describe("巡查上报领域规则", () => {
     expect(payload.plan_date).toBeUndefined();
   });
 
-  it.each(["", " \t "])("设施编号为空或仅有空白时，下一步和最终提交均拦截：%j", (code) => {
+  it.each(["", " \t "])("手动设施编号为空或仅有空白时，下一步和最终提交均拦截：%j", (code) => {
     const form = validWellForm();
     form.code = code;
+    form.codeMode = "manual";
 
     expect(validateBasicStep(form)).toEqual(["请填写设施编号"]);
     expect(validateSubmitStep(form)).toEqual(["请填写设施编号"]);

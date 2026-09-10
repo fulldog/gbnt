@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"strings"
+	"time"
 
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
@@ -22,30 +23,33 @@ type IssueService struct {
 
 // IssueQuery 列表筛选。
 type IssueQuery struct {
-	Type        string // 问题类型 well/road/bridge/forest/transformer；空或 all 不限
-	Status      string // new|pending|done；空或 all 不限状态
-	OrgID       uint64 // 落点组织 ID；>0 时含该组织及全部下级；0 不限
-	ProjectYear int    // 项目年度 2020–2023；0 不限
-	Keyword     string // 管理端为问题编号/设施编号/地址模糊；小程序保持设施编号/地址模糊
-	Page        int    // 页码，默认 1
-	Size        int    // 每页条数，默认 20
+	AsOf        time.Time // 小程序排序计算时刻，由服务端注入；零值使用 GORM 配置的服务端时钟，不接受客户端指定
+	Type        string    // 问题类型 well/road/bridge/forest/transformer；空或 all 不限
+	Status      string    // new|pending|done；空或 all 不限状态
+	OrgID       uint64    // 落点组织 ID；>0 时含该组织及全部下级；0 不限
+	ProjectYear int       // 项目年度 2020–2023；0 不限
+	Keyword     string    // 管理端为问题编号/设施编号/地址模糊；小程序保持设施编号/地址模糊
+	Page        int       // 页码，默认 1
+	Size        int       // 每页条数，默认 20
 }
 
 // IssueInput 创建入参；管理端新版表单与旧小程序按 type_ext.schema_version 分别校验。
 type IssueInput struct {
+	CodeMode                string          `json:"code_mode"`                  // auto 提交时分配；manual 手动必填；旧客户端省略按 code 是否为空推断
+	RequestID               string          `json:"request_id"`                 // 同次提交重试复用的 16–64 位请求 ID；旧客户端可省略
 	ReporterName            string          `json:"reporter_name"`              // 上报人姓名快照，选填，与操作账号分开
 	ReporterPhone           string          `json:"reporter_phone"`             // 上报联系电话，选填，不复用负责人电话
 	Type                    string          `json:"type"`                       // 问题类型 well/road/bridge/forest/transformer（必填）
 	ProjectYear             int             `json:"project_year"`               // 项目年度 2020–2023（新建必填）
 	OrgID                   uint64          `json:"org_id"`                     // 落点组织 ID，对应 sys_orgs.id（必填）
-	Code                    string          `json:"code"`                       // 设施编号；新版表单必填，旧版保持选填
+	Code                    string          `json:"code"`                       // manual 必填且同组织同类型唯一；auto 不传；不接受客户端指定 code_key
 	Address                 string          `json:"address"`                    // 定位地址（必填）
 	Lat                     float64         `json:"lat"`                        // 纬度
 	Lng                     float64         `json:"lng"`                        // 经度
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
 	ReportUserID            uint64          `json:"report_user_id"`             // 上报人账号：App 由登录用户注入；后台旧版必填，新版手工填报可不关联账号
-	AssigneeUser            uint64          `json:"assignee_user"`              // 整改责任人账号；后台 0/省略表示未指派，App 由服务端注入当前用户；非 0 须启用且所属组织与表单 org_id 互为上下级或同一节点
+	AssigneeUser            uint64          `json:"assignee_user"`              // 需整改时必填；App 注入当前用户；须启用且所属组织与表单 org_id 互为上下级或同一节点
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 兼容历史请求；创建忽略该值，状态由排查清单推导
 }
@@ -249,11 +253,6 @@ func orgSubtreeIDs(orgs []model.SysOrg, rootID uint64) []uint64 {
 	return ids
 }
 
-// issueTodoOrderSQL 待办排序：new > pending > done，同状态按 id 降序。
-func issueTodoOrderSQL() string {
-	return "FIELD(status,'new','pending','done') ASC, id DESC"
-}
-
 func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, orgID uint64) (*gorm.DB, error) {
 	if orgID == 0 {
 		return db, nil
@@ -266,7 +265,7 @@ func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, o
 	return db.Where("org_id IN ?", ids), nil
 }
 
-// ListTodos 小程序待办：status 空或 all 查全部；排序 new > pending > done。
+// ListTodos 小程序待办：已逾期、即将逾期、正常依次排列，同组剩余时间倒序。
 // 权限范围为登录用户组织及下属（用户 OrgID=0 不限）；query org_id>0 再与该组织子树取交集。
 func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Status == "all" {
@@ -296,7 +295,10 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 		return nil, 0, err
 	}
 	var list []model.Issue
-	if err := db.Order(issueTodoOrderSQL()).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
+	if q.AsOf.IsZero() {
+		q.AsOf = db.NowFunc()
+	}
+	if err := db.Clauses(miniappIssueOrder(q.AsOf)).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
 	out := make([]IssueVO, 0, len(list))
@@ -381,7 +383,7 @@ func (s *IssueService) requireOrgID(ctx context.Context, orgID uint64) error {
 	var o model.SysOrg
 	if err := s.db(ctx).First(&o, orgID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("组织不存在")
+			return ErrIssueOrgNotFound
 		}
 		return err
 	}
@@ -396,22 +398,22 @@ func (s *IssueService) requireAssigneeInFormOrg(ctx context.Context, assigneeUse
 	var user model.SysUser
 	if err := s.db(ctx).First(&user, assigneeUser).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("整改人不存在")
+			return errIssueAssigneeNotFound
 		}
 		return err
 	}
 	if user.Status != 1 {
-		return errors.New("整改人已停用")
+		return errIssueAssigneeDisabled
 	}
 	if user.OrgID == 0 || formOrgID == 0 {
-		return errors.New("责任人不属于所选组织")
+		return errIssueAssigneeOrg
 	}
 	var orgs []model.SysOrg
 	if err := s.db(ctx).Find(&orgs).Error; err != nil {
 		return err
 	}
 	if !orgIDsRelated(orgs, user.OrgID, formOrgID) {
-		return errors.New("责任人不属于所选组织")
+		return errIssueAssigneeOrg
 	}
 	return nil
 }
@@ -434,7 +436,17 @@ func orgIDsRelated(orgs []model.SysOrg, a, b uint64) bool {
 	return false
 }
 
+// Create 在事务内分配或校验设施编号并保存工单；请求 ID 保证重试返回首次成功结果。
 func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, error) {
+	mode, code, err := issueCodeInput(in.CodeMode, in.Code)
+	if err != nil {
+		return nil, err
+	}
+	in.CodeMode, in.Code = mode, code
+	request, err := prepareIssueRequest(ctx, in)
+	if err != nil {
+		return nil, err
+	}
 	typ := strings.TrimSpace(in.Type)
 	if !model.IssueType(typ).Valid() {
 		return nil, errors.New("问题类型无效")
@@ -457,9 +469,6 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if err := validateReporterSnapshot(in.ReporterName, in.ReporterPhone); err != nil {
 		return nil, err
 	}
-	if issueExtVersion(in.TypeExt) == 2 && strings.TrimSpace(in.Code) == "" {
-		return nil, errors.New("请填写设施编号")
-	}
 	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, in.OrgID); err != nil {
 		return nil, err
 	}
@@ -474,6 +483,9 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		return nil, err
 	}
 	if needsRectify {
+		if in.AssigneeUser == 0 {
+			return nil, errors.New("请指定整改人")
+		}
 		if strings.TrimSpace(in.PlanDate) == "" {
 			return nil, errors.New("请选择计划整改完成时间")
 		}
@@ -501,14 +513,75 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if in.AssigneeUser > 0 {
 		item.AssigneeUser = in.AssigneeUser
 	}
-	if err := s.db(ctx).Create(item).Error; err != nil {
+	// 创建时不存在整改记录；提前展开附件，避免提交成功后读详情失败被误认为保存失败。
+	hydrated, err := s.hydrateTypeExt(ctx, item.Type, item.TypeExt)
+	if err != nil {
 		return nil, err
 	}
-	return s.toVO(item)
+	var signature *FileItem
+	if s.Attach != nil {
+		if list, err := s.Attach.lookupExisting(ctx, []string{item.ReporterSignatureFileID}); err == nil && len(list) == 1 {
+			signature = &list[0]
+		}
+	}
+	var result *IssueVO
+	err = issueWriteTransaction(ctx, s.DB, mode == "auto", func(tx *gorm.DB) error {
+		previous, err := claimIssueRequest(tx, request)
+		if err != nil {
+			return err
+		}
+		if previous != nil {
+			result = previous
+			return nil
+		}
+		if err := lockIssueOrgs(tx, item.OrgID); err != nil {
+			return err
+		}
+		next := *item // 事务重试不复用前次 INSERT 产生的主键。
+		if mode == "auto" {
+			next.Code, err = allocateIssueCode(tx, next.OrgID, next.Type)
+		} else {
+			err = requireAvailableCode(tx, next.OrgID, next.Type, next.Code, 0)
+		}
+		if err != nil {
+			return err
+		}
+		next.CodeKey = next.Code
+		if err := tx.Create(&next).Error; err != nil {
+			return err
+		}
+		result = &IssueVO{Issue: next, TypeExtVO: hydrated, ReporterSignature: signature, RectifyRecords: []RectifyRecordVO{}}
+		return finishIssueRequest(tx, request, result)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
+// Delete 软删除工单并释放有效编号；与编辑采用相同的工单行、组织行锁顺序。
 func (s *IssueService) Delete(ctx context.Context, id uint64) error {
-	return s.db(ctx).Delete(&model.Issue{}, id).Error
+	return s.deleteIssue(ctx, id, 0)
+}
+
+func (s *IssueService) deleteIssue(ctx context.Context, id, reporterID uint64) error {
+	return issueWriteTransaction(ctx, s.DB, false, func(tx *gorm.DB) error {
+		var item model.Issue
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			}
+			return err
+		}
+		// 本人删除的权限以行锁内最新上报账号为准，不使用可编辑的姓名快照。
+		if reporterID != 0 && item.ReportUserID != reporterID {
+			return ErrIssueReporterOnly
+		}
+		if err := lockIssueOrgs(tx, item.OrgID); err != nil {
+			return err
+		}
+		return tx.Delete(&item).Error
+	})
 }
 
 func deriveCreateStatus(needsRectify bool) model.IssueStatus {
@@ -542,7 +615,10 @@ func reRectifyGate(status string, needsRectify bool) error {
 }
 
 func assertAppAssignee(item *model.Issue, userID uint64) error {
-	if item.AssigneeUser != 0 && item.AssigneeUser != userID {
+	if item.AssigneeUser == 0 {
+		return errors.New("该工单尚未指派整改人，请联系管理员指派")
+	}
+	if item.AssigneeUser != userID {
 		return errors.New("该问题已由他人认领整改")
 	}
 	return nil
@@ -551,8 +627,7 @@ func assertAppAssignee(item *model.Issue, userID uint64) error {
 // Rectify 提交分项整改：仅本轮记录覆盖全部需整改 type 才转 done，否则 pending。
 // 同一问题行锁串行提交与重新整改；lockAssignee 为 true 时保留 App 已认领人校验。
 func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, lockAssignee bool) (*IssueVO, error) {
-	user, err := database.UserFromContext(ctx)
-	if err != nil {
+	if _, err := database.UserFromContext(ctx); err != nil {
 		return nil, err
 	}
 	if len(in.RectifyList) == 0 {
@@ -562,12 +637,7 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 		return nil, errors.New("附件服务未初始化")
 	}
 
-	type prepared struct {
-		typ   model.QuizType
-		note  string
-		photo string
-	}
-	prep := make([]prepared, 0, len(in.RectifyList))
+	prep := make([]preparedRectification, 0, len(in.RectifyList))
 	for i, it := range in.RectifyList {
 		if !it.Type.Valid() {
 			return nil, fmt.Errorf("第 %d 项整改类型无效", i+1)
@@ -584,9 +654,16 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 		if mErr != nil {
 			return nil, mErr
 		}
-		prep = append(prep, prepared{typ: it.Type, note: note, photo: string(b)})
+		prep = append(prep, preparedRectification{typ: it.Type, note: note, photo: string(b)})
 	}
+	return s.rectifyPrepared(ctx, id, in.ExpectedRound, lockAssignee, prep, false)
+}
 
+func (s *IssueService) rectifyPrepared(ctx context.Context, id uint64, expectedRound *uint64, lockAssignee bool, prep []preparedRectification, completeRemaining bool) (*IssueVO, error) {
+	user, err := database.UserFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
 	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
 		var item model.Issue
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
@@ -599,7 +676,7 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 			}
 		}
 		// 即使服务器已完成并重开，旧页面的取证也不能悄悄写入下一轮。
-		if in.ExpectedRound != nil && *in.ExpectedRound != item.RectifyRound {
+		if expectedRound != nil && *expectedRound != item.RectifyRound {
 			return errors.New("整改轮次已更新，请刷新问题后重新提交")
 		}
 		if err := rectifyGate(item.Status, true); err != nil {
@@ -615,7 +692,14 @@ func (s *IssueService) Rectify(ctx context.Context, id uint64, in RectifyInput, 
 				covered[typ] = struct{}{}
 			}
 		}
-		for _, p := range prep {
+		toWrite := prep
+		if completeRemaining {
+			toWrite = remainingRectifications(neededQuizTypes(item.Type, item.TypeExt), covered, prep[0])
+			if len(toWrite) == 0 {
+				return errors.New("当前没有可提交的整改项，请刷新详情")
+			}
+		}
+		for _, p := range toWrite {
 			covered[p.typ] = struct{}{}
 			rec := model.IssueRectifyRecord{
 				IssueID: id, Round: item.RectifyRound, QuizType: string(p.typ), Note: p.note, PhotoFileIDs: p.photo,
@@ -662,6 +746,9 @@ func (s *IssueService) ReRectify(ctx context.Context, id uint64, lockAssignee bo
 		if err := reRectifyGate(item.Status, len(neededQuizTypes(item.Type, item.TypeExt)) > 0); err != nil {
 			return err
 		}
+		if item.AssigneeUser == 0 {
+			return errors.New("请先指定整改人")
+		}
 		// 历史保留在原轮次；下一次提交不能借用上一轮已完成的题项。
 		return tx.Model(&item).Updates(map[string]interface{}{
 			"status": model.IssueStatusPending, "rectify_round": gorm.Expr("rectify_round + 1"),
@@ -698,11 +785,12 @@ func (s *IssueService) Reassign(ctx context.Context, id uint64, in ReassignInput
 	return s.Get(id)
 }
 
+// Import 逐行创建，失败时停止并保留前序成功行；错误附带行号与已导入数量。
 func (s *IssueService) Import(ctx context.Context, rows []IssueInput) (int, error) {
 	n := 0
 	for _, row := range rows {
 		if _, err := s.Create(ctx, row); err != nil {
-			return n, err
+			return n, fmt.Errorf("第 %d 行导入失败，已成功 %d 条：%w", n+1, n, err)
 		}
 		n++
 	}

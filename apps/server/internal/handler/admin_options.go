@@ -78,7 +78,7 @@ func (d *Deps) IssueReporterOptions(c *gin.Context) {
 	response.OK(c, result)
 }
 
-// IssueAssigneeOptions GET /api/issues/:id/assignee-options — 既有问题的同组织责任人候选，受 edit 权限保护。
+// IssueAssigneeOptions GET /api/issues/:id/assignee-options — edit 权限；选填 org_id 为编辑表单的新组织，省略沿用原组织。
 func (d *Deps) IssueAssigneeOptions(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -87,6 +87,14 @@ func (d *Deps) IssueAssigneeOptions(c *gin.Context) {
 	query, ok := userOptionQuery(c)
 	if !ok {
 		return
+	}
+	if value, provided := c.GetQuery("org_id"); provided {
+		orgID, err := strconv.ParseUint(value, 10, 64)
+		if err != nil || orgID == 0 {
+			response.Fail(c, 400, response.CodeBadReq, service.ErrOptionArgument.Error())
+			return
+		}
+		query.OrgID = orgID
 	}
 	result, err := d.Issue.ListAssigneeOptions(c.Request.Context(), id, query)
 	if err != nil {

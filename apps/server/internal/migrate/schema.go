@@ -18,6 +18,7 @@ func projectModels() []any {
 		&model.SysAPI{},
 		&model.SysRoleAPI{},
 		&model.Issue{},
+		&model.IssueCreateRequest{},
 		&model.IssueRectifyRecord{},
 		&model.OpLog{},
 		&model.Attachment{},
@@ -42,6 +43,9 @@ func projectTableNames() []string {
 // ensureSchema 按当前模型 AutoMigrate 并写表注释。开发模式已按项目表删表，此处不写历史列 DROP。
 func ensureSchema(db *gorm.DB) error {
 	if err := db.AutoMigrate(projectModels()...); err != nil {
+		return err
+	}
+	if err := ensureFacilityCodes(db); err != nil {
 		return err
 	}
 	return applyTableComments(db)

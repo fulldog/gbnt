@@ -170,7 +170,7 @@ describe("formal miniapp API methods validate actual transport results", () => {
 
   it("validates login and me identity before returning it to the session store", async () => {
     const { client } = clientFor({ token: "test-token", expires_at: "2099-01-01T00:00:00Z", user });
-    expect((await createAuthApi(client).login({ username: "tester", password: "fixture" })).user.org_name).toBeNull();
+    expect((await createAuthApi(client).login({ agreed: true, username: "tester", password: "fixture" })).user.org_name).toBeNull();
     await expect(createAuthApi(clientFor({ id: 1 }).client).getMe()).rejects.toThrow("接口数据异常");
   });
 

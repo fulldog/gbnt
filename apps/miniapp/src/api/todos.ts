@@ -8,9 +8,13 @@ import type { MiniappIssueListResult } from "./types";
 export function createTodosApi(client: ApiClient) {
   return {
     async list(query: MiniappTodoQuery = {}): Promise<MiniappIssueListResult> {
-      return parseIssuePage(await client.request<unknown>("/api/app/todos", {
+      const response = await client.request<unknown>("/api/app/todos", {
         query: { ...query },
-      }));
+      });
+      const page = parseIssuePage(response);
+      const time = (response as { server_time?: unknown }).server_time;
+      if (typeof time === "string" && Number.isFinite(Date.parse(time))) page.server_time = time;
+      return page;
     },
   } as const;
 }

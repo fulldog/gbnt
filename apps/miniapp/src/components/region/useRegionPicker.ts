@@ -1,7 +1,7 @@
 import { computed, shallowRef, watch } from "vue";
 import type { OrgTreeNode } from "@gbnt/api-client";
 
-export type RegionPickerMode = "leaf" | "filter";
+export type RegionPickerMode = "leaf" | "filter" | "village";
 
 export interface RegionSelection {
   /** null 仅表示筛选不限区域，不是后端组织 ID。 */
@@ -31,12 +31,25 @@ export function useRegionPicker(
   getSelectedId: () => number | null,
   onConfirm: (selection: RegionSelection) => void,
   getMode: () => RegionPickerMode = () => "leaf",
+  getStartLevel: () => "district" | "street" = () => "district",
 ) {
   const opened = shallowRef(false);
   // ID 三元组保存候选，null 三元组表示全选；整体 null 表示尚无有效候选。
   const pendingIds = shallowRef<RegionIds | null>(null);
   const isFilter = computed(() => getMode() === "filter");
   const districts = computed(() => {
+    if (getStartLevel() === "street") {
+      const streets: OrgTreeNode[] = [];
+      function collectStreets(nodes: readonly OrgTreeNode[]): void {
+        for (const node of nodes) {
+          if (node.type === "street") streets.push(node);
+          else collectStreets(node.children);
+        }
+      }
+      collectStreets(getTree());
+      // 隐藏的联动容器只用于复用选择逻辑，永远不能作为组织 ID 提交。
+      return [{ node: { id: -1, name: "", type: "district" as const, parent_id: 0, sort: 0, children: streets }, names: [] }];
+    }
     const entries: DistrictEntry[] = [];
     function collect(nodes: readonly OrgTreeNode[], names: string[]): void {
       for (const node of nodes) {
@@ -64,7 +77,7 @@ export function useRegionPicker(
     return find(getTree(), []) ?? [];
   });
   const selectedLabel = computed(() => getSelectedId() === null && isFilter.value
-    ? ALL_NAMES[0] : selectedPath.value.map((node) => node.name).join(" / "));
+    ? ALL_NAMES[0] : selectedPath.value.filter((node) => getStartLevel() !== "street" || ["street", "village"].includes(node.type)).map((node) => node.name).join(""));
   const selectedName = computed(() => getSelectedId() === null && isFilter.value
     ? ALL_NAMES[0] : selectedPath.value[selectedPath.value.length - 1]?.name ?? "");
 
@@ -104,6 +117,7 @@ export function useRegionPicker(
     const entry = districts.value.find((item) => item.node.id === ids[0]);
     if (!entry) return null;
     const street = streetsOf(entry.node).find((node) => node.id === ids[1]);
+    if (getStartLevel() === "street" && !street) return null;
     if (ids[1] !== null && !street) return null;
     const village = villagesOf(street).find((node) => node.id === ids[2]);
     if (ids[2] !== null && !village) return null;
@@ -111,7 +125,8 @@ export function useRegionPicker(
     const endpoint = path[path.length - 1]!;
     // 创建兼容无下级的真实区县/街道；筛选可选有下级的父组织。
     if (!isFilter.value && endpoint.children.length !== 0) return null;
-    return { id: endpoint.id, label: [...entry.names, ...path.slice(1).map((node) => node.name)].join(" / ") };
+    if (getMode() === "village" && endpoint.type !== "village") return null;
+    return { id: endpoint.id, label: [...entry.names, ...path.slice(1).map((node) => node.name)].join("") };
   });
 
   function initialIds(): RegionIds | null {
@@ -182,6 +197,10 @@ export function useRegionPicker(
     if (!selection.value) cancel();
   }, { deep: true, flush: "sync" });
   watch(getMode, cancel, { flush: "sync" });
+  watch(getStartLevel, cancel, { flush: "sync" });
 
-  return { opened, indices, columns, selection, selectedLabel, selectedName, open, cancel, change, confirm };
+  return { opened, indices: computed(() => getStartLevel() === "street" ? indices.value.slice(1) : indices.value),
+    columns: computed(() => getStartLevel() === "street" ? columns.value.slice(1) : columns.value),
+    selection, selectedLabel, selectedName, open, cancel,
+    change: (values: readonly number[]) => change(getStartLevel() === "street" ? [0, ...values] : values), confirm };
 }

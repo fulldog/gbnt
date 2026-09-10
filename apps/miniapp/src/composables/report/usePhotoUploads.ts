@@ -5,6 +5,7 @@ export interface PhotoUploadJob {
   id: number;
   path: string;
   capturedAt: number;
+  location?: { lat: number | null; lng: number | null; address: string };
   source: "camera" | "unknown";
   status: "queued" | "uploading" | "failed";
   error: string;
@@ -47,10 +48,10 @@ export function usePhotoUploads(
     }
   }
 
-  function enqueue(paths: readonly string[], source: PhotoUploadJob["source"], capturedAt = Date.now()): void {
+  function enqueue(paths: readonly string[], source: PhotoUploadJob["source"], capturedAt = Date.now(), location?: PhotoUploadJob["location"]): void {
     if (disposed) return;
     jobs.value = [...jobs.value, ...paths.map((path): PhotoUploadJob => ({
-      id: ++nextId, path, source, capturedAt, status: "queued", error: "",
+      id: ++nextId, path, source, capturedAt, location, status: "queued", error: "",
     }))];
     void run();
   }

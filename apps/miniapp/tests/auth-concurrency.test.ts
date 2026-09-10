@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { MiniappLoginResult } from "@/api/types";
-import { writeSession } from "@/api/session";
+import { MINIAPP_AGREEMENT_KEY, MINIAPP_TOKEN_KEY, writeSession } from "@/api/session";
 import { useAuthStore } from "@/stores/auth";
 
 const api = vi.hoisted(() => ({ getMe: vi.fn(), login: vi.fn(), logout: vi.fn(), changePassword: vi.fn() }));
@@ -28,13 +28,30 @@ beforeEach(() => {
 });
 
 describe("authenticated profile request isolation", () => {
+  it("rejects unchecked agreement before sending a login request", async () => {
+    const store = useAuthStore();
+    await expect(store.signIn({ username: "account-2", password: "fixture", agreed: false } as never))
+      .rejects.toThrow("请先阅读并同意");
+    expect(api.login).not.toHaveBeenCalled();
+    expect(store.loading).toBe(false);
+  });
+
+  it("requires fresh agreement for a legacy session without consent", async () => {
+    storage.delete(MINIAPP_AGREEMENT_KEY);
+    const store = useAuthStore();
+    await store.restore();
+    expect(store.isAuthenticated).toBe(false);
+    expect(storage.has(MINIAPP_TOKEN_KEY)).toBe(false);
+    expect(api.getMe).not.toHaveBeenCalled();
+  });
+
   it("ignores a profile response that finishes after switching accounts", async () => {
     let resolveProfile: (user: MiniappLoginResult["user"]) => void = () => {};
     api.getMe.mockImplementationOnce(() => new Promise((resolve) => { resolveProfile = resolve; }));
     api.login.mockResolvedValueOnce(session(2));
     const store = useAuthStore();
     const refresh = store.refreshUser();
-    await store.signIn({ username: "account-2", password: "fixture" });
+    await store.signIn({ agreed: true, username: "account-2", password: "fixture" });
     resolveProfile(session(1).user);
     await refresh;
     expect(store.user?.id).toBe(2);
@@ -57,7 +74,7 @@ describe("authenticated profile request isolation", () => {
     let resolveLogin: (result: MiniappLoginResult) => void = () => {};
     api.login.mockImplementationOnce(() => new Promise((resolve) => { resolveLogin = resolve; }));
     const store = useAuthStore();
-    const pending = store.signIn({ username: "account-2", password: "fixture" });
+    const pending = store.signIn({ agreed: true, username: "account-2", password: "fixture" });
     store.reset();
     resolveLogin(session(2));
     await expect(pending).rejects.toThrow("登录请求已失效");

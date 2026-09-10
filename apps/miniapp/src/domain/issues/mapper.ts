@@ -1,3 +1,4 @@
+import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import type {
   BridgeQuizType,
   ForestQuizType,
@@ -34,10 +35,12 @@ function checklist<TType extends QuizType>(form: ReportFormState): QuizBool<TTyp
 }
 
 function common(form: ReportFormState) {
+  if (form.projectYear === null) throw new Error("请选择项目年度");
   return {
     project_year: form.projectYear,
     org_id: form.orgId ?? 0,
-    code: form.code.trim() || undefined,
+    code_mode: resolveFacilityCodeMode(form),
+    code: resolveFacilityCodeMode(form) === "manual" ? form.code.trim() : undefined,
     address: form.address.trim(),
     lat: form.lat ?? undefined,
     lng: form.lng ?? undefined,

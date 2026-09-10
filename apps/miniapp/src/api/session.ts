@@ -5,6 +5,13 @@ import type { MiniappAuthUser } from "./types";
 export const MINIAPP_TOKEN_KEY = "gbnt.miniapp.token";
 export const MINIAPP_EXPIRES_AT_KEY = "gbnt.miniapp.expires-at";
 export const MINIAPP_USER_KEY = "gbnt.miniapp.user";
+export const MINIAPP_AGREEMENT_KEY = "gbnt.miniapp.agreement";
+const AGREEMENT_VERSION = "2026-09-09";
+
+/** 老会话没有同意凭据时重新登录，不将历史 Token 当作已同意协议。 */
+export function hasAcceptedAgreement(): boolean {
+  return readStorage(MINIAPP_AGREEMENT_KEY) === AGREEMENT_VERSION;
+}
 let sessionRevision = 0;
 
 /** 仅登录/退出更换会话；同一会话的 Token 续期不淘汰并发请求。 */
@@ -80,6 +87,7 @@ export function writeSession(result: LoginResult): void {
   sessionRevision += 1;
   writeAccessToken(result.token, result.expires_at);
   writeStoredUser(result.user);
+  writeStorage(MINIAPP_AGREEMENT_KEY, AGREEMENT_VERSION);
 }
 
 export function clearSession(): void {
@@ -87,4 +95,5 @@ export function clearSession(): void {
   removeStorage(MINIAPP_TOKEN_KEY);
   removeStorage(MINIAPP_EXPIRES_AT_KEY);
   removeStorage(MINIAPP_USER_KEY);
+  removeStorage(MINIAPP_AGREEMENT_KEY);
 }
