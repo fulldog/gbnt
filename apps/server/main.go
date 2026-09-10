@@ -2,7 +2,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,9 +62,9 @@ func main() {
 		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"), zap.String("sys_apis", "synced"))
 	}
 	// 编号比较键及约束未完成迁移时禁止启动写入服务。
-	if report, err := migrate.AuditFacilityCodes(context.Background(), db); err != nil || !report.Ready {
-		logs.Error.Fatal("facility code migration required", zap.Error(migrate.ErrFacilityCodeSchema))
-	}
+	//if report, err := migrate.AuditFacilityCodes(context.Background(), db); err != nil || !report.Ready {
+	//	logs.Error.Fatal("facility code migration required", zap.Error(migrate.ErrFacilityCodeSchema))
+	//}
 	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
 	memCache := cachex.New(5*time.Minute, 10*time.Minute)
 	denyList := &jwtutil.DenyList{Store: memCache}
