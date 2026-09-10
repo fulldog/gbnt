@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import PageTopInset from "@/components/common/PageTopInset.vue";
-import type { IssueStatus, IssueType, OrgTreeNode } from "@gbnt/api-client";
+import type { IssueStatus, IssueType } from "@gbnt/api-client";
 import {
   onLoad,
   onShareAppMessage,
@@ -8,14 +8,17 @@ import {
   onShow,
   onUnload,
 } from "@dcloudio/uni-app";
-import { computed, shallowRef } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { miniappApi } from "@/api/runtime";
 import IssueCard from "@/components/issue/IssueCard.vue";
 import RegionPicker from "@/components/region/RegionPicker.vue";
 import { usePagedIssues } from "@/composables/usePagedIssues";
-import { useBusinessToday } from "@/composables/useBusinessToday";
+import { useBusinessNow } from "@/composables/useBusinessNow";
+import { useAuthStore } from "@/stores/auth";
+import { useTodoRegion } from "@/composables/useTodoRegion";
+import type { TodoIssueFilters } from "@/composables/usePagedIssues";
+import { businessToday } from "@/utils/business-date";
 import {
-  errorMessage,
   ISSUE_FILTER_TYPE_OPTIONS,
   ISSUE_STATUS_OPTIONS,
 } from "@/utils/issue-display";
@@ -24,30 +27,34 @@ interface PickerChangeEvent {
   detail: { value: string | number };
 }
 
+const auth = useAuthStore();
+const region = useTodoRegion(() => auth.user);
+const { tree: regionTree, loading: regionLoading, error: regionError, ready: regionReady } = region;
+const paged = usePagedIssues((query) => {
+  if (!region.ready.value || query.org_id !== region.selectedId.value) return Promise.reject(new Error("请选择具体村／社区"));
+  return miniappApi.todos.list(query);
+});
 const {
   items,
   filters,
   total,
+  clockOffset,
   error,
   hasMore,
   isRefreshing,
   isLoadingMore,
   isStale,
-  reload,
-  resetFilters,
-  loadMore,
+  loadMore: loadNext,
   retry,
   invalidate,
-} = usePagedIssues();
+} = paged;
 
 const searchKeyword = shallowRef("");
-const today = useBusinessToday();
-const regionTree = shallowRef<OrgTreeNode[]>([]);
-const regionLoading = shallowRef(false);
-const regionError = shallowRef("");
+const now = useBusinessNow(() => clockOffset.value);
+watch(() => businessToday(now.value), () => { void reload(); });
 const refresherTriggered = shallowRef(false);
 let showCount = 0;
-let regionRequestSequence = 0;
+let active = true;
 
 const typeIndex = computed(() =>
   Math.max(0, ISSUE_FILTER_TYPE_OPTIONS.findIndex((option) => option.value === filters.value.type)),
@@ -60,23 +67,23 @@ const hasActiveFilters = computed(
   () =>
     filters.value.type !== "all" ||
     filters.value.status !== "all" ||
-    filters.value.orgId !== undefined ||
     filters.value.keyword !== "",
 );
 
+function reload(patch?: Partial<TodoIssueFilters>): Promise<boolean> {
+  if (!active || !region.ready.value) return Promise.resolve(false);
+  return paged.reload(patch || filters.value.orgId !== region.selectedId.value ? { ...patch, orgId: region.selectedId.value } : undefined);
+}
+
+function loadMore(): Promise<boolean> {
+  return regionLoading.value || !regionReady.value || refresherTriggered.value ? Promise.resolve(false) : loadNext();
+}
+
 async function loadRegions(): Promise<void> {
-  const requestId = ++regionRequestSequence;
-  regionLoading.value = true;
-  regionError.value = "";
-  try {
-    const result = await miniappApi.regions.list();
-    if (requestId !== regionRequestSequence) return;
-    regionTree.value = result.list;
-  } catch (cause) {
-    if (requestId === regionRequestSequence) regionError.value = errorMessage(cause, "区域加载失败");
-  } finally {
-    if (requestId === regionRequestSequence) regionLoading.value = false;
-  }
+  await region.load();
+  if (!active) return;
+  if (region.ready.value) await reload();
+  else paged.clear();
 }
 
 function optionIndex(event: PickerChangeEvent): number {
@@ -95,8 +102,7 @@ function changeStatus(event: PickerChangeEvent): void {
 }
 
 function changeRegion(option: { id: number | null; label: string }): void {
-  // 全部区域不发送 org_id；上级区域由后端按子树查询，并保留其他筛选条件。
-  void reload({ orgId: option.id ?? undefined });
+  if (region.select(option.id)) void reload();
 }
 
 function applySearch(): void {
@@ -111,7 +117,8 @@ function clearSearch(): void {
 
 function clearAllFilters(): void {
   searchKeyword.value = "";
-  void resetFilters();
+  region.reset();
+  void reload({ keyword: "", type: "all", status: "all", projectYear: undefined });
 }
 
 function openDetail(id: number): void {
@@ -130,7 +137,7 @@ async function refreshList(): Promise<void> {
   if (refresherTriggered.value) return;
   refresherTriggered.value = true;
   try {
-    await Promise.all([loadRegions(), reload()]);
+    await loadRegions();
   } finally {
     refresherTriggered.value = false;
   }
@@ -147,7 +154,7 @@ onShareTimeline(() => ({
 }));
 
 onLoad(() => {
-  void Promise.all([loadRegions(), reload()]);
+  void loadRegions();
 });
 
 onShow(() => {
@@ -156,7 +163,8 @@ onShow(() => {
 });
 
 onUnload(() => {
-  regionRequestSequence += 1;
+  active = false;
+  region.invalidate();
   refresherTriggered.value = false;
   invalidate();
 });
@@ -201,11 +209,13 @@ onUnload(() => {
         </picker>
         <view class="todo-page__region-filter">
           <RegionPicker
-            mode="filter"
+            mode="village"
+            start-level="street"
             :tree="regionTree"
-            :value="filters.orgId ?? null"
+            :value="region.selectedId.value ?? null"
             :loading="regionLoading"
             :error="regionError"
+            :show-inline-error="false"
             @select="changeRegion"
             @retry="loadRegions"
           />
@@ -249,7 +259,12 @@ onUnload(() => {
           刷新失败，当前显示上次加载的数据和总数。{{ error }}
         </view>
 
-        <view v-if="isInitialLoading" class="todo-page__state">
+        <view v-if="!regionReady" class="todo-page__state">
+          <text class="todo-page__state-title">{{ regionLoading ? '正在加载行政区划…' : regionError ? '行政区划加载失败' : '请选择具体村／社区' }}</text>
+          <text class="todo-page__state-text">{{ regionError || '选择行政区划后查看该村／社区的待办记录。' }}</text>
+          <button v-if="regionError" class="todo-page__retry" @tap="loadRegions">重新加载</button>
+        </view>
+        <view v-else-if="isInitialLoading" class="todo-page__state">
           <view class="todo-page__spinner" />
           <text>正在加载待办…</text>
         </view>
@@ -276,7 +291,7 @@ onUnload(() => {
             v-for="issue in items"
             :key="issue.id"
             :issue="issue"
-            :today="today"
+            :now="now"
             @open="openDetail"
             @map="openMap"
             @preview="previewImages"

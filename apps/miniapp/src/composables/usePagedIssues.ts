@@ -53,6 +53,7 @@ export function usePagedIssues(
   const filters = ref<TodoIssueFilters>({ ...DEFAULT_FILTERS });
   const page = shallowRef(0);
   const total = shallowRef(0);
+  const clockOffset = shallowRef(0);
   const loadingMode = shallowRef<LoadingMode>(null);
   const error = shallowRef("");
   const isStale = shallowRef(false);
@@ -72,6 +73,8 @@ export function usePagedIssues(
     try {
       const result = await loader(toQuery(filters.value, targetPage, pageSize));
       if (requestId !== requestSequence) return false;
+
+      if (result.server_time) clockOffset.value = Date.parse(result.server_time) - Date.now();
 
       items.value = replace ? result.list : mergeUniqueIssues(items.value, result.list);
       page.value = result.page || targetPage;
@@ -128,11 +131,22 @@ export function usePagedIssues(
     loadingMode.value = null;
   }
 
+  function clear(): void {
+    invalidate();
+    items.value = [];
+    page.value = 0;
+    total.value = 0;
+    error.value = "";
+    isStale.value = false;
+    failedRequest = null;
+  }
+
   return {
     items: shallowReadonly(items),
     filters: readonly(filters),
     page: readonly(page),
     total: readonly(total),
+    clockOffset: readonly(clockOffset),
     error: readonly(error),
     isStale: readonly(isStale),
     hasMore,
@@ -144,5 +158,6 @@ export function usePagedIssues(
     loadMore,
     retry,
     invalidate,
+    clear,
   } as const;
 }

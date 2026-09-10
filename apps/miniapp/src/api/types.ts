@@ -29,6 +29,8 @@ export interface MiniappLoginResult extends Omit<LoginResult, "user"> {
 
 export interface MiniappIssueListResult extends Omit<IssueListResult, "list"> {
   list: MiniappIssue[];
+  /** 待办排序基准时间 RFC3339；旧服务端及非待办列表可缺省。 */
+  server_time?: string;
 }
 
 export interface MiniappMineIssueListResult extends MiniappIssueListResult {

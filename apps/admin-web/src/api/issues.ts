@@ -65,13 +65,14 @@ export function createIssuesApi(client: ApiClient) {
       }));
     },
 
-    /** 专项整改 edit 权限；按已有问题的组织返回启用候选及独立 selected 回显。 */
-    async listAssigneeOptions(id: number, query: UserOptionQuery = {}): Promise<UserOptionResult> {
+    /** edit 权限；选填 org_id 为编辑表单的新组织，省略沿用工单组织；合法上下级已选人员可回显。 */
+    async listAssigneeOptions(id: number, query: UserOptionQuery & { org_id?: number } = {}): Promise<UserOptionResult> {
       return normalizeUserOptions(await client.request<unknown>(`/api/issues/${id}/assignee-options`, {
         query: { ...query, keyword: query.keyword?.trim() || undefined },
       }));
     },
 
+    /** 需整改时 assignee_user 必填；auto 提交时分配编号，manual 重复返回 40901，重试复用 request_id。 */
     create(input: AdminCreateIssueInput): Promise<Issue> {
       return client.request<Issue, AdminCreateIssueInput>("/api/issues", {
         method: "POST",
@@ -79,6 +80,7 @@ export function createIssuesApi(client: ApiClient) {
       });
     },
 
+    /** 逐行创建、遇错停止，错误含失败行与成功数量；每行 request_id 支持原批次重试。 */
     importRows(input: ImportIssuesInput): Promise<ImportResult> {
       return client.request<ImportResult, ImportIssuesInput>("/api/issues/import", {
         method: "POST",
@@ -90,7 +92,7 @@ export function createIssuesApi(client: ApiClient) {
       return normalizeAdminIssue(await client.request<unknown>(`/api/issues/${id}`));
     },
 
-    /** 完整编辑支持五类属性、上报信息与签名；省略字段保留，expected_updated_at 防止旧页面覆盖。 */
+    /** 完整编辑；省略保留，expected_updated_at 防覆盖；编号/组织/类型的最终组合重复返回 40901。 */
     update(id: number, input: UpdateIssueInput): Promise<Issue> {
       return client.request<Issue, UpdateIssueInput>(`/api/issues/${id}`, {
         method: "PUT",

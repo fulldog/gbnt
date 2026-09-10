@@ -1,4 +1,4 @@
-import { defineComponent } from "vue";
+import { defineComponent, watch } from "vue";
 import { enableAutoUnmount, flushPromises, shallowMount } from "@vue/test-utils";
 import { ElMessage } from "element-plus";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +34,10 @@ function mountForm(toBlob = vi.fn().mockResolvedValue(new Blob(["signature"], { 
         IssueChecklistFields: false, IssueTypeFields: false,
         ElDialog: { template: "<div><slot /><slot name='footer' /></div>" },
         ElForm: defineComponent({ setup(_, { expose }) { expose({ validate, clearValidate: vi.fn() }); }, template: "<div><slot /></div>" }),
+        BusinessUserSelect: defineComponent({
+          props: ["active"], emits: ["ready"],
+          setup(props, { emit }) { watch(() => props.active, (active) => emit("ready", Boolean(active)), { immediate: true }); }, template: "<div/>",
+        }),
         SignaturePad: defineComponent({ setup(_, { expose }) { expose({ toBlob }); }, template: "<div />" }),
       },
     },

@@ -36,11 +36,11 @@ const props = withDefaults(defineProps<{
 const { maximum, cameraOnly, cooldownSeconds, watermark, location } = toRefs(props);
 
 const model = defineModel<UploadedPhoto[]>({ required: true });
-const emit = defineEmits<{ pending: [value: boolean] }>();
+const emit = defineEmits<{ pending: [value: boolean]; permissionDenied: [] }>();
 const selecting = shallowRef(false);
 let active = true;
 const uploads = usePhotoUploads(async (job) => {
-  const point = location.value;
+  const point = job.location ?? location.value;
   if (watermark.value && (!hasValidCoordinates(point.lat!, point.lng!) || !point.address.trim())) {
     throw new Error("请先选择有效现场位置，不能使用缺失坐标生成水印");
   }
@@ -121,12 +121,13 @@ function addPhoto(): void {
       success: (result) => {
         if (!active) return;
         const paths = result.tempFiles.map((file) => file.tempFilePath).filter(Boolean).slice(0, remaining.value);
-        uploads.enqueue(paths, camera ? "camera" : "unknown");
+        uploads.enqueue(paths, camera ? "camera" : "unknown", Date.now(), { ...location.value });
         selecting.value = false;
       },
       fail: (error) => {
         if (!active) return;
         selecting.value = false;
+        if (/auth|permission|deny|denied|privacy/i.test(error.errMsg || "")) emit("permissionDenied");
         showDeviceFailure(error, "选择照片");
       },
     });
@@ -137,7 +138,7 @@ function addPhoto(): void {
 }
 
 function preview(index: number, loadedUrl?: string): void {
-  const urls = model.value.map((photo) => toAssetUrl(photo.url) || photo.localPath || "");
+  const urls = model.value.map((photo) => toAssetUrl(photo.url) || (!watermark.value ? photo.localPath : "") || "");
   if (loadedUrl) urls[index] = loadedUrl;
   const current = urls[index];
   if (!current) {
@@ -178,7 +179,7 @@ onUnmounted(() => {
         <RecoverableImage
           class="photo-image"
           :src="toAssetUrl(photo.url)"
-          :fallback-src="photo.localPath"
+          :fallback-src="watermark ? undefined : photo.localPath"
           mode="aspectFill"
           :alt="`现场照片 ${index + 1}`"
           @preview="preview(index, $event)"

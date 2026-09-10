@@ -4,9 +4,8 @@ import * as vue from "vue";
 import { parse } from "vue/compiler-sfc";
 import type { OrgTreeNode } from "@gbnt/api-client";
 import * as pickerLogic from "@/components/region/useRegionPicker";
-import { usePagedIssues } from "@/composables/usePagedIssues";
-import * as issueDisplay from "@/utils/issue-display";
 import { setupSfc } from "./helpers/setup-sfc";
+import { setupTodo } from "./helpers/todo-page";
 
 const village: OrgTreeNode = { id: 3, name: "甲村", type: "village", parent_id: 2, sort: 0, children: [] };
 const tree: OrgTreeNode[] = [{ id: 1, name: "甲区", type: "district", parent_id: 0, sort: 0,
@@ -74,37 +73,27 @@ describe("共享行政区划组件接入", () => {
     state.show();
     state.commit();
     expect(emit).toHaveBeenCalledTimes(1);
-    expect(emit).toHaveBeenCalledWith("select", { id: 3, label: "甲区 / 甲街道 / 甲村" });
+    expect(emit).toHaveBeenCalledWith("select", { id: 3, label: "甲区甲街道甲村" });
   });
 
-  it("待办页面确认区域后从第一页查询，全部区域清除 org_id 并保留其他筛选", async () => {
-    const loader = vi.fn().mockResolvedValue({ list: [], total: 0, page: 1, size: 10 });
-    let listState: ReturnType<typeof usePagedIssues>;
-    const state = setupSfc("pages/todo/index.vue", {}, {
-      "@/components/common/PageTopInset.vue": { default: {} },
-      "@dcloudio/uni-app": {
-        onLoad: vi.fn(), onShow: vi.fn(), onUnload: vi.fn(), onPullDownRefresh: vi.fn(),
-        onReachBottom: vi.fn(), onShareAppMessage: vi.fn(), onShareTimeline: vi.fn(),
-      },
-      "@/api/runtime": { miniappApi: { regions: { list: vi.fn() } } },
-      "@/components/issue/IssueCard.vue": {},
-      "@/components/region/RegionPicker.vue": {},
-      "@/composables/usePagedIssues": { usePagedIssues: () => (listState = usePagedIssues(loader)) },
-      "@/composables/useBusinessToday": { useBusinessToday: () => vue.shallowRef("2026-09-06") },
-      "@/utils/issue-display": issueDisplay,
-    }) as unknown as { changeRegion: (selection: pickerLogic.RegionSelection) => void; clearAllFilters: () => void };
-    await listState!.reload({ keyword: "1188", status: "done", type: "well", projectYear: 2023 });
-    state.changeRegion({ id: 2, label: "甲区 / 甲街道" });
-    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, keyword: "1188", status: "done", type: "well", project_year: 2023, org_id: 2 });
+  it("待办必须选具体村，拒绝全选和父级，清除其他筛选保留村", async () => {
+    const { state, loader } = setupTodo(11);
+    await state.loadRegions();
+    expect(loader).not.toHaveBeenCalled();
     state.changeRegion({ id: null, label: "全部区域" });
-    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, keyword: "1188", status: "done", type: "well", project_year: 2023 });
+    state.changeRegion({ id: 11, label: "甲街道" });
+    state.changeRegion({ id: 22, label: "其他街道的村" });
+    expect(loader).not.toHaveBeenCalled();
+    state.changeRegion({ id: 12, label: "甲街道甲村" });
+    await state.reload({ keyword: "1188", status: "done", type: "well" });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, keyword: "1188", status: "done", type: "well", org_id: 12 });
     state.clearAllFilters();
-    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10 });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, org_id: 12 });
   });
 
   it("创建和筛选只引用同一个组件，弹窗不再渲染底部已选路径", () => {
     const read = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
-    for (const path of ["pages/report/index.vue", "pages/todo/index.vue"]) {
+    for (const path of ["components/report/ReportTypeForm.vue", "pages/todo/index.vue"]) {
       expect(read(path)).toContain('import RegionPicker from "@/components/region/RegionPicker.vue"');
       expect(read(path)).toContain("<RegionPicker");
     }

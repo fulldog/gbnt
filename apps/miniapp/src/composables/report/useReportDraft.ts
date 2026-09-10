@@ -69,7 +69,7 @@ function isUploadedPhoto(value: unknown): boolean {
   );
 }
 
-function isReportFormState(value: unknown): value is ReportFormState {
+export function isReportFormState(value: unknown): value is ReportFormState {
   if (!isRecord(value)) {
     return false;
   }
@@ -119,8 +119,8 @@ function isReportFormState(value: unknown): value is ReportFormState {
   }
 
   return (
-    typeof value.projectYear === "number" &&
-    [2020, 2021, 2022, 2023].includes(value.projectYear) &&
+    (value.projectYear === null || (typeof value.projectYear === "number" &&
+    [2020, 2021, 2022, 2023].includes(value.projectYear))) &&
     (value.orgId === null ||
       (typeof value.orgId === "number" && Number.isInteger(value.orgId) && value.orgId > 0)) &&
     typeof value.orgLabel === "string" &&
@@ -169,6 +169,7 @@ export function useReportDraft(ownerSource: DraftOwnerSource) {
       return null;
     }
     const restored = JSON.parse(JSON.stringify(value.form)) as ReportFormState;
+    restored.signatureStrokes ??= [];
     // 向导按当前后端题目顺序展示，旧草稿数组顺序不能决定题目与答案的配对。
     restored.quizzes = QUIZ_DEFINITIONS[restored.type].map((definition) =>
       restored.quizzes.find((quiz) => quiz.type === definition.type)!,

@@ -125,6 +125,7 @@ type Issue struct {
 	ProjectYear             int     `gorm:"index;default:0;comment:项目年度 2020-2023" json:"project_year"`
 	OrgID                   uint64  `gorm:"index;not null;comment:落点组织ID 对应sys_orgs.id" json:"org_id"`
 	Code                    string  `gorm:"size:64;comment:设施编号或点位编号" json:"code"`
+	CodeKey                 string  `gorm:"type:varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;not null;default:'';comment:设施编号规范化键" json:"-"` // 后端计算，生成列和唯一索引由专用迁移管理
 	Address                 string  `gorm:"size:255;comment:详细地址" json:"address"`
 	Lat                     float64 `gorm:"comment:纬度" json:"lat"`
 	Lng                     float64 `gorm:"comment:经度" json:"lng"`
@@ -192,6 +193,7 @@ func TableComments() map[string]string {
 		"sys_apis":              "API目录",
 		"sys_role_apis":         "角色API授权",
 		"issues":                "排查整改问题主表",
+		"issue_create_requests": "巡查提交去重记录",
 		"issue_rectify_records": "问题整改记录",
 		"op_logs":               "操作日志",
 		"attachments":           "附件文件主表",

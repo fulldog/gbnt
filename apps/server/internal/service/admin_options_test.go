@@ -102,7 +102,7 @@ func TestUserOptionsValidateOrgAndIssue(t *testing.T) {
 			t.Fatalf("错误：%v", err)
 		}
 	})
-	t.Run("问题组织为唯一来源", func(t *testing.T) {
+	t.Run("省略新组织时沿用问题组织", func(t *testing.T) {
 		db := testutil.NewQueryDB(t,
 			testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"id", "org_id"}, Rows: [][]driver.Value{{int64(8), int64(4)}}},
 			testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id"}, Rows: [][]driver.Value{{int64(4)}}},
@@ -114,6 +114,25 @@ func TestUserOptionsValidateOrgAndIssue(t *testing.T) {
 			testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}},
 		)
 		if _, err := (&IssueService{DB: db}).ListAssigneeOptions(context.Background(), 8, BusinessUserOptionQuery{}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("改选组织后候选只查询新组织", func(t *testing.T) {
+		db := testutil.NewQueryDB(t,
+			testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"id", "org_id"}, Rows: [][]driver.Value{{int64(8), int64(4)}}},
+			testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id"}, Rows: [][]driver.Value{{int64(5)}}, Check: func(_ string, args []driver.NamedValue) {
+				if args[0].Value != int64(5) {
+					t.Errorf("没有验证新组织: %v", args)
+				}
+			}},
+			testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}, Check: func(_ string, args []driver.NamedValue) {
+				if args[0].Value != int64(5) {
+					t.Errorf("仍在查询旧组织: %v", args)
+				}
+			}},
+			testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}},
+		)
+		if _, err := (&IssueService{DB: db}).ListAssigneeOptions(context.Background(), 8, BusinessUserOptionQuery{OrgID: 5}); err != nil {
 			t.Fatal(err)
 		}
 	})

@@ -28,7 +28,7 @@ type IssueUpdateInput struct {
 	ReporterName            *string         `json:"reporter_name"`              // 上报人姓名快照；空字符串清除
 	ReporterPhone           *string         `json:"reporter_phone"`             // 上报联系电话；空字符串清除
 	ReportUserID            *uint64         `json:"report_user_id"`             // 上报账号关联；0 解除关联，姓名快照独立保留
-	AssigneeUser            *uint64         `json:"assignee_user"`              // 责任人；省略保留，非 0 必须属于相关组织
+	AssigneeUser            *uint64         `json:"assignee_user"`              // 责任人；省略保留；待整改/整改中不允许为 0，非 0 须启用且属于相关组织
 	ReporterSignatureFileID *string         `json:"reporter_signature_file_id"` // 新签名附件 ID；省略保留原签名，不允许清空
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 当前类型完整表单；省略保留，旧版字段兼容保留
 	Status                  *string         `json:"status"`                     // 兼容旧调用方显式状态更新；普通编辑不提交该字段
@@ -44,7 +44,7 @@ func validateReporterSnapshot(name, phone string) error {
 
 // Update 行锁内更新基础信息、设施属性、清单及签名；不删除历史，不自动改变整改轮次或状态。
 func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInput) (*IssueVO, error) {
-	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
+	err := issueWriteTransaction(ctx, s.DB, false, func(tx *gorm.DB) error {
 		var item model.Issue
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
 			return err
@@ -189,6 +189,14 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 		if in.AssigneeUser != nil {
 			assignee = *in.AssigneeUser
 		}
+		status := item.Status
+		if in.Status != nil {
+			status = *in.Status
+		}
+		// 新建、导入以及后续编辑都不能把待处理工单保存成无人负责。
+		if (status == string(model.IssueStatusNew) || status == string(model.IssueStatusPending)) && assignee == 0 {
+			return errors.New("请指定整改人")
+		}
 		if in.AssigneeUser != nil || orgID != item.OrgID {
 			if err := local.requireAssigneeInFormOrg(ctx, assignee, orgID); err != nil {
 				return err
@@ -217,6 +225,23 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 		}
 		if len(updates) == 0 {
 			return nil
+		}
+		if in.Code != nil || orgID != item.OrgID || typ != item.Type {
+			code := item.Code
+			if in.Code != nil {
+				code = *in.Code
+			}
+			code, err := model.NormalizeFacilityCode(code)
+			if err != nil {
+				return err
+			}
+			if err := lockIssueOrgs(tx, item.OrgID, orgID); err != nil {
+				return err
+			}
+			if err := requireAvailableCode(tx, orgID, typ, code, item.ID); err != nil {
+				return err
+			}
+			updates["code"], updates["code_key"] = code, code
 		}
 		return tx.Model(&item).Updates(updates).Error
 	})

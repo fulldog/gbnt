@@ -26,10 +26,11 @@ const props = defineProps<{
 const { item, definition, issueType, location, disabled } = toRefs(props);
 
 const emit = defineEmits<{
-  answer: [value: boolean];
-  description: [value: string];
-  photos: [value: UploadedPhoto[]];
-  pending: [value: boolean];
+  answer: [change: { type: QuizFormItem['type']; value: boolean }];
+  description: [change: { type: QuizFormItem['type']; value: string }];
+  photos: [change: { type: QuizFormItem['type']; value: UploadedPhoto[] }];
+  pending: [change: { type: QuizFormItem['type']; value: boolean }];
+  permissionDenied: [];
 }>();
 
 const indicatesIssue = computed(() =>
@@ -45,7 +46,7 @@ const showPhotos = computed(
 );
 
 function updateDescription(event: Event | InputEventLike): void {
-  emit("description", inputEventValue(event));
+  emit("description", { type: item.value.type, value: inputEventValue(event) });
 }
 </script>
 
@@ -64,7 +65,7 @@ function updateDescription(event: Event | InputEventLike): void {
         :class="{ 'answer-button--selected': item.value === true }"
         :aria-checked="item.value === true"
         :disabled="disabled"
-        @tap="emit('answer', true)"
+        @tap="emit('answer', { type: item.type, value: true })"
       >
         <view class="answer-mark" aria-hidden="true">
           <image v-if="item.value === true" class="answer-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
@@ -76,7 +77,7 @@ function updateDescription(event: Event | InputEventLike): void {
         :class="{ 'answer-button--selected': item.value === false }"
         :aria-checked="item.value === false"
         :disabled="disabled"
-        @tap="emit('answer', false)"
+        @tap="emit('answer', { type: item.type, value: false })"
       >
         <view class="answer-mark" aria-hidden="true">
           <image v-if="item.value === false" class="answer-mark__icon" src="/static/icons/check-white.svg" mode="aspectFit" />
@@ -108,8 +109,9 @@ function updateDescription(event: Event | InputEventLike): void {
         :camera-only="item.type === 'water_out' && item.value === true"
         :cooldown-seconds="item.type === 'water_out' && item.value === true ? 60 : 0"
         :location="location"
-        @update:model-value="emit('photos', $event)"
-        @pending="emit('pending', $event)"
+        @update:model-value="emit('photos', { type: item.type, value: $event })"
+        @pending="emit('pending', { type: item.type, value: $event })"
+        @permission-denied="emit('permissionDenied')"
       />
     </view>
   </view>

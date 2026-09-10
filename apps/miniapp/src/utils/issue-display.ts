@@ -7,6 +7,7 @@ import type {
   QuizType,
 } from "@gbnt/api-client";
 import type { MiniappIssue } from "@/api/types";
+import { formatOrganization } from "./regions";
 import { businessDateTime, businessToday, calendarDate, calendarDayDifference } from "./business-date";
 import {
   ISSUE_TYPE_OPTIONS as DOMAIN_ISSUE_TYPE_OPTIONS,
@@ -211,7 +212,7 @@ export function issueReporter(issue: Partial<MiniappIssue>): string {
 }
 
 export function issueOrganization(issue: Partial<MiniappIssue>): string {
-  return issue.org_path?.trim() || issue.org_name?.trim() || "所属区域资料暂缺";
+  return formatOrganization(issue.org_path?.trim() || issue.org_name?.trim() || "所属区域资料暂缺");
 }
 
 export function hasValidCoordinates(lat: number, lng: number): boolean {

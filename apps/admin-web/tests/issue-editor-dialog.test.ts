@@ -1,4 +1,4 @@
-import { defineComponent } from "vue";
+import { defineComponent, watch } from "vue";
 import { enableAutoUnmount, flushPromises, shallowMount } from "@vue/test-utils";
 import { ISSUE_TYPES } from "@gbnt/api-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +22,10 @@ function mountEditor(type: typeof ISSUE_TYPES[number], get = vi.fn().mockResolve
         IssueTypeFields: false, IssueChecklistFields: false,
         ElDialog: { template: "<div><slot/><slot name='footer'/></div>" },
         ElForm: defineComponent({ setup(_, { expose }) { expose({ validate: () => Promise.resolve(true), clearValidate: vi.fn() }); }, template: "<div><slot/></div>" }),
+        BusinessUserSelect: defineComponent({
+          props: ["active"], emits: ["ready"],
+          setup(props, { emit }) { watch(() => props.active, (active) => emit("ready", Boolean(active)), { immediate: true }); }, template: "<div/>",
+        }),
         SignaturePad: defineComponent({ props: ["existing"], setup(_, { expose }) { expose({ changed: false, toBlob }); }, template: "<div class='signature-preview'/>" }),
       },
     },

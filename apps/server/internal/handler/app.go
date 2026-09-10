@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -45,6 +46,10 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 			issues.POST("", d.AppCreateIssue)
 			// GET /api/app/issues/:id — 问题详情（含 lat/lng，地图页可复用）
 			issues.GET("/:id", d.AppGetIssue)
+			// DELETE /api/app/issues/:id — 仅上报人本人软删除
+			issues.DELETE("/:id", d.AppDeleteIssue)
+			// POST /api/app/issues/:id/feedback — 一份反馈完成本轮剩余整改项
+			issues.POST("/:id/feedback", d.AppSubmitFeedback)
 			// POST /api/app/issues/:id/rectify — 页内提交分项整改
 			issues.POST("/:id/rectify", d.AppRectifyIssue)
 			// POST /api/app/issues/:id/re-rectify — 重新整改（done → pending）
@@ -59,6 +64,50 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 			mine.GET("/issues", d.AppMineIssues)
 		}
 	}
+}
+
+// AppDeleteIssue 小程序本人删除上报；禁止通过姓名匹配或管理权限代替归属校验。
+func (d *Deps) AppDeleteIssue(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	if err := d.Issue.DeleteReported(c.Request.Context(), id); err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		} else if errors.Is(err, service.ErrIssueReporterOnly) {
+			response.Fail(c, 403, response.CodeForbid, err.Error())
+		} else {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+		}
+		return
+	}
+	d.OpLog.Mark(c, "小程序删除上报", c.Param("id"))
+	response.OK(c, nil)
+}
+
+// AppSubmitFeedback 小程序整单整改；必传说明、照片和当前轮次，后端原子完成剩余项。
+func (d *Deps) AppSubmitFeedback(c *gin.Context) {
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var req service.IssueFeedbackInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	item, err := d.Issue.SubmitFeedback(c.Request.Context(), id, req)
+	if err != nil {
+		if errors.Is(err, database.ErrUnauth) {
+			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		} else {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+		}
+		return
+	}
+	d.OpLog.Mark(c, "小程序整改反馈", item.Type+" · "+item.Code)
+	d.appIssuePayload(c, item)
 }
 
 // AppSliderStart 开始滑动验证。
@@ -99,6 +148,7 @@ func (d *Deps) AppSliderFinish(c *gin.Context) {
 
 // AppLoginReq 小程序登录请求（滑动 pass_token）。
 type AppLoginReq struct {
+	Agreed    bool   `json:"agreed"`                      // 必须主动同意用户协议与隐私政策；缺失或 false 拒绝登录
 	Username  string `json:"username" binding:"required"` // 登录账号
 	Password  string `json:"password" binding:"required"` // 登录密码
 	PassToken string `json:"pass_token"`                  // 滑动验证一次性令牌；captcha.enabled=false 时可省略
@@ -109,6 +159,11 @@ func (d *Deps) AppLogin(c *gin.Context) {
 	var req AppLoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
+		return
+	}
+	// 协议校验先于一次性滑动令牌消费，未同意时不得创建登录会话。
+	if !req.Agreed {
+		response.Fail(c, 400, response.CodeBadReq, "请先阅读并同意用户协议与隐私政策")
 		return
 	}
 	if d.Cfg != nil && d.Cfg.Captcha.Enabled {
@@ -177,10 +232,11 @@ func (d *Deps) appIssuePayload(c *gin.Context, item *service.IssueVO) {
 }
 
 // AppListTodos 小程序待办：筛选 type/status/org_id/project_year/keyword/page/size。
-// status 空或 all 表示不限状态；结果按 new > pending > done，同状态 id 降序。
+// status 空或 all 表示不限状态；分页前按逾期、即将逾期、正常排序，同组剩余时间倒序。
 // org_id>0 时含该组织及下级，并与登录用户组织子树取交集。
 func (d *Deps) AppListTodos(c *gin.Context) {
 	q := service.IssueQuery{
+		AsOf:        time.Now(),
 		Type:        c.Query("type"),
 		Status:      c.Query("status"),
 		OrgID:       parseUint64Query(c.Query("org_id")),
@@ -204,7 +260,8 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 		return
 	}
 	q.Page, q.Size = service.NormalizePagination(q.Page, q.Size, 0)
-	response.OK(c, gin.H{"list": items, "total": total, "page": q.Page, "size": q.Size})
+	// server_time 为本次排序基准时刻（RFC3339），供小程序校准倒计时。
+	response.OK(c, gin.H{"list": items, "total": total, "page": q.Page, "size": q.Size, "server_time": q.AsOf.UTC().Format(time.RFC3339Nano)})
 }
 
 // AppRegions 小程序组织树：按 sys_orgs.parent_id 返回嵌套 children。
@@ -274,6 +331,9 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 	req.AssigneeUser = user.ID
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
+		if issueWriteConflict(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

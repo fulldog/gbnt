@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import AuthSlider from "@/components/auth/AuthSlider.vue";
+import { useLoginInputFocus } from "@/composables/useLoginInputFocus";
 import { useAuthStore } from "@/stores/auth";
 
 interface SliderExpose {
@@ -20,7 +21,17 @@ const agreed = shallowRef(false);
 const showPassword = shallowRef(false);
 const errorMessage = shallowRef("");
 const checkingSession = shallowRef(true);
+const pageActive = shallowRef(true);
+const compactLayout = shallowRef(false);
 const sliderRef = shallowRef<SliderExpose | null>(null);
+const { focusTarget, onFieldTouch, onFieldTap, requestFocus, onFieldFocus, onFieldBlur, releaseFocus } =
+  useLoginInputFocus(() => pageActive.value && !checkingSession.value && !authStore.loading);
+
+function togglePassword(): void {
+  if (authStore.loading) return;
+  showPassword.value = !showPassword.value;
+  void requestFocus("password", true);
+}
 
 const canSubmit = computed(
   () =>
@@ -40,6 +51,7 @@ function onAgreementChange(event: CheckboxChangeEvent): void {
 }
 
 function openLegal(page: "agreement" | "privacy"): void {
+  releaseFocus();
   uni.navigateTo({ url: `/pages-sub/legal/${page}` });
 }
 
@@ -58,6 +70,7 @@ async function submit(): Promise<void> {
   errorMessage.value = "";
   try {
     await authStore.signIn({
+      agreed: true,
       username: username.value.trim(),
       password: password.value,
       pass_token: passToken.value,
@@ -72,6 +85,8 @@ async function submit(): Promise<void> {
 }
 
 onLoad(async () => {
+  // 仅按进入页面时的窗口选布局，键盘改变可视高度时不挪动输入框。
+  try { compactLayout.value = uni.getWindowInfo().windowHeight <= 600; } catch { /* 使用标准布局。 */ }
   try {
     await authStore.restore();
     if (authStore.isAuthenticated) {
@@ -81,10 +96,12 @@ onLoad(async () => {
     checkingSession.value = false;
   }
 });
+onHide(() => { pageActive.value = false; });
+onShow(() => { pageActive.value = true; });
 </script>
 
 <template>
-  <view class="login-page">
+  <view class="login-page" :class="{ 'login-page--compact': compactLayout }" @tap="releaseFocus">
     <image class="login-page__background" src="/static/brand/login-background.jpg" mode="aspectFill" aria-hidden="true" />
 
     <view class="login-page__content">
@@ -103,30 +120,37 @@ onLoad(async () => {
         </view>
 
         <view class="login-field">
-          <view class="login-field__control">
+          <view class="login-field__control" @touchstart.stop="onFieldTouch('username')" @tap.stop="onFieldTap('username')">
             <image class="login-field__prefix" src="/static/icons/user-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="username"
               class="login-field__input"
               name="username"
               type="text"
+              :focus="focusTarget === 'username'"
               placeholder="请输入账号"
               :disabled="authStore.loading"
               :cursor-spacing="96"
               :adjust-position="true"
               aria-label="账号"
               confirm-type="next"
+              :confirm-hold="true"
+              @focus="onFieldFocus('username')"
+              @blur="onFieldBlur('username')"
+              @confirm="requestFocus('password')"
             />
           </view>
         </view>
 
         <view class="login-field">
-          <view class="login-field__control">
+          <view class="login-field__control" @touchstart.stop="onFieldTouch('password')" @tap.stop="onFieldTap('password')">
             <image class="login-field__prefix" src="/static/icons/lock-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="password"
-              class="login-field__input login-field__input--password"
+              class="login-field__input"
               name="password"
+              type="text"
+              :focus="focusTarget === 'password'"
               :password="!showPassword"
               placeholder="请输入密码"
               :disabled="authStore.loading"
@@ -134,6 +158,8 @@ onLoad(async () => {
               :adjust-position="true"
               aria-label="密码"
               confirm-type="done"
+              @focus="onFieldFocus('password')"
+              @blur="onFieldBlur('password')"
               @confirm="submit"
             />
             <button
@@ -141,7 +167,8 @@ onLoad(async () => {
               :aria-label="showPassword ? '隐藏密码' : '显示密码'"
               :disabled="authStore.loading"
               hover-class="login-field__toggle--pressed"
-              @tap="showPassword = !showPassword"
+              @touchstart.stop
+              @tap.stop="togglePassword"
             >
               <image :src="showPassword ? '/static/icons/eye-primary.png' : '/static/icons/eyeOff-primary.png'" class="login-field__eye" mode="aspectFit" aria-hidden="true" />
             </button>
@@ -311,15 +338,9 @@ onLoad(async () => {
   box-sizing: border-box;
 }
 
-.login-field__input--password {
-  padding-right: 44px;
-}
-
 .login-field__toggle {
-  position: absolute;
-  top: 0;
-  right: 0;
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 44px;
@@ -458,7 +479,7 @@ onLoad(async () => {
   text-align: center;
 }
 
-@media (max-height: 600px) {
+.login-page--compact {
   .login-page__content {
     padding-top: max(76px, calc(44px + env(safe-area-inset-top, 0px)));
   }

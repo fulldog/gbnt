@@ -30,10 +30,11 @@ type BusinessUserOption struct {
 
 // BusinessUserOptionQuery 人员候选参数；组织由具体业务入口验证。
 type BusinessUserOptionQuery struct {
+	OrgID      uint64 // 仅编辑责任人候选使用；>0 为编辑表单选择的新组织，0 沿用工单组织
 	Keyword    string // 姓名或账号模糊查询，选填；去除首尾空白
 	Page       int    // 页码，默认 1
 	Size       int    // 每页条数，默认 20，最大 100
-	SelectedID uint64 // 已选人员 ID，选填；只允许同组织启用人员回显
+	SelectedID uint64 // 已选人员 ID，选填；按业务入口的组织关系和启用状态校验回显
 }
 
 // BusinessUserOptionResult 分页候选；已选回显独立于查询页，不改变 total 和分页。
@@ -42,7 +43,7 @@ type BusinessUserOptionResult struct {
 	Total    int64                `json:"total"`    // 同组织启用人员经关键字筛选后的数量
 	Page     int                  `json:"page"`     // 实际使用页码，至少为 1
 	Size     int                  `json:"size"`     // 实际使用每页条数，1–100
-	Selected *BusinessUserOption  `json:"selected"` // 合法已选人员；未传、已删除、停用或跨组织为 null
+	Selected *BusinessUserOption  `json:"selected"` // 合法已选人员；未传、已删除、停用或不在业务组织范围内为 null
 }
 
 // ListBusinessOrgOptions 提供业务授权内的轻量组织选项；本轮保持现有全局业务范围，不引入行级隔离。
@@ -112,14 +113,34 @@ func (s *SysService) ListReporterOptions(ctx context.Context, orgID uint64, quer
 	return listBusinessUserOptions(s.db(ctx), orgID, query)
 }
 
-// ListAssigneeOptions 已有问题的同组织启用责任人候选；编辑权限由业务路由的 RBAC 校验。
+// ListAssigneeOptions 编辑表单组织的启用责任人候选；省略 OrgID 沿用工单组织，既有合法上下级责任人可回显。
 func (s *IssueService) ListAssigneeOptions(ctx context.Context, issueID uint64, query BusinessUserOptionQuery) (*BusinessUserOptionResult, error) {
 	var issue model.Issue
 	if err := s.db(ctx).Select("id", "org_id").First(&issue, issueID).Error; err != nil {
 		return nil, err
 	}
+	if query.OrgID != 0 {
+		issue.OrgID = query.OrgID
+	}
 	if err := requireOptionOrg(s.db(ctx), issue.OrgID); err != nil {
 		return nil, err
 	}
-	return listBusinessUserOptions(s.db(ctx), issue.OrgID, query)
+	result, err := listBusinessUserOptions(s.db(ctx), issue.OrgID, query)
+	if err != nil || result.Selected != nil || query.SelectedID == 0 {
+		return result, err
+	}
+	// 写入允许同组织或上下级账号，既有合法责任人不能因候选分页而丢失。
+	if err := s.requireAssigneeInFormOrg(ctx, query.SelectedID, issue.OrgID); err != nil {
+		if errors.Is(err, errIssueAssigneeNotFound) || errors.Is(err, errIssueAssigneeDisabled) || errors.Is(err, errIssueAssigneeOrg) {
+			return result, nil
+		}
+		return nil, err
+	}
+	var selected BusinessUserOption
+	if err := s.db(ctx).Model(&model.SysUser{}).Select("id", "name", "username").First(&selected, query.SelectedID).Error; err != nil {
+		return nil, err
+	}
+	selected.Name = displayUserName(selected.Name, selected.Username)
+	result.Selected = &selected
+	return result, nil
 }

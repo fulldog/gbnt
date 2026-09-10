@@ -1,4 +1,5 @@
-import { ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal } from "@gbnt/api-client";
+import { ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal, resolveFacilityCodeMode } from "@gbnt/api-client";
+import type { FacilityCodeMode } from "@gbnt/api-client";
 import type { AdminCreateIssueInput, FileItem, Issue, IssueQuizDefinition, IssueType, IssueTypeExt, ProjectYear, QuizBool, UpdateIssueInput } from "@gbnt/api-client";
 import type { AdminIssue } from "@/api/types";
 
@@ -20,10 +21,12 @@ export interface IssueFormDraft {
   project_year: ProjectYear;
   org_id?: number;
   code: string;
+  codeMode?: FacilityCodeMode;
   address: string;
   lat?: number;
   lng?: number;
   report_user_id?: number;
+  assignee_user?: number;
   reporter_name: string;
   reporter_phone: string;
   types: { well: WellDraft; road: RoadDraft; bridge: BridgeDraft; forest: ForestDraft; transformer: TransformerDraft };
@@ -36,7 +39,7 @@ export function createChecklist(type: IssueType): ChecklistDraft[] {
 export function createIssueDraft(reportUserId?: number): IssueFormDraft {
   return {
     type: "well", project_year: 2023, org_id: undefined, code: "", address: "", lat: undefined, lng: undefined,
-    report_user_id: reportUserId, reporter_name: "", reporter_phone: "",
+    report_user_id: reportUserId, assignee_user: undefined, reporter_name: "", reporter_phone: "",
     types: {
       well: { type: "well", build_kind: "new", panorama_files: [], panorama_photos: [], checklist: createChecklist("well"), plan_date: "" },
       road: { type: "road", checklist: createChecklist("road"), plan_date: "" },
@@ -52,6 +55,8 @@ export function hydrateIssueDraft(issue: AdminIssue): IssueFormDraft {
   const draft = createIssueDraft(issue.report_user_id);
   Object.assign(draft, {
     type: issue.type, project_year: issue.project_year, org_id: issue.org_id, code: issue.code, address: issue.address,
+    codeMode: "manual",
+    assignee_user: issue.assignee_user || undefined,
     lat: issue.lat ?? undefined, lng: issue.lng ?? undefined,
     reporter_name: issue.reporter_name?.trim() || issue.report_user_name || "", reporter_phone: issue.reporter_phone ?? "",
   });
@@ -165,9 +170,12 @@ function buildTypeInput(form: IssueFormDraft, issue: AdminIssue | null = null): 
 
 export function buildCreateInput(form: IssueFormDraft, signatureId: string): AdminCreateIssueInput {
   if (!form.org_id) throw new Error("请选择行政区划");
+  if (draftNeedsRectify(form) && !form.assignee_user) throw new Error("请指定整改人");
   return {
-    type: form.type, project_year: form.project_year, org_id: form.org_id, code: form.code.trim(), address: form.address.trim(),
+    type: form.type, project_year: form.project_year, org_id: form.org_id,
+    code_mode: resolveFacilityCodeMode(form), code: resolveFacilityCodeMode(form) === "manual" ? form.code.trim() : undefined, address: form.address.trim(),
     lat: form.lat, lng: form.lng, report_user_id: form.report_user_id,
+    assignee_user: form.assignee_user || undefined,
     reporter_name: form.reporter_name.trim(), reporter_phone: form.reporter_phone.trim(),
     reporter_signature_file_id: signatureId, plan_date: draftNeedsRectify(form) ? form.types[form.type].plan_date : "",
     type_ext: buildTypeInput(form),
@@ -175,6 +183,7 @@ export function buildCreateInput(form: IssueFormDraft, signatureId: string): Adm
 }
 
 export function buildUpdateInput(form: IssueFormDraft, issue: AdminIssue, signatureId: string): UpdateIssueInput {
+  if (issue.status !== "done" && !form.assignee_user) throw new Error("请指定整改人");
   const original = hydrateIssueDraft(issue);
   const input: UpdateIssueInput = { expected_updated_at: issue.updated_at || undefined };
   const fields = ["project_year", "org_id", "code", "address", "lat", "lng", "reporter_name", "reporter_phone"] as const;
@@ -183,6 +192,7 @@ export function buildUpdateInput(form: IssueFormDraft, issue: AdminIssue, signat
     if (current !== original[key] && current !== undefined) Object.assign(input, { [key]: current });
   }
   if (form.reporter_name.trim() !== original.reporter_name.trim()) input.report_user_id = 0;
+  if (form.assignee_user !== original.assignee_user) input.assignee_user = form.assignee_user || 0;
   const changed = typeDraftChanged(form, issue);
   if (changed) {
     input.type = form.type;

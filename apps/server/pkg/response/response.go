@@ -19,13 +19,15 @@ type Body struct {
 }
 
 const (
-	CodeOK       = 0
-	CodeBadReq   = 400
-	CodeUnauth   = 401
-	CodeForbid   = 403
-	CodeNotFound = 404
-	CodeConflict = 409
-	CodeServer   = 500
+	CodeOK                   = 0
+	CodeBadReq               = 400
+	CodeUnauth               = 401
+	CodeForbid               = 403
+	CodeNotFound             = 404
+	CodeConflict             = 409
+	CodeServer               = 500
+	CodeFacilityCodeConflict = 40901 // 同组织同类型设施编号重复
+	CodeIssueRequestConflict = 40902 // 同一个请求 ID 携带不同提交内容
 )
 
 // Context keys

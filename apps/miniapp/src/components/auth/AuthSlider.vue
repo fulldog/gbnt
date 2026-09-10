@@ -14,8 +14,8 @@ const emit = defineEmits<{
 
 const instance = getCurrentInstance();
 const {
-  state, offset, errorMessage, busy, progressWidth, stateText, prepare, reset,
-  onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, setTrackWidth, checkExpiry, dispose,
+  state, offset, handleRevision, trackWidth, errorMessage, busy, stateText, prepare, reset, onNativeChange,
+  onTouchStart, onTouchEnd, onTouchCancel, setTrackWidth, checkExpiry, dispose,
 } = useAuthSlider({
   configured: () => Boolean(apiBaseUrl),
   disabled: () => disabled.value,
@@ -66,26 +66,22 @@ defineExpose({ reset });
         'auth-slider__track--disabled': disabled,
       }"
     >
-      <view v-if="state !== 'error' && state !== 'preparing'" class="auth-slider__progress" :style="{ width: progressWidth }" />
+      <view v-if="state === 'verified'" class="auth-slider__progress" />
       <text class="auth-slider__text">{{ stateText }}</text>
-      <view
-        v-if="state !== 'error' && state !== 'preparing'"
-        class="auth-slider__handle"
-        :style="{ transform: `translateX(${offset}px)` }"
-        role="button"
-        aria-label="拖动滑块完成人机验证"
-        @touchstart.stop="onTouchStart"
-        @touchmove.stop.prevent="onTouchMove"
-        @touchend.stop="onTouchEnd"
-        @touchcancel.stop="onTouchCancel"
-      >
-        <image
-          class="auth-slider__handle-icon"
-          :src="state === 'verified' ? '/static/icons/check-success.svg' : '/static/icons/chevron-right.svg'"
-          mode="aspectFit"
-          aria-hidden="true"
-        />
-      </view>
+      <movable-area v-if="state !== 'error' && state !== 'preparing'" class="auth-slider__area">
+        <movable-view v-for="revision in [handleRevision]" :key="revision" class="auth-slider__handle" direction="horizontal" :x="offset" :animation="false"
+          :inertia="false" :out-of-bounds="false" :disabled="disabled || !['ready', 'dragging'].includes(state)"
+          role="button" aria-label="拖动滑块完成人机验证"
+          @touchstart.stop="onTouchStart" @change="onNativeChange"
+          @touchend.stop="onTouchEnd" @touchcancel.stop="onTouchCancel">
+          <view v-if="state === 'dragging' || state === 'verifying'" class="auth-slider__trail" :style="{ width: `${trackWidth}px` }" />
+          <view class="auth-slider__face">
+            <image class="auth-slider__handle-icon"
+              :src="state === 'verified' ? '/static/icons/check-success.svg' : '/static/icons/chevron-right.svg'"
+              mode="aspectFit" aria-hidden="true" />
+          </view>
+        </movable-view>
+      </movable-area>
       <button
         v-else
         class="auth-slider__retry"
@@ -122,9 +118,8 @@ defineExpose({ reset });
   top: 0;
   bottom: 0;
   left: 0;
-  width: 24px;
+  width: 100%;
   background: #56d288;
-  transition: width 80ms linear;
 }
 
 .auth-slider__text {
@@ -141,10 +136,32 @@ defineExpose({ reset });
   text-align: center;
 }
 
-.auth-slider__handle {
+.auth-slider__area {
   position: absolute;
   top: 3px;
   left: 3px;
+  width: calc(100% - 6px);
+  height: 38px;
+}
+.auth-slider__trail {
+  position: absolute;
+  right: 24px;
+  top: -3px;
+  height: 44px;
+  background: #56d288;
+  pointer-events: none;
+}
+.auth-slider__face {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border-radius: 6px;
+}
+.auth-slider__handle {
   display: flex;
   width: 48px;
   height: 38px;

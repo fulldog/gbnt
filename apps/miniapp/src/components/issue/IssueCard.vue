@@ -3,12 +3,12 @@ import type { MiniappIssue } from "@/api/types";
 import { computed } from "vue";
 import { toAssetUrl } from "@/api/runtime";
 import IssuePhotoGrid from "@/components/issue/IssuePhotoGrid.vue";
+import { issueDeadlineHint } from "@/utils/issue-deadline";
 import { issueTypeLabel } from "@/domain/issues/definitions";
 import {
   formatDateTime,
   hasValidCoordinates,
   issueChecklistPhotos,
-  issuePlanHint,
   issueSummary,
   issueReporter,
   issueOrganization,
@@ -16,7 +16,7 @@ import {
 
 const props = defineProps<{
   issue: MiniappIssue;
-  today?: string;
+  now?: number;
 }>();
 
 const emit = defineEmits<{
@@ -26,7 +26,7 @@ const emit = defineEmits<{
 }>();
 
 const typeLabel = computed(() => issueTypeLabel(props.issue.type));
-const plan = computed(() => issuePlanHint(props.issue, props.today));
+const plan = computed(() => issueDeadlineHint(props.issue, props.now));
 const summary = computed(() => issueSummary(props.issue));
 const photoUrls = computed(() =>
   issueChecklistPhotos(props.issue).map((photo) => toAssetUrl(photo.url)),
@@ -55,8 +55,6 @@ function preview(urls: readonly string[], index: number): void {
       <text class="issue-card__summary">{{ summary }}</text>
       <IssuePhotoGrid v-if="photoUrls.length" :urls="photoUrls" @preview="preview(photoUrls, $event)" />
       <view class="issue-card__tags">
-        <text class="issue-card__tag issue-card__tag--type">{{ typeLabel }}</text>
-        <text class="issue-card__tag">{{ issue.project_year }} 年</text>
         <text class="issue-card__tag">{{ issueOrganization(issue) }}</text>
       </view>
       <view class="issue-card__location" :class="{ 'issue-card__location--muted': !hasLocation }" role="button" :aria-label="hasLocation ? '查看地图' : '暂无坐标'" @tap.stop="hasLocation && emit('map', issue.id)">

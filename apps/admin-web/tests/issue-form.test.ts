@@ -111,4 +111,27 @@ describe("五类独立表单与编辑回填", () => {
     expect(validateChecklist(form, issue)).toBeNull();
     expect(buildUpdateInput(form, issue, issue.reporter_signature_file_id)).toEqual({ expected_updated_at: issue.updated_at, plan_date: "2026-09-20" });
   });
+
+  it("需整改的新记录必须指定人员，正常记录不强制指派", () => {
+    const form = hydrateIssueDraft(editorIssue("road"));
+    form.assignee_user = undefined;
+    expect(buildCreateInput(form, "signature").assignee_user).toBeUndefined();
+    form.types.road.checklist.find((q) => q.type === "has_road_damage")!.value = true;
+    expect(() => buildCreateInput(form, "signature")).toThrow("请指定整改人");
+    form.assignee_user = 22;
+    expect(buildCreateInput(form, "signature").assignee_user).toBe(22);
+  });
+
+  it("待整改记录禁止清空责任人，已完成记录允许显式解除指派", () => {
+    const issue = editorIssue("road");
+    issue.status = "pending";
+    const form = hydrateIssueDraft(issue);
+    form.assignee_user = undefined;
+    expect(() => buildUpdateInput(form, issue, "original-signature")).toThrow("请指定整改人");
+    form.assignee_user = 22;
+    expect(buildUpdateInput(form, issue, "original-signature").assignee_user).toBe(22);
+    issue.status = "done";
+    form.assignee_user = undefined;
+    expect(buildUpdateInput(form, issue, "original-signature").assignee_user).toBe(0);
+  });
 });

@@ -8,7 +8,8 @@ const canvas = useTemplateRef<HTMLCanvasElement>("canvas");
 const drawing = shallowRef(false);
 const empty = shallowRef(true);
 const changed = shallowRef(false);
-watch(() => existing?.file_id, () => { changed.value = false; empty.value = true; });
+const revision = shallowRef(0);
+watch(() => existing?.file_id, () => { changed.value = false; empty.value = true; revision.value += 1; });
 
 const cursorClass = computed(() => (disabled ? "cursor-not-allowed" : "cursor-crosshair"));
 
@@ -32,6 +33,7 @@ function start(event: PointerEvent): void {
   context.moveTo(current.x, current.y);
   drawing.value = true;
   changed.value = true;
+  revision.value += 1;
 }
 
 function draw(event: PointerEvent): void {
@@ -56,6 +58,7 @@ function stop(event: PointerEvent): void {
 }
 
 function clear(): void {
+  revision.value += 1;
   changed.value = true;
   empty.value = true;
   const context = canvas.value?.getContext("2d");
@@ -74,7 +77,7 @@ function toBlob(): Promise<Blob> {
   });
 }
 
-defineExpose({ clear, empty, changed, toBlob });
+defineExpose({ clear, empty, changed, revision, toBlob });
 </script>
 
 <template>

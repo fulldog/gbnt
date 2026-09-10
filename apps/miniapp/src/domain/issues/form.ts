@@ -2,10 +2,13 @@ import type {
   BridgeKind,
   FacilityBuildKind,
   IssueType,
+  FacilityCodeMode,
+  IssueSubmissionAttempt,
   ProjectYear,
   QuizType,
   TransformerVoltage,
 } from "@gbnt/api-client";
+import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import { QUIZ_DEFINITIONS } from "./definitions";
 
 export interface UploadedPhoto {
@@ -47,18 +50,39 @@ export interface ReportDetailsForm {
 
 export interface ReportFormState {
   type: IssueType;
-  projectYear: ProjectYear;
+  projectYear: ProjectYear | null;
   orgId: number | null;
   orgLabel: string;
   code: string;
+  /** 旧草稿可省略，恢复时按编号来源推断；新表单显式保存模式。 */
+  codeMode?: FacilityCodeMode;
+  submissionAttempt?: IssueSubmissionAttempt;
+  /** 仅草稿元数据；manual 包括用户主动清空，禁止迟到的自动填充覆盖。 */
+  codeSource?: "auto" | "manual";
+  /** 编号所属的 orgId:type，仅留在本地草稿，不发送至创建接口。 */
+  codeScopeKey?: string;
   address: string;
   lat: number | null;
   lng: number | null;
   planDate: string;
   signatureFileId: string;
   signaturePreviewUrl: string;
+  /** 归一化笔迹坐标，供切换、返回步骤及重启后恢复签名。 */
+  signatureStrokes: Array<Array<{ x: number; y: number }>>;
   details: ReportDetailsForm;
   quizzes: QuizFormItem[];
+}
+
+/** 迁移旧建议值/手动草稿，不把用户主动清空误判成自动编号。 */
+export function restoreReportCodeMode(form: ReportFormState): void {
+  form.codeMode = resolveFacilityCodeMode(form);
+  if (form.codeSource === "auto" && form.code !== "") {
+    form.code = "";
+    form.signatureFileId = "";
+    form.signaturePreviewUrl = "";
+  }
+  delete form.codeSource;
+  delete form.codeScopeKey;
 }
 
 export function createReportDetails(): ReportDetailsForm {
@@ -93,10 +117,10 @@ export function createQuizForm(type: IssueType): QuizFormItem[] {
   }));
 }
 
-export function createReportForm(): ReportFormState {
+export function createReportForm(type: IssueType = "well"): ReportFormState {
   return {
-    type: "well",
-    projectYear: 2023,
+    type,
+    projectYear: null,
     orgId: null,
     orgLabel: "",
     code: "",
@@ -106,13 +130,15 @@ export function createReportForm(): ReportFormState {
     planDate: "",
     signatureFileId: "",
     signaturePreviewUrl: "",
+    signatureStrokes: [],
     details: createReportDetails(),
-    quizzes: createQuizForm("well"),
+    quizzes: createQuizForm(type),
   };
 }
 
 /** 只有用户实际填写或切换过内容时才保留草稿，避免空表单反复提示恢复。 */
 export function hasReportProgress(form: ReportFormState): boolean {
+  if (form.signatureStrokes?.length) return true;
   const initial = createReportForm();
   if (
     form.type !== initial.type ||
@@ -147,6 +173,7 @@ export function replaceIssueType(form: ReportFormState, type: IssueType): void {
   form.planDate = "";
   form.signatureFileId = "";
   form.signaturePreviewUrl = "";
+  form.signatureStrokes = [];
 }
 
 /** 切换到出水现场取证时，不能把普通相册照片当作取证照片复用。 */

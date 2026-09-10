@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ISSUE_TYPES, PROJECT_YEARS } from "@gbnt/api-client";
-import type { FileItem } from "@gbnt/api-client";
+import { ApiError, FACILITY_CODE_CONFLICT, ISSUE_REQUEST_CONFLICT, ISSUE_TYPES, PROJECT_YEARS, prepareIssueSubmission } from "@gbnt/api-client";
+import type { FileItem, IssueType, IssueSubmissionAttempt } from "@gbnt/api-client";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { computed, onScopeDispose, reactive, shallowRef, watch } from "vue";
 import { useAdminApi } from "@/api/runtime";
-import type { AdminIssue, OrgOption } from "@/api/types";
+import type { AdminIssue, OrgOption, UserOptionQuery } from "@/api/types";
 import AsyncError from "@/components/AsyncError.vue";
 import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
+import BusinessUserSelect from "@/components/BusinessUserSelect.vue";
 import PhotoUpload from "@/components/PhotoUpload.vue";
 import SignaturePad from "@/components/SignaturePad.vue";
 import { ISSUE_TYPE_LABELS } from "@/constants/issue";
@@ -17,8 +18,9 @@ import IssueTypeFields from "./IssueTypeFields.vue";
 import IssueChecklistFields from "./IssueChecklistFields.vue";
 import { buildCreateInput, buildUpdateInput, createIssueDraft, draftNeedsRectify, draftSchemaVersion, hydrateIssueDraft, validateChecklist } from "./issue-form";
 import type { IssueFormDraft, IssueTypeDraft, WellDraft } from "./issue-form";
+import { useIssueCodeDrafts } from "./useIssueCodeDrafts";
 
-interface SignaturePadExpose { changed?: boolean; toBlob: () => Promise<Blob> }
+interface SignaturePadExpose { changed?: boolean; revision?: number; toBlob: () => Promise<Blob> }
 const { issue = null, orgs, orgsReady = true } = defineProps<{ issue?: AdminIssue | null; orgs: readonly OrgOption[]; orgsReady?: boolean }>();
 const emit = defineEmits<{ saved: [issueId: number] }>();
 const visible = defineModel<boolean>({ required: true });
@@ -38,29 +40,50 @@ const form = reactive<IssueFormDraft>(createIssueDraft());
 let session = 0;
 onScopeDispose(() => { session += 1; });
 const editing = computed(() => Boolean(issue));
+const formReady = shallowRef(false);
+const codeDrafts = useIssueCodeDrafts(form, () => visible.value && !editing.value && formReady.value);
+const codeError = shallowRef("");
+const manualCode = computed(() => editing.value || form.codeMode === "manual");
+let uploadedSignature: { pad: SignaturePadExpose; revision?: number; fileId: string } | undefined;
+let attempts: Partial<Record<IssueType, IssueSubmissionAttempt>> = {};
+watch(() => [form.code, form.codeMode, form.org_id, form.type], () => { codeError.value = ""; formRef.value?.clearValidate("code"); });
 const activeDraft = computed({ get: () => form.types[form.type], set: (draft: IssueTypeDraft) => { Object.assign(form.types, { [draft.type]: draft }); } });
 const renderContext = computed(() => ({ draft: activeDraft.value, token: photoSession.value }));
 const needsRectify = computed(() => draftNeedsRectify(form, original.value));
+const needsAssignee = computed(() => original.value ? original.value.status !== "done" : needsRectify.value);
+const assigneeReady = shallowRef(false);
+function loadAssignees(query: UserOptionQuery) {
+  if (!form.org_id) return Promise.reject(new Error("请先选择行政区划"));
+  return original.value
+    ? api.issues.listAssigneeOptions(original.value.id, { ...query, org_id: form.org_id })
+    : api.issues.listReporterOptions({ ...query, org_id: form.org_id });
+}
 const schemaVersion = computed(() => draftSchemaVersion(form, original.value));
 const existingSignature = computed(() => original.value?.reporter_signature ?? (original.value?.reporter_signature_file_id ? { file_id: original.value.reporter_signature_file_id, url: "" } : undefined));
 const rules: FormRules<IssueFormDraft> = {
   type: [{ required: true, message: "请选择问题类型", trigger: "change" }],
   project_year: [{ required: true, message: "请选择项目年度", trigger: "change" }],
   org_id: [{ required: true, message: "请选择行政区划", trigger: "change" }],
-  code: [{ required: true, whitespace: true, message: "请填写设施编号", trigger: "blur" }],
+  code: [{ validator: (_rule, _value, callback) => callback(manualCode.value && !form.code.trim() ? new Error("请填写设施编号") : undefined), trigger: "blur" }],
   address: [{ required: true, whitespace: true, message: "请填写地址", trigger: "blur" }],
   reporter_phone: [{ pattern: /^(?:1[3-9]\d{9})?$/, message: "请输入有效的手机号码", trigger: "blur" }],
+  assignee_user: [{ validator: (_rule, _value, callback) => callback(needsAssignee.value && !form.assignee_user ? new Error("请指定整改人") : undefined), trigger: "change" }],
 };
 
 async function initialize(): Promise<void> {
   const current = ++session;
+  assigneeReady.value = false;
+  formReady.value = false;
+  codeDrafts.reset();
+  codeError.value = ""; attempts = {}; uploadedSignature = undefined;
   submitting.value = false; loading.value = false; loadError.value = ""; original.value = null;
   uploadingKeys.value = new Set(); photoSession.value += 1; signatureSession.value += 1;
   if (!visible.value) return;
   if (!issue) {
     const next = createIssueDraft(auth.user?.id);
+    next.codeMode = "auto";
     next.reporter_name = auth.user?.name ?? ""; next.reporter_phone = auth.user?.phone ?? "";
-    Object.assign(form, next); formRef.value?.clearValidate(); return;
+    Object.assign(form, next); formRef.value?.clearValidate(); formReady.value = true; return;
   }
   loading.value = true;
   try {
@@ -84,6 +107,9 @@ function updateType(value: string | number | boolean | undefined): void {
 function updateYear(value: string | number | boolean | undefined): void {
   const year = PROJECT_YEARS.find((item) => item === value); if (year) form.project_year = year;
 }
+function setCodeMode(value: string | number | boolean | undefined): void {
+  if (!submitting.value && (value === "auto" || value === "manual")) form.codeMode = value;
+}
 function setUploading(key: string, busy: boolean, token: number): void {
   if (!visible.value || token !== photoSession.value) return;
   const next = new Set(uploadingKeys.value); if (busy) next.add(key); else next.delete(key); uploadingKeys.value = next;
@@ -99,11 +125,15 @@ async function signatureId(current: number): Promise<string> {
   if (original.value?.reporter_signature_file_id && !signatureRef.value?.changed) return original.value.reporter_signature_file_id;
   const pad = signatureRef.value;
   if (!pad) throw new Error("电子签名组件未就绪");
+  if (uploadedSignature?.pad === pad && uploadedSignature.revision === pad.revision) return uploadedSignature.fileId;
+  const revision = pad.revision;
   const blob = await pad.toBlob();
   if (current !== session || !visible.value) throw new Error("当前填报已取消");
   const file = new File([blob], `signature-${Date.now()}.png`, { type: "image/png" });
   const result = await api.attachments.uploadImages({ files: [file], watermark: false });
-  const id = result.list[0]?.file_id; if (!id) throw new Error("电子签名上传失败"); return id;
+  const id = result.list[0]?.file_id; if (!id) throw new Error("电子签名上传失败");
+  if (current === session && visible.value && revision === pad.revision) uploadedSignature = { pad, revision, fileId: id };
+  return id;
 }
 async function submit(): Promise<void> {
   if (submitting.value || photosUploading.value || loading.value || loadError.value || !visible.value) return;
@@ -111,6 +141,7 @@ async function submit(): Promise<void> {
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (current !== session || photosUploading.value || submitting.value) return;
   if (!orgsReady) { ElMessage.error("行政区划加载失败，请重试"); return; }
+  if ((needsAssignee.value || form.assignee_user) && !assigneeReady.value) { ElMessage.error("请选择有效的整改人，或等待人员候选加载完成"); return; }
   if (original.value && original.value.type !== form.type && original.value.rectify_records.length) {
     ElMessage.error("该记录已有整改历史，请保留原类型编辑"); return;
   }
@@ -120,16 +151,26 @@ async function submit(): Promise<void> {
   try {
     const id = await signatureId(current); if (current !== session) return;
     let savedId: number;
+    let savedCode = "";
     if (original.value) {
       await api.issues.update(original.value.id, buildUpdateInput(form, original.value, id)); savedId = original.value.id;
     } else {
       const input = buildCreateInput(form, id);
       if (form.reporter_name.trim() !== auth.user?.name?.trim()) delete input.report_user_id;
-      savedId = (await api.issues.create(input)).id;
+      const attempt = prepareIssueSubmission(input, attempts[form.type]);
+      attempts[form.type] = attempt;
+      const saved = await api.issues.create({ ...input, request_id: attempt.requestId });
+      savedId = saved.id; savedCode = saved.code;
     }
     if (current !== session) return;
-    ElMessage.success(editing.value ? "巡查记录已保存" : "巡查记录已新增"); visible.value = false; emit("saved", savedId);
-  } catch (error) { if (current === session) ElMessage.error(errorMessage(error, "保存失败")); }
+    ElMessage.success(editing.value ? "巡查记录已保存" : `巡查记录已新增，设施编号 ${savedCode}`); visible.value = false; emit("saved", savedId);
+  } catch (error) {
+    if (current === session) {
+      if (error instanceof ApiError && error.code === FACILITY_CODE_CONFLICT) { codeError.value = error.message; formRef.value?.scrollToField("code"); }
+      if (error instanceof ApiError && error.code === ISSUE_REQUEST_CONFLICT) delete attempts[form.type];
+      ElMessage.error(errorMessage(error, "保存失败"));
+    }
+  }
   finally { if (current === session) submitting.value = false; }
 }
 </script>
@@ -149,8 +190,17 @@ async function submit(): Promise<void> {
               </ElRadioGroup>
             </ElFormItem>
             <ElFormItem label="行政区划" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" :disabled="!orgsReady" :clearable="false" /></ElFormItem>
+            <ElFormItem label="整改人" prop="assignee_user" :required="needsAssignee">
+              <BusinessUserSelect :key="session" v-model="form.assignee_user" :active="visible && !!form.org_id && !loading" :scope-key="form.org_id || 0" :load-options="loadAssignees" placeholder="请选择整改人" @ready="assigneeReady = $event" />
+            </ElFormItem>
             <ElFormItem label="项目年度" prop="project_year"><ElRadioGroup :model-value="form.project_year" class="issue-year-picker" @update:model-value="updateYear"><ElRadioButton v-for="year in PROJECT_YEARS" :key="year" :value="year">{{ year }}</ElRadioButton></ElRadioGroup></ElFormItem>
-            <ElFormItem label="设施编号" prop="code"><ElInput v-model="form.code" maxlength="64" placeholder="如：01号" /></ElFormItem>
+            <ElFormItem label="设施编号" prop="code" :error="codeError">
+              <div class="facility-code-control">
+                <ElRadioGroup v-if="!editing" :model-value="form.codeMode" class="code-mode-options" @update:model-value="setCodeMode"><ElRadioButton value="auto">自动生成</ElRadioButton><ElRadioButton value="manual">手动填写</ElRadioButton></ElRadioGroup>
+                <ElInput v-if="manualCode" v-model="form.code" maxlength="64" placeholder="请输入设施编号" />
+                <span v-else class="code-status">提交时自动生成</span>
+              </div>
+            </ElFormItem>
             <ElFormItem label="上报人"><ElInput v-model="form.reporter_name" maxlength="128" placeholder="请输入上报人" /></ElFormItem>
             <ElFormItem label="联系电话" prop="reporter_phone"><ElInput v-model="form.reporter_phone" type="tel" maxlength="11" placeholder="请输入联系电话" /></ElFormItem>
           </section>
@@ -195,6 +245,10 @@ async function submit(): Promise<void> {
 <style scoped>
 .issue-form { height: 100%; }
 .form-loading { padding: 24px; }
+.facility-code-control { width: 100%; }
+.code-mode-options { margin-bottom: 6px; }
+.code-status { display: block; font-size: 12px; line-height: 20px; color: #727b89; }
+.code-error { color: #bd6400; }
 .issue-form-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; height: 100%; min-height: 0; background: #eef3f9; }
 .issue-form-pane { overflow-y: auto; overflow-x: hidden; min-width: 0; min-height: 0; padding: 20px 24px; background: #fff; }
 .issue-form h3 { font-size: 14px; font-weight: 600; color: #333; margin: 0 0 16px; }

@@ -75,7 +75,7 @@ describe("小程序 HTTPS 接线", () => {
 
   it("历史草稿照片、预览和签名入口不会绕过 URL 解析器", () => {
     const photo = readFileSync(new URL("../src/components/media/PhotoPicker.vue", import.meta.url), "utf8");
-    const report = readFileSync(new URL("../src/pages/report/index.vue", import.meta.url), "utf8");
+    const report = readFileSync(new URL("../src/components/report/ReportTypeForm.vue", import.meta.url), "utf8");
     expect(photo).toContain(':src="toAssetUrl(photo.url)"');
     expect(photo).toContain("model.value.map((photo) => toAssetUrl(photo.url)");
     expect(report).toContain(':src="toAssetUrl(form.signaturePreviewUrl)"');

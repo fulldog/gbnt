@@ -9,6 +9,7 @@ import { miniappApi } from "@/api/runtime";
 import type { MiniappAuthUser } from "@/api/types";
 import {
   clearSession,
+  hasAcceptedAgreement,
   readAccessToken,
   readStoredUser,
   writeSession,
@@ -50,6 +51,7 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   async function signIn(input: MiniappLoginInput): Promise<void> {
+    if (input.agreed !== true) throw new Error("请先阅读并同意用户协议与隐私政策");
     const version = ++sessionVersion;
     loading.value = true;
     try {
@@ -66,7 +68,7 @@ export const useAuthStore = defineStore("auth", () => {
 
   function restore(): Promise<void> {
     const storedToken = readAccessToken();
-    if (!storedToken) {
+    if (!storedToken || !hasAcceptedAgreement()) {
       reset();
       initialized.value = true;
       return Promise.resolve();

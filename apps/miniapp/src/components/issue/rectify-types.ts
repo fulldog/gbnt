@@ -1,7 +1,4 @@
-import type { QuizType } from "@gbnt/api-client";
-
-export interface RectifyDraftSubmitItem {
-  type: QuizType;
+export interface RectifyFeedbackDraft {
   note: string;
   photoPaths: string[];
 }
