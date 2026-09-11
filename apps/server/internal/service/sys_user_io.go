@@ -28,8 +28,10 @@ const (
 	colOrg                = "所属单位"
 	colRole               = "角色名称"
 	colRoleID             = "角色ID"
+	colSort               = "排序"
 	colStatus             = "状态"
 	colCreatedAt          = "创建时间"
+	userListOrder         = "sort ASC, id DESC"
 )
 
 // orgPathFromRoot 由 org_id 拼根→叶路径，以 / 分隔；orgID=0 返回空串。
@@ -197,6 +199,19 @@ func formatUserStatus(status int) string {
 	return "启用"
 }
 
+// parseImportUserSort 兼容没有排序列的旧文件；空值默认 100，其他值须为有符号 32 位整数。
+func parseImportUserSort(raw string) (int32, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return model.DefaultUserSort, nil
+	}
+	sort, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return 0, errors.New("排序须为 -2147483648～2147483647 之间的整数")
+	}
+	return int32(sort), nil
+}
+
 func parseImportCreatedAt(raw string) (time.Time, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -221,10 +236,10 @@ func (s *SysService) userListQuery(orgID uint64, keyword string) *gorm.DB {
 	return q
 }
 
-// ExportUsers 导出人员xlsx（不分页）；角色ID为英文标识，数字关联键不对外展示。
+// ExportUsers 导出人员xlsx（不分页），排序与列表一致；包含排序值及英文角色ID。
 func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 	var users []model.SysUser
-	if err := s.userListQuery(orgID, keyword).Order("id DESC").Find(&users).Error; err != nil {
+	if err := s.userListQuery(orgID, keyword).Order(userListOrder).Find(&users).Error; err != nil {
 		return nil, err
 	}
 	orgs, err := s.ListOrgs()
@@ -244,12 +259,16 @@ func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 		}
 	}
 
-	headers := []string{colName, colPhone, colUsername, colOrg, colRoleID, colRole, colStatus, colCreatedAt}
+	headers := []string{colName, colPhone, colUsername, colOrg, colRoleID, colRole, colSort, colStatus, colCreatedAt}
 	rows := make([][]any, 0, len(users))
 	for _, u := range users {
 		// 未绑定或关联缺失的历史人员仍可导出空角色列，不能因此阻塞整个导出。
 		if _, exists := roleName[u.RoleID]; exists && roleCodes[u.RoleID] == "" {
 			return nil, errors.New("存在尚未配置英文角色ID的人员角色，请先完成角色标识迁移")
+		}
+		sort := model.DefaultUserSort
+		if u.Sort != nil {
+			sort = *u.Sort
 		}
 		rows = append(rows, []any{
 			u.Name,
@@ -258,6 +277,7 @@ func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 			orgPathFromRoot(orgs, u.OrgID),
 			roleCodes[u.RoleID],
 			roleName[u.RoleID],
+			sort,
 			formatUserStatus(u.Status),
 			u.CreatedAt.In(time.Local).Format(userIOCreatedAtLayout),
 		})
@@ -265,7 +285,7 @@ func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 	return xlsxutil.Export(headers, rows)
 }
 
-// ImportUsers 从xlsx新增人员；角色ID优先、名称兼容，任一校验失败则整批不落库。
+// ImportUsers 从xlsx新增人员；角色ID优先、排序空则 100，任一校验失败则整批不落库。
 func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -334,6 +354,10 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		if idx, ok := colIdx[colStatus]; ok {
 			statusRaw = cellAt(row, idx)
 		}
+		sortRaw := ""
+		if idx, ok := colIdx[colSort]; ok {
+			sortRaw = cellAt(row, idx)
+		}
 		createdRaw := ""
 		if idx, ok := colIdx[colCreatedAt]; ok {
 			createdRaw = cellAt(row, idx)
@@ -364,6 +388,10 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		if serr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, serr)
 		}
+		sort, sortErr := parseImportUserSort(sortRaw)
+		if sortErr != nil {
+			return 0, fmt.Errorf("第 %d 行: %w", line, sortErr)
+		}
 		created, cerr := parseImportCreatedAt(createdRaw)
 		if cerr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, cerr)
@@ -380,6 +408,7 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 			Phone:        phone,
 			OrgID:        orgID,
 			RoleID:       roleID,
+			Sort:         &sort,
 			Status:       st,
 			IsSuperAdmin: false,
 		}

@@ -393,6 +393,8 @@ export interface SysUser extends BaseRecord {
   phone: string;
   org_id: number;
   role_id: number;
+  /** 人员排序整数，越小越靠前；新版服务固定返回数值，兼容旧服务缺省。 */
+  sort?: number | null;
   status: number;
   is_super_admin: boolean;
 }
@@ -414,6 +416,8 @@ export interface CreateUserInput {
   phone?: string;
   org_id?: number;
   role_id?: number;
+  /** 有符号 32 位整数，默认 100；支持 0。 */
+  sort?: number;
   status?: number;
 }
 
@@ -423,6 +427,8 @@ export interface UpdateUserInput {
   phone: string;
   org_id: number;
   role_id: number;
+  /** 有符号 32 位整数；不传时保留原排序，支持 0。 */
+  sort?: number;
   status?: number;
 }
 

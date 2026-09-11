@@ -2,6 +2,7 @@ package handler
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -15,6 +16,50 @@ import (
 	"gbnt/apps/server/internal/testutil"
 	"gbnt/apps/server/pkg/middleware"
 )
+
+func TestUserListSortHTTPContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := testutil.NewQueryDB(t,
+		testutil.QueryStep{Contains: "count(*)", Columns: []string{"total"}, Rows: [][]driver.Value{{int64(1)}}},
+		testutil.QueryStep{Contains: "ORDER BY sort ASC, id DESC", Columns: []string{"id", "sort"}, Rows: [][]driver.Value{{int64(2), int64(0)}}},
+	)
+	r := gin.New()
+	(&Deps{Sys: &service.SysService{DB: db}}).registerSysStaff(r.Group("/api"))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/sys/users", nil))
+	var body struct {
+		Data struct {
+			SortSupported bool `json:"sort_supported"`
+			List          []struct {
+				Sort *int32 `json:"sort"`
+			} `json:"list"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil || w.Code != 200 || !body.Data.SortSupported || len(body.Data.List) != 1 || body.Data.List[0].Sort == nil || *body.Data.List[0].Sort != 0 {
+		t.Fatalf("排序契约丢失: %d %s err=%v", w.Code, w.Body.String(), err)
+	}
+}
+
+func TestUserSortRejectsNonIntegerOrOutOfRangeBeforeDB(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	(&Deps{}).registerSysStaff(r.Group("/api"))
+	for _, method := range []string{"POST", "PUT"} {
+		path := "/api/sys/users"
+		if method == "PUT" {
+			path += "/2"
+		}
+		for _, value := range []string{`1.5`, `"5"`, `false`, `2147483648`, `-2147483649`} {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(method, path, strings.NewReader(`{"sort":`+value+`}`))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+			if w.Code != 400 {
+				t.Fatalf("无效排序不应访问数据库: %s %s %d %s", method, value, w.Code, w.Body.String())
+			}
+		}
+	}
+}
 
 func TestUserStatusHTTPContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)

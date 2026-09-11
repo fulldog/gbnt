@@ -101,7 +101,27 @@ describe("管理端独立读取契约", () => {
   it("读取人员名称并兼容旧人员列表没有 page/size", async () => {
     const row = { id: 2, org_name: null, org_path: null, role_name: "操作员" };
     const { users } = setup({ list: [row], total: 1 });
-    expect(await users.list({ page: 2, size: 10 })).toEqual({ list: [row], total: 1, page: 2, size: 10 });
+    expect(await users.list({ page: 2, size: 10 })).toEqual({ list: [row], total: 1, page: 2, size: 10, sort_supported: false });
+  });
+
+  it("新版人员列表透传排序能力与0值，保持后端顺序", async () => {
+    const result = { list: [{ id: 1, sort: 0 }, { id: 5, sort: 100 }], total: 2, page: 1, size: 20, sort_supported: true };
+    expect(await setup(result).users.list()).toEqual(result);
+    expect((await setup({ ...result, list: [] }).users.list()).sort_supported).toBe(true);
+  });
+
+  it.each([undefined, null, "1", 1.5])("新后端返回异常排序时不伪造默认值：%j", async (sort) => {
+    await expect(setup({ list: [{ id: 1, sort }], total: 1, sort_supported: true }).users.list()).rejects.toThrow("格式异常");
+  });
+
+  it("新增和编辑人员同步发送sort，编辑不附带未指定的status", async () => {
+    const row = { id: 2, sort: 0 };
+    const { users, request } = setup(row);
+    const input = { name: "人员", phone: "", org_id: 3, role_id: 2, sort: 0 };
+    expect(await users.create({ ...input, username: "worker", status: 1 })).toBe(row);
+    expect(request).toHaveBeenLastCalledWith("/api/sys/users", { method: "POST", body: { ...input, username: "worker", status: 1 } });
+    expect(await users.update(2, input)).toBe(row);
+    expect(request).toHaveBeenLastCalledWith("/api/sys/users/2", { method: "PUT", body: input });
   });
 
   it("分页列表结构及计数错误显式失败", async () => {

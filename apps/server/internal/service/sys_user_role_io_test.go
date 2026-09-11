@@ -24,8 +24,8 @@ func userIORoleStep() testutil.QueryStep {
 
 func TestExportUsersIncludesTextRoleIDWithDuplicateNames(t *testing.T) {
 	db := testutil.NewQueryDB(t,
-		testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username", "org_id", "role_id", "status", "created_at"}, Rows: [][]driver.Value{
-			{int64(10), "测试人员", "worker", int64(2), int64(3), int64(1), time.Date(2026, 9, 11, 10, 0, 0, 0, time.Local)},
+		testutil.QueryStep{Contains: "ORDER BY sort ASC, id DESC", Columns: []string{"id", "name", "username", "org_id", "role_id", "sort", "status", "created_at"}, Rows: [][]driver.Value{
+			{int64(10), "测试人员", "worker", int64(2), int64(3), int64(0), int64(1), time.Date(2026, 9, 11, 10, 0, 0, 0, time.Local)},
 		}}, userIOOrgStep(), userIORoleStep())
 	svc := SysService{DB: db}
 	raw, err := svc.ExportUsers(0, "")
@@ -48,10 +48,57 @@ func TestExportUsersIncludesTextRoleIDWithDuplicateNames(t *testing.T) {
 	if cellAt(rows[1], idx[colRoleID]) != "test" || cellAt(rows[1], idx[colRole]) != "系统配置员" {
 		t.Fatalf("角色导出错位: %v", rows)
 	}
+	if _, ok := idx[colSort]; !ok || cellAt(rows[1], idx[colSort]) != "0" {
+		t.Fatalf("排序列未保留0值: %v", rows)
+	}
 	cell, _ := excelize.CoordinatesToCellName(idx[colRoleID]+1, 2)
 	typ, err := f.GetCellType(f.GetSheetName(0), cell)
 	if err != nil || (typ != excelize.CellTypeSharedString && typ != excelize.CellTypeInlineString) {
 		t.Fatalf("角色ID必须以文本输出，type=%v err=%v", typ, err)
+	}
+}
+
+func TestImportUsersReadsSortAndKeepsOldFiles(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		header  bool
+		value   string
+		want    int32
+		failure bool
+	}{
+		{"旧文件无排序列", false, "", 100, false}, {"空值默认", true, "", 100, false},
+		{"显式0", true, "0", 0, false}, {"负数", true, "-10", -10, false}, {"正数", true, "50", 50, false},
+		{"小数", true, "1.5", 0, true}, {"越界", true, "2147483648", 0, true}, {"非数字", true, "bad", 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := []string{colName, colPhone, colUsername, colOrg, colRoleID}
+			cells := []any{"测试人员", "", "sort-worker", "测试街道", "test"}
+			if tc.header {
+				headers = append(headers, colSort)
+				cells = append(cells, tc.value)
+			}
+			raw, err := xlsxutil.Export(headers, [][]any{cells})
+			if err != nil {
+				t.Fatal(err)
+			}
+			steps := []testutil.QueryStep{userIOOrgStep(), userIORoleStep()}
+			if !tc.failure {
+				steps = append(steps,
+					testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"username"}},
+					testutil.QueryStep{Kind: "begin"},
+					testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_users`", Check: checkInsertedUserSort(t, tc.want)},
+					testutil.QueryStep{Kind: "commit"},
+				)
+			}
+			count, err := (&SysService{DB: testutil.NewTransactionDB(t, steps...)}).ImportUsers(context.Background(), bytes.NewReader(raw))
+			if tc.failure {
+				if err == nil || !strings.Contains(err.Error(), "排序须为") || count != 0 {
+					t.Fatalf("无效排序未阻止整批导入: count=%d err=%v", count, err)
+				}
+			} else if err != nil || count != 1 {
+				t.Fatalf("导入排序失败: count=%d err=%v", count, err)
+			}
+		})
 	}
 }
 

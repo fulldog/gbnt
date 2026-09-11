@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { validateApiBaseUrl } from "../build/api-base-url";
 
@@ -132,6 +133,15 @@ describe("Vite API Origin injection", () => {
     expect(config.define?.["import.meta.env.VITE_API_BASE_URL"]).toBe('"https://api.gbnt.test"');
     expect(configMocks.loadEnv).toHaveBeenCalledWith("production", expect.stringMatching(/apps\/miniapp\/$/), "VITE_");
     expect(configMocks.uniPlugin).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["development", "production"])("keeps port 8443 from the checked-in example in %s builds", async (mode) => {
+    const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+    const origin = /^VITE_API_BASE_URL=(.*)$/m.exec(example)?.[1];
+    expect(origin).toBe("https://nt.kfqzhsq.cn:8443");
+    configMocks.loadEnv.mockReturnValue({ VITE_API_BASE_URL: origin });
+    const config = await configuredVite(mode);
+    expect(config.define?.["import.meta.env.VITE_API_BASE_URL"]).toBe('"https://nt.kfqzhsq.cn:8443"');
   });
 
   it("rejects an unsafe production address before initializing the compilation plugin", async () => {

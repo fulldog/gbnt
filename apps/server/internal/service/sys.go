@@ -88,6 +88,7 @@ type UserInput struct {
 	Phone    string `json:"phone"`    // 手机号（选填；有值须为中国大陆 11 位）
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
 	RoleID   uint64 `json:"role_id"`  // 角色 ID
+	Sort     *int32 `json:"sort"`     // 排序整数，越小越靠前；空则新建默认 100、编辑保留原值，支持 0
 	Status   *int   `json:"status"`   // 1 启用 / 0 禁用；空则新建默认 1
 }
 
@@ -269,7 +270,7 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 	return nil
 }
 
-// ListUsers 查询工作人员基础分页；计数失败立即返回，避免伪造 total=0。
+// ListUsers 查询工作人员基础分页；排序在分页前执行，计数失败立即返回。
 func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
 	page, size = NormalizePagination(page, size, 0)
 	q := s.userListQuery(orgID, keyword)
@@ -278,7 +279,7 @@ func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]
 		return nil, 0, err
 	}
 	list := make([]model.SysUser, 0)
-	err := q.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error
+	err := q.Order(userListOrder).Offset((page - 1) * size).Limit(size).Find(&list).Error
 	return list, total, err
 }
 
@@ -288,7 +289,7 @@ func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
 		return nil, errors.New("org_id 必填")
 	}
 	var list []model.SysUser
-	err := s.DB.Model(&model.SysUser{}).Where("org_id = ?", orgID).Order("id DESC").Find(&list).Error
+	err := s.DB.Model(&model.SysUser{}).Where("org_id = ?", orgID).Order(userListOrder).Find(&list).Error
 	return list, err
 }
 
@@ -316,6 +317,7 @@ func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUs
 		Phone:        in.Phone,
 		OrgID:        in.OrgID,
 		RoleID:       in.RoleID,
+		Sort:         in.Sort,
 		Status:       1,
 		IsSuperAdmin: false, // 超管仅允许一名，由种子初始化
 	}
@@ -344,6 +346,9 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 	}
 	if in.Status != nil {
 		updates["status"] = *in.Status
+	}
+	if in.Sort != nil {
+		updates["sort"] = *in.Sort
 	}
 	if in.Password != "" {
 		pwd := strings.TrimSpace(in.Password)

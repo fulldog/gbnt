@@ -23,7 +23,7 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 	}
 }
 
-// ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size。
+// ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size；按 sort 升序、id 倒序分页，sort_supported 表示支持人员排序。
 func (d *Deps) ListUsers(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
 	page, size := service.NormalizePagination(atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20), 0)
@@ -32,10 +32,10 @@ func (d *Deps) ListUsers(c *gin.Context) {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	response.OK(c, gin.H{"list": list, "total": total, "page": page, "size": size})
+	response.OK(c, gin.H{"list": list, "total": total, "page": page, "size": size, "sort_supported": true})
 }
 
-// ListUsersByOrgID GET /api/sys/users/by-org — 按行政区划 ID 获取用户列表。
+// ListUsersByOrgID GET /api/sys/users/by-org — 按行政区划 ID 获取用户列表；按 sort 升序、id 倒序。
 func (d *Deps) ListUsersByOrgID(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
 	list, err := d.Sys.ListUsersByOrgID(orgID)
@@ -46,7 +46,7 @@ func (d *Deps) ListUsersByOrgID(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": len(list)})
 }
 
-// ExportUsers GET /api/sys/users/export — 导出人员 xlsx；query 同列表、不分页。
+// ExportUsers GET /api/sys/users/export — 导出人员 xlsx；query 同列表、不分页，包含排序列并沿用列表排序。
 func (d *Deps) ExportUsers(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
 	data, err := d.Sys.ExportUsers(orgID, c.Query("keyword"))
@@ -57,7 +57,7 @@ func (d *Deps) ExportUsers(c *gin.Context) {
 	xlsxutil.WriteDownload(c, "users.xlsx", data)
 }
 
-// ImportUsers POST /api/sys/users/import — 上传 xlsx 仅新增人员。
+// ImportUsers POST /api/sys/users/import — 上传 xlsx 仅新增人员；排序列可选，缺失或空值默认 100。
 func (d *Deps) ImportUsers(c *gin.Context) {
 	d.OpLog.Mark(c, "导入人员", "")
 	fh, err := c.FormFile("file")
@@ -80,7 +80,7 @@ func (d *Deps) ImportUsers(c *gin.Context) {
 	response.OK(c, gin.H{"imported": n})
 }
 
-// CreateUser POST /api/sys/users — 新增工作人员（password 空则=账户名）。
+// CreateUser POST /api/sys/users — 新增工作人员；password 空则=账户名；sort 为可选整数，默认 100，越小越靠前。
 func (d *Deps) CreateUser(c *gin.Context) {
 	d.OpLog.Mark(c, "新增用户", "")
 	var req service.UserInput
@@ -97,7 +97,7 @@ func (d *Deps) CreateUser(c *gin.Context) {
 	response.OK(c, u)
 }
 
-// UpdateUser PUT /api/sys/users/:id — 更新工作人员（password 空则不改）。
+// UpdateUser PUT /api/sys/users/:id — 更新工作人员；password 空则不改，sort/status 未传则保留原值。
 func (d *Deps) UpdateUser(c *gin.Context) {
 	d.OpLog.Mark(c, "更新用户", c.Param("id"))
 	id, ok := parseID(c)

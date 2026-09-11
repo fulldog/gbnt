@@ -5,7 +5,7 @@ import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
-const defaultProxyTarget = "https://www.weilone.com";
+const defaultProxyTarget = "https://nt.kfqzhsq.cn:8443";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
@@ -48,6 +48,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "jsdom",
       setupFiles: ["./tests/setup.ts"],
+      // 让表单依赖经过 Vite 转换，避免 Node 直接加载 async-validator 时默认导出不兼容。
+      server: { deps: { inline: ["element-plus"] } },
     },
   };
 });

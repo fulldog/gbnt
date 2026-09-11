@@ -9,13 +9,13 @@ pnpm dev:admin
 ```
 
 开发服务器默认把同源 `/api` 和 `/uploads` 请求代理到远程测试服务
-`https://www.weilone.com`。如需切换到本机后端，在 `.env.local` 中覆盖：
+`https://nt.kfqzhsq.cn:8443`（与小程序使用相同 HTTPS 入口，必须保留 `8443` 端口）。如需切换到本机后端，在 `.env.local` 中覆盖：
 
 ```dotenv
 VITE_API_PROXY_TARGET=http://127.0.0.1:8080
 ```
 
-如果前端与后端分别部署，可设置 `VITE_API_BASE_URL` 为后端 HTTPS 地址。旧的本地配置如果仍使用公网 HTTP 地址，也需同步切换为 HTTPS，并重启开发服务器。
+如果前端与后端分别部署，在构建环境设置 `VITE_API_BASE_URL=https://nt.kfqzhsq.cn:8443`；同源部署时保持为空，继续走同源 `/api` 和 `/uploads`（域名相同但端口不同仍属于跨源）。`VITE_API_PROXY_TARGET` 只影响开发代理，不会改变生产包的 API 地址。若本机已有 `.env.local` 或 `.env.development.local`，也需要更新旧的接口或代理地址，并重启开发服务器；生产包需要重新构建发布。
 
 图片与签名共用资源地址解析：相对路径沿用同源代理或配置的 API 地址；历史 HTTP 绝对地址仅在与 HTTPS API 地址或当前 HTTPS 页面同主机时升级协议，不改写第三方地址和本地预览路径。
 

@@ -23,6 +23,8 @@ export type AdminUserListResult = Omit<UserListResult, "list"> & {
   list: AdminUser[];
   page: number;
   size: number;
+  /** 新服务明确返回 true；旧服务缺省时不发送排序，避免静默忽略。 */
+  sort_supported?: boolean;
 };
 
 /** 业务组织候选不包含系统管理模型的审计字段。 */

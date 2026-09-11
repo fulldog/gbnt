@@ -28,7 +28,7 @@ pnpm dev:mp
 
 编译产物位于 `apps/miniapp/dist/dev/mp-weixin`，把这个目录导入微信开发者工具。项目 `AppID` 需要在 `src/manifest.json` 或微信开发者工具项目设置中配置。
 
-小程序不能使用管理后台的 Vite 代理。当前测试服务使用 `https://www.weilone.com`，将 `.env.example` 复制到不提交的 `.env.local` 后即可连接；发布到其他环境时替换为对应的 HTTPS Origin。若本机已有 `.env.development.local`，也需要更新其中的 `VITE_API_BASE_URL`，避免开发模式仍覆盖成旧的 HTTP 地址。微信公众平台需配置 request、uploadFile、downloadFile 合法域名；`src/manifest.json` 的正式 `urlCheck: true` 保持不变，开发者工具默认开启域名/HTTPS 校验。
+小程序不能使用管理后台的 Vite 代理。当前测试服务使用 `https://nt.kfqzhsq.cn:8443`，与管理后台使用相同 HTTPS 入口，必须保留 `8443` 端口。将 `.env.example` 复制到不提交的 `.env.local` 后即可连接；发布到其他环境时替换为对应的 HTTPS Origin。若本机已有 `.env.development.local`，也需要更新其中的 `VITE_API_BASE_URL`，避免开发模式仍覆盖成旧地址。微信公众平台需配置 request、uploadFile、downloadFile 合法域名；`src/manifest.json` 的正式 `urlCheck: true` 保持不变，开发者工具默认开启域名/HTTPS 校验。
 
 HTTPS 证书可用不代表微信合法域名已配置。若开发者工具报 `request:fail url not in domain list`，先配置或刷新合法域名；仅在用户明确授权的本机联调期间，可在开发者工具项目「本地设置」临时关闭域名/HTTPS 校验，对应开发产物下不提交的 `project.private.config.json`。接口仍使用 HTTPS，不修改正式配置；合法域名配置并验证完成后，再恢复本机校验。
 

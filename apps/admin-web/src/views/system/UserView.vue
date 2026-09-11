@@ -20,7 +20,7 @@ import UserFormDialog from "./UserFormDialog.vue";
 
 const tablePage = useTemplateRef<HTMLElement>("tablePage");
 const filtersVisible = shallowRef(true);
-const columns = [{ key: "username", label: "登录账号" }, { key: "phone", label: "手机号" }, { key: "org", label: "所属组织" }, { key: "role", label: "角色" }, { key: "status", label: "状态" }, { key: "created", label: "创建时间" }];
+const columns = [{ key: "username", label: "登录账号" }, { key: "phone", label: "手机号" }, { key: "org", label: "所属组织" }, { key: "role", label: "角色" }, { key: "sort", label: "排序" }, { key: "status", label: "状态" }, { key: "created", label: "创建时间" }];
 const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
 const permission = usePermissionStore();
@@ -218,6 +218,7 @@ onMounted(() => {
         <ElTableColumn v-if="visibleColumns.includes('phone')" prop="phone" label="手机号" min-width="135"  align="center"/>
         <ElTableColumn v-if="visibleColumns.includes('org')" label="所属组织" min-width="220" show-overflow-tooltip align="center"><template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template></ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('role')" label="角色" min-width="130" align="center"><template #default="scope">{{ displayRole(asUser(scope.row)) }}</template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('sort')" label="排序" width="90" align="center"><template #default="scope">{{ scope.row.sort ?? '—' }}</template></ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="90" align="center">
           <template #default="scope">
             <ElSwitch
@@ -256,7 +257,7 @@ onMounted(() => {
     </section>
 
     </div>
-    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
+    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :sort-supported="result.sort_supported === true" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
   </div>
 </template>
 

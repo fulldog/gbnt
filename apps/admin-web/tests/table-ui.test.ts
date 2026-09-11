@@ -431,6 +431,14 @@ describe("汇总表真实状态", () => {
 });
 
 describe("工作人员展示与表单候选", () => {
+  it("列表展示后端排序值且传递排序能力，0值不显示为空", async () => {
+    api.users.list.mockResolvedValue({ list: [{ ...user, sort: 0 }], total: 1, page: 1, size: 20, sort_supported: true });
+    const wrapper = render(UserView);
+    await flushPromises();
+    expect(wrapper.get('[data-column="排序"]').text()).toBe("0");
+    expect(wrapper.getComponent(UserFormDialog).props("sortSupported")).toBe(true);
+  });
+
   it("组织树选中和清空会重新查询，并回到第一页", async () => {
     const wrapper = render(UserView);
     await flushPromises();

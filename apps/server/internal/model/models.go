@@ -64,6 +64,9 @@ func (t OrgType) Valid() bool {
 	}
 }
 
+// DefaultUserSort 人员默认排序；历史数据升级后保持同值，继续按 ID 倒序。
+const DefaultUserSort int32 = 100
+
 // SysUser 工作人员。
 type SysUser struct {
 	Username     string `gorm:"size:64;uniqueIndex;not null;comment:登录账号" json:"username"`
@@ -72,6 +75,7 @@ type SysUser struct {
 	Phone        string `gorm:"size:32;comment:手机号" json:"phone"`
 	OrgID        uint64 `gorm:"column:org_id;index;default:0;comment:所属组织主键ID" json:"org_id"`
 	RoleID       uint64 `gorm:"column:role_id;index;default:0;comment:角色主键ID" json:"role_id"`
+	Sort         *int32 `gorm:"type:int;not null;default:100;comment:排序号 越小越靠前" json:"sort"` // 指针保留显式 0，避免 GORM 将零值替换为默认 100
 	Status       int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
 	IsSuperAdmin bool   `gorm:"column:is_super_admin;index;default:0;comment:是否超级管理员 全库仅允许一名" json:"is_super_admin"`
 	TokenVer     int    `gorm:"column:token_ver;default:0;comment:令牌版本 登录、改密或强制下线时递增" json:"-"`

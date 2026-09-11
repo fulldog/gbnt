@@ -16,7 +16,7 @@ import { checkDisplayFields, responseArray, responseInteger, responseRecord } fr
 export type ExportUsersQuery = Pick<UserListQuery, "org_id" | "keyword">;
 
 export interface ImportUsersInput {
-  /** 人员xlsx；英文角色ID优先，兼容旧文件的数字主键或唯一角色名称。 */
+  /** 人员xlsx；排序列缺失或空值默认100；英文角色ID优先，兼容旧文件的数字主键或唯一角色名称。 */
   file: Blob;
 }
 
@@ -55,10 +55,12 @@ export function createUsersApi(client: ApiClient) {
         list: responseArray(result.list, "工作人员").map((item): AdminUser => {
           const row = responseRecord(item, "工作人员");
           responseInteger(row.id, "人员 ID", 1);
+          if (result.sort_supported === true) responseInteger(row.sort, "人员排序", -2147483648);
           checkDisplayFields(row, ["org_name", "org_path", "role_name"]);
           return row as unknown as AdminUser;
         }),
         total: responseInteger(result.total, "人员总数"),
+        sort_supported: result.sort_supported === true,
         // 旧服务未返回分页元数据，仅在键缺失时沿用本次请求的有效值。
         page: responseInteger(result.page === undefined ? (query.page && query.page > 0 ? query.page : 1) : result.page, "页码", 1),
         size: responseInteger(result.size === undefined ? (query.size && query.size > 0 ? query.size : 20) : result.size, "每页数量", 1),
@@ -72,6 +74,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
+    /** sort 为可选整数，默认100；排序越小越靠前，同值按id倒序。 */
     create(input: CreateUserInput): Promise<SysUser> {
       return client.request<SysUser, CreateUserInput>("/api/sys/users", {
         method: "POST",
@@ -79,6 +82,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
+    /** sort/status 未传时保持原值；编辑人员资料不隐式改变账号状态。 */
     update(id: number, input: UpdateUserInput): Promise<SysUser> {
       return client.request<SysUser, UpdateUserInput>(`/api/sys/users/${id}`, {
         method: "PUT",
@@ -104,7 +108,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
-    /** 导出包含英文角色ID和角色名称；人员关联仍使用内部数字role_id。 */
+    /** 导出包含排序、英文角色ID和角色名称；顺序与人员列表一致，关联仍使用内部数字role_id。 */
     async exportFile(query: ExportUsersQuery = {}): Promise<DownloadResult<Blob>> {
       const response = await client.raw<Blob>("/api/sys/users/export", {
         query: { ...query },
