@@ -70,11 +70,13 @@ func (d *Deps) GetIssue(c *gin.Context) {
 
 // CreateIssue POST /api/issues — 新增排查；org_id + QuizBool 推导 needs_rectify/status。
 func (d *Deps) CreateIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "上报问题", "")
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
+	d.OpLog.Mark(c, "上报问题", req.Type)
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
 		if issueWriteConflict(c, err) {
@@ -89,6 +91,7 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 
 // UpdateIssue PUT /api/issues/:id — 更新问题；省略字段保持原值，完整校验类型表单，保留整改历史。
 func (d *Deps) UpdateIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "更新问题", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -111,6 +114,7 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 
 // DeleteIssue DELETE /api/issues/:id — 删除问题（软删）。
 func (d *Deps) DeleteIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "删除问题", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -124,6 +128,7 @@ func (d *Deps) DeleteIssue(c *gin.Context) {
 
 // RectifyIssue POST /api/issues/:id/rectify — 整改闭环；body 见 RectifyInput。
 func (d *Deps) RectifyIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "提交整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -147,6 +152,7 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 
 // ReRectifyIssue POST /api/issues/:id/re-rectify — 重新整改（done → pending）。
 func (d *Deps) ReRectifyIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "重新整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -162,6 +168,7 @@ func (d *Deps) ReRectifyIssue(c *gin.Context) {
 
 // ReassignIssue POST /api/issues/:id/reassign — 重新指派整改人；body: {assignee_user}。
 func (d *Deps) ReassignIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "重新指派整改人", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -186,6 +193,7 @@ func (d *Deps) ReassignIssue(c *gin.Context) {
 
 // ImportIssues POST /api/issues/import — 批量导入 {rows:IssueInput[]}。
 func (d *Deps) ImportIssues(c *gin.Context) {
+	d.OpLog.Mark(c, "批量导入", "")
 	var req service.ImportIssuesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")

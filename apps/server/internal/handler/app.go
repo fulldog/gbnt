@@ -68,6 +68,7 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 
 // AppDeleteIssue 小程序本人删除上报；禁止通过姓名匹配或管理权限代替归属校验。
 func (d *Deps) AppDeleteIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序删除上报", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -82,12 +83,12 @@ func (d *Deps) AppDeleteIssue(c *gin.Context) {
 		}
 		return
 	}
-	d.OpLog.Mark(c, "小程序删除上报", c.Param("id"))
 	response.OK(c, nil)
 }
 
 // AppSubmitFeedback 小程序整单整改；必传说明、照片和当前轮次，后端原子完成剩余项。
 func (d *Deps) AppSubmitFeedback(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序整改反馈", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -112,6 +113,7 @@ func (d *Deps) AppSubmitFeedback(c *gin.Context) {
 
 // AppSliderStart 开始滑动验证。
 func (d *Deps) AppSliderStart(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序滑动验证开始", "")
 	if d.Captcha == nil {
 		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
 		return
@@ -126,6 +128,7 @@ func (d *Deps) AppSliderStart(c *gin.Context) {
 
 // AppSliderFinish 完成滑动，换取一次性 pass_token。
 func (d *Deps) AppSliderFinish(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序滑动验证完成", "")
 	var req struct {
 		SliderID   string `json:"slider_id" binding:"required"`   // 滑动会话 ID
 		DurationMs int64  `json:"duration_ms" binding:"required"` // 滑动耗时毫秒，须在配置区间内
@@ -156,11 +159,13 @@ type AppLoginReq struct {
 
 // AppLogin 小程序登录：账密 + pass_token。
 func (d *Deps) AppLogin(c *gin.Context) {
+	d.OpLog.Mark(c, "登录", "")
 	var req AppLoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
+	d.OpLog.Mark(c, "登录", req.Username)
 	// 协议校验先于一次性滑动令牌消费，未同意时不得创建登录会话。
 	if !req.Agreed {
 		response.Fail(c, 400, response.CodeBadReq, "请先阅读并同意用户协议与隐私政策")
@@ -184,7 +189,6 @@ func (d *Deps) AppLogin(c *gin.Context) {
 		response.Fail(c, 500, response.CodeServer, "用户资料加载失败")
 		return
 	}
-	d.OpLog.Mark(c, "登录", user.Username)
 	response.OK(c, gin.H{
 		"token":      token,
 		"expires_at": exp,
@@ -316,11 +320,13 @@ func (d *Deps) AppGetIssue(c *gin.Context) {
 
 // AppCreateIssue 小程序上报（按 quiz 推导 new/done）。
 func (d *Deps) AppCreateIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序上报", "")
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
+	d.OpLog.Mark(c, "小程序上报", req.Type)
 	user, err := userFromCtx(c)
 	if err != nil {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
@@ -343,6 +349,7 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 
 // AppRectifyIssue 小程序页内提交整改。
 func (d *Deps) AppRectifyIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -367,6 +374,7 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 
 // AppReRectifyIssue 小程序重新整改（done → pending）。
 func (d *Deps) AppReRectifyIssue(c *gin.Context) {
+	d.OpLog.Mark(c, "小程序重新整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return

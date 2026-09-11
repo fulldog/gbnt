@@ -83,7 +83,16 @@ func AccessLog() gin.HandlerFunc {
 		blw := &bodyLogWriter{ResponseWriter: c.Writer, buf: bytes.NewBuffer(nil)}
 		c.Writer = blw
 
+		// 写操作在进入 JWT/业务前先标动作名，失败与成功共用同一条操作日志。
+		if beforeAccess != nil && shouldPersistOpLog(c) {
+			beforeAccess(c)
+		}
+
 		c.Next()
+
+		if beforeAccess != nil && shouldPersistOpLog(c) {
+			beforeAccess(c)
+		}
 
 		reqLog := maskJSON(string(reqBody))
 		if reqLog == "" && strings.HasPrefix(c.ContentType(), "multipart/") {
@@ -194,7 +203,15 @@ func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, s
 
 type AfterAccessFunc func(c *gin.Context, req, resp string)
 
+type BeforeAccessFunc func(c *gin.Context)
+
 var afterAccess AfterAccessFunc
+var beforeAccess BeforeAccessFunc
+
+// OnBeforeAccess 注册进入业务前的回调（写入操作动作名）。
+func OnBeforeAccess(fn BeforeAccessFunc) {
+	beforeAccess = fn
+}
 
 // OnAfterAccess 注册访问结束后的回调（写入操作日志表）。
 func OnAfterAccess(fn AfterAccessFunc) {

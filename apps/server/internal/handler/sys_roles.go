@@ -33,6 +33,7 @@ func (d *Deps) ListRoles(c *gin.Context) {
 
 // CreateRole POST /api/sys/roles — 新增角色。
 func (d *Deps) CreateRole(c *gin.Context) {
+	d.OpLog.Mark(c, "新增角色", "")
 	var req service.RoleInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
@@ -48,6 +49,7 @@ func (d *Deps) CreateRole(c *gin.Context) {
 
 // UpdateRole PUT /api/sys/roles/:id — 更新角色（id=1 超管不可编辑）。
 func (d *Deps) UpdateRole(c *gin.Context) {
+	d.OpLog.Mark(c, "更新角色", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -67,6 +69,7 @@ func (d *Deps) UpdateRole(c *gin.Context) {
 
 // DeleteRole DELETE /api/sys/roles/:id — 删除角色（超管不可删；仍有用户绑定时拒绝）。
 func (d *Deps) DeleteRole(c *gin.Context) {
+	d.OpLog.Mark(c, "删除角色", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -98,6 +101,7 @@ func (d *Deps) GetRoleAPIs(c *gin.Context) {
 
 // SetRoleAPIs PUT /api/sys/roles/:id/apis — 覆盖授权 {api_ids:[...]}（超管不可编辑）。
 func (d *Deps) SetRoleAPIs(c *gin.Context) {
+	d.OpLog.Mark(c, "设置角色API权限", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return

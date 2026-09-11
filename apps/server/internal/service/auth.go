@@ -13,6 +13,7 @@ import (
 
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
+	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/pkg/jwtutil"
 	"gbnt/apps/server/pkg/response"
 )
@@ -197,13 +198,34 @@ const (
 	maxOpBody   = 16384
 )
 
-// Mark 标记本请求的操作文案，由中间件在响应后写入 OpLog（含 request/response）。
+// Mark 标记本请求的操作文案；须在业务校验前调用，失败也会落入 OpLog。
 func (s *OpLogService) Mark(c *gin.Context, action, detail string) {
-	if c == nil {
+	if s == nil || c == nil {
 		return
 	}
 	c.Set(ctxOpAction, action)
 	c.Set(ctxOpDetail, detail)
+}
+
+// MarkFromCatalog 按 sys_apis 目录写入动作名；已有 Mark 时不覆盖。
+func (s *OpLogService) MarkFromCatalog(c *gin.Context, permSvc *perm.Service) {
+	if s == nil || c == nil || permSvc == nil {
+		return
+	}
+	if v, ok := c.Get(ctxOpAction); ok {
+		if act, _ := v.(string); strings.TrimSpace(act) != "" {
+			return
+		}
+	}
+	path := c.FullPath()
+	if path == "" {
+		return
+	}
+	api, ok := permSvc.FindAPI(c.Request.Method, path)
+	if !ok || strings.TrimSpace(api.Name) == "" {
+		return
+	}
+	c.Set(ctxOpAction, api.Name)
 }
 
 // Persist 写入操作日志（含脱敏后的请求/响应体）。

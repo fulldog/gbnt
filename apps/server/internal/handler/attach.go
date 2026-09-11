@@ -68,6 +68,7 @@ func watermarkFromForm(c *gin.Context) (service.WatermarkInput, error) {
 
 // AttachUploadImages POST /api/attachments/images — 批量直传图片（multipart files/file + 可选 watermark/lat/lng/address）。
 func (d *Deps) AttachUploadImages(c *gin.Context) {
+	d.OpLog.Mark(c, "上传图片", "")
 	maxMem := d.Cfg.Upload.MaxFileSize
 	if maxMem <= 0 {
 		maxMem = 32 << 20
@@ -99,6 +100,5 @@ func (d *Deps) AttachUploadImages(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "上传图片", "")
 	response.OK(c, gin.H{"list": list})
 }

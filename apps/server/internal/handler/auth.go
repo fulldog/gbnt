@@ -47,11 +47,13 @@ func (d *Deps) GetCaptcha(c *gin.Context) {
 
 // Login POST /api/auth/login — 账密 + 图形验证码（JWT 公开）。超管跳过 RBAC；其余须有 web.auth/login。
 func (d *Deps) Login(c *gin.Context) {
+	d.OpLog.Mark(c, "登录", "")
 	var req LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
+	d.OpLog.Mark(c, "登录", req.Username)
 	if d.Cfg != nil && d.Cfg.Captcha.Enabled {
 		if err := d.Captcha.VerifyImage(req.CaptchaID, req.Captcha); err != nil {
 			response.Fail(c, 400, response.CodeBadReq, err.Error())
@@ -74,7 +76,6 @@ func (d *Deps) Login(c *gin.Context) {
 		return
 	}
 	c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), service.UserInfoFromModel(user)))
-	d.OpLog.Mark(c, "登录", user.Username)
 	response.OK(c, gin.H{
 		"token":      token,
 		"expires_at": exp,
@@ -144,11 +145,13 @@ func (d *Deps) Me(c *gin.Context) {
 
 // ChangePassword PUT /api/auth/password — 本人改密（JWT，不做 RBAC）。
 func (d *Deps) ChangePassword(c *gin.Context) {
+	d.OpLog.Mark(c, "修改密码", "")
 	user, err := userFromCtx(c)
 	if err != nil {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
+	d.OpLog.Mark(c, "修改密码", user.Username)
 	var req service.ChangePasswordReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
@@ -158,20 +161,20 @@ func (d *Deps) ChangePassword(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "修改密码", user.Username)
 	response.OK(c, nil)
 }
 
 // Logout POST /api/auth/logout — 退出登录：当前 token jti 入黑名单（JWT，不做 RBAC）。
 func (d *Deps) Logout(c *gin.Context) {
+	d.OpLog.Mark(c, "退出登录", "")
+	if user, err := userFromCtx(c); err == nil {
+		d.OpLog.Mark(c, "退出登录", user.Username)
+	}
 	auth := c.GetHeader("Authorization")
 	raw := strings.TrimPrefix(auth, "Bearer ")
 	if err := d.Auth.Logout(raw); err != nil {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
-	}
-	if user, err := userFromCtx(c); err == nil {
-		d.OpLog.Mark(c, "退出登录", user.Username)
 	}
 	response.OK(c, nil)
 }

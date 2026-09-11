@@ -29,6 +29,7 @@ func (d *Deps) ListOrgs(c *gin.Context) {
 
 // CreateOrg POST /api/sys/orgs — 新增组织（parent_id=0 为根；否则按上级逐级推导类型）。
 func (d *Deps) CreateOrg(c *gin.Context) {
+	d.OpLog.Mark(c, "新增组织", "")
 	var req service.OrgCreateInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
@@ -44,6 +45,7 @@ func (d *Deps) CreateOrg(c *gin.Context) {
 
 // UpdateOrg PUT /api/sys/orgs/:id — 仅更新组织名称。
 func (d *Deps) UpdateOrg(c *gin.Context) {
+	d.OpLog.Mark(c, "更新组织", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -63,6 +65,7 @@ func (d *Deps) UpdateOrg(c *gin.Context) {
 
 // DeleteOrg DELETE /api/sys/orgs/:id — 删除组织（根不可删；有下级时拒绝）。
 func (d *Deps) DeleteOrg(c *gin.Context) {
+	d.OpLog.Mark(c, "删除组织", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return

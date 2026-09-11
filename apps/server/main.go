@@ -122,6 +122,9 @@ func main() {
 	handler.Register(r, deps)
 	// 未匹配 API 同样经过 JWT/RBAC，再由统一处理器保留 Trace ID 并返回标准 404。
 	r.NoRoute(handler.APINotFound)
+	middleware.OnBeforeAccess(func(c *gin.Context) {
+		deps.OpLog.MarkFromCatalog(c, permSvc)
+	})
 	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {
 		_ = deps.OpLog.Persist(c, req, resp)
 	})
