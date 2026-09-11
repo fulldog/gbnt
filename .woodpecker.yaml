@@ -16,7 +16,7 @@ clone:
       lfs: false
 steps:
   - name: build-server
-    image: golang:1.27-bookworm
+    image: bash
     depends_on: []
     environment:
       CGO_ENABLED: "0"
@@ -30,7 +30,7 @@ steps:
       - test -x gbnt.service
 
   - name: build-admin
-    image: node:22-bookworm
+    image: bash
     depends_on: []
     environment:
       CI: "true"
@@ -43,7 +43,7 @@ steps:
       - test -f apps/admin-web/dist/index.html
 
   - name: publish
-    image: alpine:3.21
+    image: bash
     depends_on: [build-server, build-admin]
     environment:
       DEPLOY_HOST:
