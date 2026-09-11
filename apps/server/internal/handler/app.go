@@ -157,7 +157,7 @@ type AppLoginReq struct {
 	PassToken string `json:"pass_token"`                  // 滑动验证一次性令牌；captcha.enabled=false 时可省略
 }
 
-// AppLogin 小程序登录：账密 + pass_token。
+// AppLogin 小程序登录：账密 + pass_token。[PRD] 超级管理员禁止登录小程序。
 func (d *Deps) AppLogin(c *gin.Context) {
 	d.OpLog.Mark(c, "登录", "")
 	var req AppLoginReq
@@ -177,8 +177,12 @@ func (d *Deps) AppLogin(c *gin.Context) {
 			return
 		}
 	}
-	user, token, exp, err := d.Auth.Login(req.Username, req.Password)
+	user, token, exp, err := d.Auth.LoginMiniapp(req.Username, req.Password)
 	if err != nil {
+		if errors.Is(err, service.ErrMiniappSuperAdmin) {
+			response.Fail(c, 403, response.CodeForbid, err.Error())
+			return
+		}
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}

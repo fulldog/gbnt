@@ -2,6 +2,7 @@ package service
 
 import (
 	"database/sql/driver"
+	"errors"
 	"strings"
 	"testing"
 
@@ -54,5 +55,26 @@ func TestLoginBumpsTokenVerAndSignsNewVersion(t *testing.T) {
 	}
 	if claims.UserID != 7 || claims.TokenVer != 4 {
 		t.Fatalf("JWT token_ver 必须与库一致: %+v", claims)
+	}
+}
+
+func TestLoginMiniappRejectsSuperAdminWithoutBump(t *testing.T) {
+	t.Parallel()
+	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "FROM `sys_users`",
+		Columns:  []string{"id", "username", "password", "role_id", "token_ver", "status", "is_super_admin"},
+		Rows:     [][]driver.Value{{int64(1), "admin", string(hash), int64(0), int64(3), int64(1), true}},
+	})
+	svc := &AuthService{DB: db, JWT: jwtutil.New("miniapp-super-test", 72, 24)}
+	user, token, _, err := svc.LoginMiniapp("admin", "admin")
+	if !errors.Is(err, ErrMiniappSuperAdmin) {
+		t.Fatalf("超管登录小程序应拒绝: user=%+v token=%q err=%v", user, token, err)
+	}
+	if token != "" {
+		t.Fatal("拒绝时不得签发 token")
 	}
 }

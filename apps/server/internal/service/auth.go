@@ -25,27 +25,54 @@ type AuthService struct {
 	Deny *jwtutil.DenyList
 }
 
+// ErrMiniappSuperAdmin 超级管理员禁止登录小程序。
+var ErrMiniappSuperAdmin = errors.New("超级管理员不能登录小程序")
+
 // Login 校验账密并签发 JWT。
 // [PRD] 登录成功后递增 token_ver，使该账号此前所有 JWT 立即失效（重复登录踢下线）。
 func (s *AuthService) Login(username, password string) (*model.SysUser, string, time.Time, error) {
-	var user model.SysUser
-	if err := s.DB.Where("username = ? AND status = 1", username).First(&user).Error; err != nil {
-		return nil, "", time.Time{}, errors.New("账号或密码不正确")
-	}
-	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
-		return nil, "", time.Time{}, errors.New("账号或密码不正确")
-	}
-	if err := s.checkRoleActive(user.RoleID); err != nil {
+	user, err := s.authenticate(username, password)
+	if err != nil {
 		return nil, "", time.Time{}, err
 	}
-	if err := s.bumpLoginTokenVer(&user); err != nil {
+	return s.issueLoginToken(user)
+}
+
+// LoginMiniapp 小程序登录：账密通过后拒绝超级管理员，且不递增 token_ver、不签发 token。
+func (s *AuthService) LoginMiniapp(username, password string) (*model.SysUser, string, time.Time, error) {
+	user, err := s.authenticate(username, password)
+	if err != nil {
+		return nil, "", time.Time{}, err
+	}
+	if user.IsSuperAdmin {
+		return nil, "", time.Time{}, ErrMiniappSuperAdmin
+	}
+	return s.issueLoginToken(user)
+}
+
+func (s *AuthService) authenticate(username, password string) (*model.SysUser, error) {
+	var user model.SysUser
+	if err := s.DB.Where("username = ? AND status = 1", username).First(&user).Error; err != nil {
+		return nil, errors.New("账号或密码不正确")
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
+		return nil, errors.New("账号或密码不正确")
+	}
+	if err := s.checkRoleActive(user.RoleID); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (s *AuthService) issueLoginToken(user *model.SysUser) (*model.SysUser, string, time.Time, error) {
+	if err := s.bumpLoginTokenVer(user); err != nil {
 		return nil, "", time.Time{}, err
 	}
 	token, exp, err := s.JWT.Sign(user.ID, user.TokenVer)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
-	return &user, token, exp, nil
+	return user, token, exp, nil
 }
 
 // bumpLoginTokenVer 事务内递增令牌版本并写回 user.TokenVer，供签发使用。

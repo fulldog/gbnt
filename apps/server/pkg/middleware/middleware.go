@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"gbnt/apps/server/internal/service"
 	"io"
 	"strings"
 	"time"
@@ -198,6 +199,24 @@ func JWTAuth(jm *jwtutil.Manager, loadUser ActiveUserLoader, deny TokenDenier, s
 			}
 		}
 		c.Next()
+	}
+}
+
+// ForbidAppSuperAdmin 已登录的超级管理员不得访问 /api/app 业务接口（公开登录/滑块除外）。
+func ForbidAppSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if !strings.HasPrefix(path, "/api/app/") {
+			c.Next()
+			return
+		}
+		info, err := database.UserFromContext(c.Request.Context())
+		if err != nil || info == nil || !info.IsSuperAdmin {
+			c.Next()
+			return
+		}
+		response.Fail(c, 403, response.CodeForbid, service.ErrMiniappSuperAdmin.Error())
+		c.Abort()
 	}
 }
 

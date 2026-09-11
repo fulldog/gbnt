@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -161,5 +162,44 @@ func TestJWTAuthRenewKeepsTokenVer(t *testing.T) {
 	}
 	if claims.TokenVer != 9 || claims.UserID != 1 {
 		t.Fatalf("续期不得改变 token_ver: %+v", claims)
+	}
+}
+
+func TestForbidAppSuperAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		if c.Request.Header.Get("X-Super") == "1" {
+			c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{
+				ID: 1, Username: "admin", IsSuperAdmin: true,
+			}))
+		}
+		c.Next()
+	})
+	r.Use(ForbidAppSuperAdmin())
+	r.POST("/api/app/auth/login", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/app/todos", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/issues", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	login := httptest.NewRecorder()
+	r.ServeHTTP(login, httptest.NewRequest(http.MethodPost, "/api/app/auth/login", nil))
+	if login.Code != http.StatusOK {
+		t.Fatalf("公开登录应放行，got %d %s", login.Code, login.Body.String())
+	}
+
+	adminWeb := httptest.NewRecorder()
+	reqWeb := httptest.NewRequest(http.MethodGet, "/api/issues", nil)
+	reqWeb.Header.Set("X-Super", "1")
+	r.ServeHTTP(adminWeb, reqWeb)
+	if adminWeb.Code != http.StatusOK {
+		t.Fatalf("管理端应放行超管，got %d %s", adminWeb.Code, adminWeb.Body.String())
+	}
+
+	todos := httptest.NewRecorder()
+	reqTodos := httptest.NewRequest(http.MethodGet, "/api/app/todos", nil)
+	reqTodos.Header.Set("X-Super", "1")
+	r.ServeHTTP(todos, reqTodos)
+	if todos.Code != http.StatusForbidden || !strings.Contains(todos.Body.String(), "超级管理员不能登录小程序") {
+		t.Fatalf("超管访问小程序业务应 403，got %d %s", todos.Code, todos.Body.String())
 	}
 }
