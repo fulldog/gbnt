@@ -1,3 +1,5 @@
+import { beginNativeOverlay, type NativeOverlayVisibilityChange } from "@/utils/native-overlay";
+
 /** 将设备接口失败转为可操作的中文说明；用户取消不视为错误。 */
 export function deviceFailureMessage(error: { errMsg?: string }, action: string): string {
   const message = error.errMsg || "";
@@ -8,14 +10,24 @@ export function deviceFailureMessage(error: { errMsg?: string }, action: string)
 }
 
 /** 只有用户明确点击确认后才打开设置，不自动授予定位或相机权限。 */
-export function showDeviceFailure(error: { errMsg?: string }, action: string): void {
+export function showDeviceFailure(
+  error: { errMsg?: string },
+  action: string,
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange,
+): void {
   const message = deviceFailureMessage(error, action);
   if (!message) return;
   if (/auth|permission|deny|denied/i.test(error.errMsg || "")) {
     uni.showModal({
       title: "需要设备权限", content: message, confirmText: "打开设置",
       success: (result) => {
-        if (result.confirm) uni.openSetting({});
+        if (!result.confirm) return;
+        const closeOverlay = beginNativeOverlay(onNativeOverlayVisibilityChange);
+        try {
+          uni.openSetting({ complete: closeOverlay });
+        } catch {
+          closeOverlay();
+        }
       },
     });
   } else {

@@ -1,17 +1,22 @@
 import { computed, onScopeDispose, shallowRef } from "vue";
 import { hasValidCoordinates } from "@/utils/issue-display";
+import { beginNativeOverlay, type NativeOverlayVisibilityChange } from "@/utils/native-overlay";
 
 type PrivacyResolver = (result: { event: "agree" | "disagree"; buttonId?: string }) => void;
 interface PrivacyApi {
   requirePrivacyAuthorize(options: { success(): void; fail(error: { errMsg?: string }): void }): void;
   onNeedPrivacyAuthorization(callback: (resolve: PrivacyResolver) => void): void;
   offNeedPrivacyAuthorization?(callback: (resolve: PrivacyResolver) => void): void;
-  openPrivacyContract(options: object): void;
+  openPrivacyContract?(options: { fail?(error: { errMsg?: string }): void }): void;
 }
 declare const wx: PrivacyApi | undefined;
 
+export interface InspectionAccessOptions {
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange;
+}
+
 /** 巡查入口统一检查隐私、定位、相机及微信系统权限；拒绝后保留草稿并等待用户打开设置。 */
-export function useInspectionAccess() {
+export function useInspectionAccess(options: InspectionAccessOptions = {}) {
   const phase = shallowRef<"idle" | "checking" | "privacy" | "denied" | "ready">("idle");
   const message = shallowRef("");
   const position = shallowRef<{ latitude: number; longitude: number } | null>(null);
@@ -38,7 +43,19 @@ export function useInspectionAccess() {
     phase.value = "denied";
     message.value = "巡查需要隐私授权，授权后可继续填写。";
   }
-  function openPrivacy(): void { privacyApi?.openPrivacyContract({}); }
+  function openPrivacy(): void {
+    const closeOverlay = beginNativeOverlay(options.onNativeOverlayVisibilityChange);
+    try {
+      if (!privacyApi?.openPrivacyContract) {
+        closeOverlay();
+        return;
+      }
+      // 成功打开后由页面 onShow 结束保护；fail 代表没有进入原生隐私页。
+      privacyApi.openPrivacyContract({ fail: closeOverlay });
+    } catch {
+      closeOverlay();
+    }
+  }
 
   async function check(): Promise<void> {
     if (!ready.value) phase.value = "checking";
@@ -76,11 +93,17 @@ export function useInspectionAccess() {
     return pending;
   }
   async function openSettings(): Promise<void> {
+    const closeOverlay = beginNativeOverlay(options.onNativeOverlayVisibilityChange);
     try {
       if (systemDenied && uni.openAppAuthorizeSetting) await uni.openAppAuthorizeSetting({});
       else await uni.openSetting({});
-      await request();
-    } catch { message.value = "设置尚未完成，请开启所需权限后重试。"; }
+    } catch {
+      message.value = "设置尚未完成，请开启所需权限后重试。";
+      return;
+    } finally {
+      closeOverlay();
+    }
+    await request();
   }
   function denyMedia(): void {
     systemDenied = true;

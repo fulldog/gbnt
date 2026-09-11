@@ -72,7 +72,7 @@ describe("巡查位置选择", () => {
     let succeed!: (result: object) => void;
     chooseLocation.mockImplementation(({ success }: { success(result: object): void }) => { succeed = success; });
     const visibility = vi.fn();
-    const location = useLocation({ onPickerVisibilityChange: visibility });
+    const location = useLocation({ onNativeOverlayVisibilityChange: visibility });
 
     const pending = location.choose();
     expect(visibility).toHaveBeenCalledWith(true);

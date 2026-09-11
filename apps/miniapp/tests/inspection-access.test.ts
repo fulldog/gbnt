@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope } from "vue";
-import { useInspectionAccess } from "@/composables/report/useInspectionAccess";
+import { useInspectionAccess, type InspectionAccessOptions } from "@/composables/report/useInspectionAccess";
 
 let settings = { cameraAuthorized: "authorized", albumAuthorized: "authorized", locationAuthorized: "authorized" };
 const scopes: ReturnType<typeof effectScope>[] = [];
-function setup() { const scope = effectScope(); scopes.push(scope); return scope.run(useInspectionAccess)!; }
+function setup(options: InspectionAccessOptions = {}) {
+  const scope = effectScope();
+  scopes.push(scope);
+  return scope.run(() => useInspectionAccess(options))!;
+}
 beforeEach(() => {
   settings = { cameraAuthorized: "authorized", albumAuthorized: "authorized", locationAuthorized: "authorized" };
   vi.stubGlobal("uni", { authorize: vi.fn().mockResolvedValue({}), getLocation: vi.fn().mockResolvedValue({ latitude: 36, longitude: 116 }),
@@ -32,6 +36,36 @@ describe("巡查权限入口", () => {
     settings.albumAuthorized = "authorized"; await access.openSettings();
     expect(uni.openAppAuthorizeSetting).toHaveBeenCalled(); expect(access.ready.value).toBe(true);
     expect(uni.authorize).not.toHaveBeenCalledWith({ scope: "scope.writePhotosAlbum" });
+  });
+  it("打开微信或手机设置期间通知提交页保留当前会话", async () => {
+    let closeSetting!: () => void;
+    vi.mocked(uni.openSetting).mockImplementationOnce(() => new Promise((resolve) => {
+      closeSetting = () => resolve({});
+    }) as never);
+    const visibility = vi.fn();
+    const access = setup({ onNativeOverlayVisibilityChange: visibility });
+
+    const pending = access.openSettings();
+    expect(visibility.mock.calls).toEqual([[true]]);
+    closeSetting();
+    await pending;
+    expect(visibility.mock.calls).toEqual([[true], [false]]);
+  });
+  it("隐私协议原生页打开失败时解除页面会话保护", () => {
+    let contractOptions!: { fail(error: { errMsg?: string }): void };
+    vi.stubGlobal("wx", {
+      onNeedPrivacyAuthorization: vi.fn(),
+      offNeedPrivacyAuthorization: vi.fn(),
+      requirePrivacyAuthorize: vi.fn(),
+      openPrivacyContract: vi.fn((options) => { contractOptions = options; }),
+    });
+    const visibility = vi.fn();
+    const access = setup({ onNativeOverlayVisibilityChange: visibility });
+
+    access.openPrivacy();
+    expect(visibility.mock.calls).toEqual([[true]]);
+    contractOptions.fail({ errMsg: "openPrivacyContract:fail" });
+    expect(visibility.mock.calls).toEqual([[true], [false]]);
   });
   it("隐私同意前不调用设备权限，拒绝后保留不可用状态", async () => {
     let onPrivacy!: (resolve: (value: { event: string }) => void) => void;

@@ -6,6 +6,7 @@ import RecoverableImage from "@/components/common/RecoverableImage.vue";
 import { usePhotoUploads } from "@/composables/report/usePhotoUploads";
 import { hasValidCoordinates } from "@/utils/issue-display";
 import { showDeviceFailure } from "@/utils/device-permissions";
+import { beginNativeOverlay } from "@/utils/native-overlay";
 
 interface LocationInput {
   lat: number | null;
@@ -36,7 +37,11 @@ const props = withDefaults(defineProps<{
 const { maximum, cameraOnly, cooldownSeconds, watermark, location } = toRefs(props);
 
 const model = defineModel<UploadedPhoto[]>({ required: true });
-const emit = defineEmits<{ pending: [value: boolean]; permissionDenied: [] }>();
+const emit = defineEmits<{
+  pending: [value: boolean];
+  permissionDenied: [];
+  nativeOverlay: [visible: boolean];
+}>();
 const selecting = shallowRef(false);
 let active = true;
 const uploads = usePhotoUploads(async (job) => {
@@ -113,27 +118,31 @@ function addPhoto(): void {
   }
   selecting.value = true;
   const camera = cameraOnly.value;
+  const closeOverlay = beginNativeOverlay((visible) => emit("nativeOverlay", visible));
   try {
     chooseMedia({
       count: cameraOnly.value ? 1 : remaining.value,
       mediaType: ["image"],
       sourceType: cameraOnly.value ? ["camera"] : ["camera", "album"],
       success: (result) => {
+        closeOverlay();
         if (!active) return;
         const paths = result.tempFiles.map((file) => file.tempFilePath).filter(Boolean).slice(0, remaining.value);
         uploads.enqueue(paths, camera ? "camera" : "unknown", Date.now(), { ...location.value });
         selecting.value = false;
       },
       fail: (error) => {
+        closeOverlay();
         if (!active) return;
         selecting.value = false;
         if (/auth|permission|deny|denied|privacy/i.test(error.errMsg || "")) emit("permissionDenied");
-        showDeviceFailure(error, "选择照片");
+        showDeviceFailure(error, "选择照片", (visible) => emit("nativeOverlay", visible));
       },
     });
   } catch {
+    closeOverlay();
     selecting.value = false;
-    showDeviceFailure({}, "选择照片");
+    showDeviceFailure({}, "选择照片", (visible) => emit("nativeOverlay", visible));
   }
 }
 
@@ -144,7 +153,13 @@ function preview(index: number, loadedUrl?: string): void {
   if (!current) {
     return;
   }
-  uni.previewImage({ current, urls: urls.filter(Boolean) });
+  const closeOverlay = beginNativeOverlay((visible) => emit("nativeOverlay", visible));
+  try {
+    // previewImage 没有关闭回调；成功打开后由页面 onShow 结束保护。
+    uni.previewImage({ current, urls: urls.filter(Boolean), fail: closeOverlay });
+  } catch {
+    closeOverlay();
+  }
 }
 
 function remove(index: number): void {

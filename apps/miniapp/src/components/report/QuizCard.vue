@@ -31,6 +31,7 @@ const emit = defineEmits<{
   photos: [change: { type: QuizFormItem['type']; value: UploadedPhoto[] }];
   pending: [change: { type: QuizFormItem['type']; value: boolean }];
   permissionDenied: [];
+  nativeOverlay: [visible: boolean];
 }>();
 
 const indicatesIssue = computed(() =>
@@ -112,6 +113,7 @@ function updateDescription(event: Event | InputEventLike): void {
         @update:model-value="emit('photos', { type: item.type, value: $event })"
         @pending="emit('pending', { type: item.type, value: $event })"
         @permission-denied="emit('permissionDenied')"
+        @native-overlay="emit('nativeOverlay', $event)"
       />
     </view>
   </view>

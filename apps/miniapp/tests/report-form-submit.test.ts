@@ -26,18 +26,24 @@ function setup(form = validTransformer(), visible = true, locationApi: {
   const emit = vi.fn();
   const choose = locationApi.choose ?? vi.fn().mockResolvedValue(null);
   const refresh = locationApi.refresh ?? vi.fn().mockResolvedValue(null);
+  let notifyLocationOverlay: ((visible: boolean) => void) | undefined;
   const state = setupSfc("components/report/ReportTypeForm.vue", props, {
     "@dcloudio/uni-app": { onHide: vi.fn() },
     "@/api/runtime": { miniappApi: api, toAssetUrl: (url: string) => url },
     "@/components/media/SignaturePad.vue": {}, "@/components/media/PhotoPicker.vue": {}, "@/components/common/RecoverableImage.vue": {},
     "@/components/report/IssueTypeFields.vue": {}, "@/components/report/QuizCard.vue": {}, "@/components/region/RegionPicker.vue": {},
-    "@/composables/report/useLocation": { useLocation: () => ({
-      choosing: shallowRef(false), refreshing: shallowRef(false), busy: shallowRef(false), choose, refresh,
-    }) },
+    "@/composables/report/useLocation": { useLocation: (options: {
+      onNativeOverlayVisibilityChange?: (visible: boolean) => void;
+    } = {}) => {
+      notifyLocationOverlay = options.onNativeOverlayVisibilityChange;
+      return {
+        choosing: shallowRef(false), refreshing: shallowRef(false), busy: shallowRef(false), choose, refresh,
+      };
+    } },
     "@/domain/issues/definitions": definitions, "@/domain/issues/form": forms, "@/domain/issues/mapper": mapper,
     "@/domain/issues/validation": validation, "@/utils/events": events, "@/utils/issue-display": display,
   }, emit) as unknown as { form: forms.ReportFormState; step: Ref<number>; codeError: Ref<string>; hasPendingPhotos: Ref<boolean>; submitting: Ref<boolean>; uploadingSignature: Ref<boolean>; setPhotosPending(change: {type: forms.QuizFormItem['type']; value: boolean}): void; updateQuizPhotos(change: {type: forms.QuizFormItem['type']; value: forms.UploadedPhoto[]}): void; updateText(key: "code" | "address", event: { detail: { value: string } }): void; setCodeMode(mode: "auto" | "manual"): void; selectLocationOnMap(): Promise<void>; refreshCurrentLocation(): Promise<void>; submit(): Promise<void>; updateSignatureStrokes(strokes: forms.ReportFormState["signatureStrokes"]): void; signatureRef: Ref<unknown> };
-  return { state, props, emit, choose, refresh };
+  return { state, props, emit, choose, refresh, notifyLocationOverlay: (visible: boolean) => notifyLocationOverlay?.(visible) };
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,6 +51,15 @@ beforeEach(() => {
   api.issues.create.mockResolvedValue({ issue_key: "created", code: "03" });
 });
 describe("当前类型提交与签名", () => {
+  it("地图原生窗口状态统一上报给提交页", () => {
+    const { emit, notifyLocationOverlay } = setup();
+    notifyLocationOverlay(true);
+    notifyLocationOverlay(false);
+    expect(emit.mock.calls.filter(([event]) => event === "nativeOverlay")).toEqual([
+      ["nativeOverlay", true],
+      ["nativeOverlay", false],
+    ]);
+  });
   it("地图选点、手动编辑和重新定位分别更新同一份位置数据", async () => {
     const choose = vi.fn().mockResolvedValue({ address: "地图选中的地址", latitude: 36.1, longitude: 116.1 });
     const refresh = vi.fn().mockResolvedValue({ address: "重新定位的地址", latitude: 36.2, longitude: 116.2 });

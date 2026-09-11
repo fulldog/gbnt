@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePhotoUploads, type PhotoUploadJob } from "@/composables/report/usePhotoUploads";
 import { changeQuizAnswer, createReportForm } from "@/domain/issues/form";
 import { validateBasicStep, validateQuizItem } from "@/domain/issues/validation";
-import { deviceFailureMessage } from "@/utils/device-permissions";
+import { deviceFailureMessage, showDeviceFailure } from "@/utils/device-permissions";
+
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("照片上传恢复", () => {
   it("同批失败不丢成功项，只重试失败项且保留原取证时间", async () => {
@@ -73,5 +75,23 @@ describe("现场数据校验", () => {
   it("取消不报错，拒绝权限给中文恢复路径", () => {
     expect(deviceFailureMessage({ errMsg: "chooseMedia:fail cancel" }, "拍照")).toBe("");
     expect(deviceFailureMessage({ errMsg: "chooseMedia:fail auth deny" }, "拍照")).toContain("设置中授权");
+  });
+  it("从权限提示进入微信设置时同步保护提交页会话", () => {
+    let respond!: (result: { confirm: boolean }) => void;
+    const visibility = vi.fn();
+    const openSetting = vi.fn(({ complete }: { complete(): void }) => {
+      complete();
+      complete();
+    });
+    vi.stubGlobal("uni", {
+      showModal: vi.fn(({ success }: { success(result: { confirm: boolean }): void }) => { respond = success; }),
+      openSetting,
+    });
+
+    showDeviceFailure({ errMsg: "chooseMedia:fail auth deny" }, "拍照", visibility);
+    respond({ confirm: true });
+
+    expect(openSetting).toHaveBeenCalledOnce();
+    expect(visibility.mock.calls).toEqual([[true], [false]]);
   });
 });

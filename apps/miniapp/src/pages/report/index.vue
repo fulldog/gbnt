@@ -25,13 +25,22 @@ const workspace = ref(createReportWorkspace());
 const revisions = ref<Partial<Record<IssueType, number>>>({});
 const sessionRevision = shallowRef(0);
 const busyTypes = ref<Partial<Record<IssueType, boolean>>>({});
-const locationPickerActive = shallowRef(false);
+const nativeOverlayDepth = shallowRef(0);
+const nativeOverlayCovered = shallowRef(false);
 const busy = computed(() => Object.values(busyTypes.value).some(Boolean));
 const drafts = computed(() => ISSUE_TYPE_OPTIONS.filter(({ value }) => workspace.value.drafts[value]).map(({ value }) =>
   ({ type: value, draft: workspace.value.drafts[value]!, key: `${sessionRevision.value}:${value}:${revisions.value[value] || 0}` })));
 const { tree, loading: regionsLoading, error: regionsError, load: loadRegions } = useRegions();
-const access = useInspectionAccess();
+const access = useInspectionAccess({
+  onNativeOverlayVisibilityChange: setNativeOverlayVisibility,
+});
 let active = true;
+
+function setNativeOverlayVisibility(visible: boolean): void {
+  nativeOverlayDepth.value = visible
+    ? nativeOverlayDepth.value + 1
+    : Math.max(0, nativeOverlayDepth.value - 1);
+}
 
 function saveType(type: IssueType, draft: ReportTypeDraft): void {
   if (!active || !shown.value || draft.form.type !== type) return;
@@ -51,7 +60,8 @@ function submitted(type: IssueType, code: string): void {
 }
 
 function clearFormSession(): void {
-  locationPickerActive.value = false;
+  nativeOverlayDepth.value = 0;
+  nativeOverlayCovered.value = false;
   workspace.value = createReportWorkspace();
   revisions.value = {};
   busyTypes.value = {};
@@ -71,11 +81,17 @@ onLoad(async () => {
 });
 onShow(() => {
   shown.value = true;
+  // 原生窗口没有统一的关闭回调，回到当前页后统一结束保护。
+  nativeOverlayDepth.value = 0;
+  nativeOverlayCovered.value = false;
   if (draftReady.value) void access.request();
 });
 onHide(() => {
-  // 微信原生地图会遮住页面并触发 onHide；此时仍属于当前填写会话。
-  if (locationPickerActive.value) return;
+  // 微信地图、相机/相册、图片预览、设置等原生窗口会触发 onHide，但仍属于当前填写会话。
+  if (nativeOverlayDepth.value > 0 || nativeOverlayCovered.value) {
+    nativeOverlayCovered.value = true;
+    return;
+  }
   shown.value = false;
   clearFormSession();
 });
@@ -117,7 +133,7 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
           <ReportTypeForm :draft="entry.draft" :visible="shown && access.ready.value && workspace.activeType === entry.type"
             :initial-position="access.position.value" :region-tree="tree" :regions-loading="regionsLoading" :regions-error="regionsError"
             @save="saveType(entry.type, $event)" @submitted="submitted(entry.type, $event)"
-            @busy="busyTypes[entry.type] = $event" @location-picker="locationPickerActive = $event"
+            @busy="busyTypes[entry.type] = $event" @native-overlay="setNativeOverlayVisibility"
             @retry-regions="loadRegions" @permission-denied="access.denyMedia" />
         </view>
       </view>

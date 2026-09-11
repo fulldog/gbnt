@@ -10,7 +10,9 @@ interface ReportPageState {
   shown: Ref<boolean>;
   draftReady: Ref<boolean>;
   sessionRevision: Ref<number>;
-  locationPickerActive: Ref<boolean>;
+  nativeOverlayDepth: Ref<number>;
+  nativeOverlayCovered: Ref<boolean>;
+  setNativeOverlayVisibility(visible: boolean): void;
   saveType(type: IssueType, draft: reportWorkspace.ReportTypeDraft): void;
   selectType(type: IssueType): void;
 }
@@ -123,7 +125,7 @@ describe("巡查表单页面会话", () => {
     expect(state.workspace.value.drafts.well!.form.address).toBe("");
   });
 
-  it("原生地图遮挡页面时保留表单，地图关闭后的真实离开仍会清空", async () => {
+  it("原生窗口遮挡页面时保留表单，返回后真正离开仍会清空", async () => {
     const { state, hooks } = setupReportPage();
     await hooks.load();
     const well = reportWorkspace.createTypeDraft("well");
@@ -131,14 +133,25 @@ describe("巡查表单页面会话", () => {
     state.saveType("well", well);
     const previousRevision = state.sessionRevision.value;
 
-    state.locationPickerActive.value = true;
+    state.setNativeOverlayVisibility(true);
+    state.setNativeOverlayVisibility(true);
+    state.setNativeOverlayVisibility(false);
     hooks.hide();
 
     expect(state.shown.value).toBe(true);
+    expect(state.nativeOverlayDepth.value).toBe(1);
+    expect(state.nativeOverlayCovered.value).toBe(true);
     expect(state.sessionRevision.value).toBe(previousRevision);
     expect(state.workspace.value.drafts.well!.form.address).toBe("地图选择前的地址");
 
-    state.locationPickerActive.value = false;
+    state.setNativeOverlayVisibility(false);
+    hooks.hide();
+    expect(state.sessionRevision.value).toBe(previousRevision);
+    expect(state.workspace.value.drafts.well!.form.address).toBe("地图选择前的地址");
+
+    hooks.show();
+    expect(state.nativeOverlayDepth.value).toBe(0);
+    expect(state.nativeOverlayCovered.value).toBe(false);
     hooks.hide();
     expect(state.shown.value).toBe(false);
     expect(state.workspace.value.drafts.well!.form.address).toBe("");

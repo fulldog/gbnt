@@ -1,6 +1,7 @@
 import { computed, shallowRef } from "vue";
 import { hasValidCoordinates } from "@/utils/issue-display";
 import { showDeviceFailure } from "@/utils/device-permissions";
+import { beginNativeOverlay, type NativeOverlayVisibilityChange } from "@/utils/native-overlay";
 
 export interface SelectedLocation {
   address: string;
@@ -21,28 +22,22 @@ export interface LocationCenter {
 }
 
 export interface LocationOptions {
-  onPickerVisibilityChange?: (visible: boolean) => void;
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange;
 }
 
 type LocationAction = "map" | "refresh" | null;
 
 function openLocationPicker(
   center?: LocationCenter,
-  onPickerVisibilityChange?: (visible: boolean) => void,
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange,
 ): Promise<SelectedLocation | null> {
   return new Promise((resolve, reject) => {
-    let pickerVisible = true;
-    const closePicker = (): void => {
-      if (!pickerVisible) return;
-      pickerVisible = false;
-      onPickerVisibilityChange?.(false);
-    };
-    onPickerVisibilityChange?.(true);
+    const closeOverlay = beginNativeOverlay(onNativeOverlayVisibilityChange);
     try {
       uni.chooseLocation({
         ...(center ? { latitude: center.latitude, longitude: center.longitude } : {}),
         success: (result: ChooseLocationResult) => {
-          closePicker();
+          closeOverlay();
           const latitude = Number(result.latitude);
           const longitude = Number(result.longitude);
           if (!hasValidCoordinates(latitude, longitude)) {
@@ -56,17 +51,17 @@ function openLocationPicker(
           resolve({ address, latitude, longitude });
         },
         fail: (error) => {
-          closePicker();
+          closeOverlay();
           if (error.errMsg?.includes("cancel")) {
             resolve(null);
             return;
           }
-          showDeviceFailure(error, "选择现场位置");
+          showDeviceFailure(error, "选择现场位置", onNativeOverlayVisibilityChange);
           resolve(null);
         },
       });
     } catch (error) {
-      closePicker();
+      closeOverlay();
       reject(error);
     }
   });
@@ -82,7 +77,7 @@ export function useLocation(options: LocationOptions = {}) {
     if (busy.value) return null;
     action.value = "map";
     try {
-      return await openLocationPicker(center, options.onPickerVisibilityChange);
+      return await openLocationPicker(center, options.onNativeOverlayVisibilityChange);
     } finally {
       action.value = null;
     }
@@ -102,13 +97,13 @@ export function useLocation(options: LocationOptions = {}) {
       if (!hasValidCoordinates(center.latitude, center.longitude)) {
         throw new Error("未获取到有效定位，请开启手机定位后重试");
       }
-      return await openLocationPicker(center, options.onPickerVisibilityChange);
+      return await openLocationPicker(center, options.onNativeOverlayVisibilityChange);
     } catch (cause) {
       const error = cause as { message?: string; errMsg?: string };
       if (error.message && !error.errMsg) {
         uni.showToast({ title: error.message, icon: "none", duration: 3000 });
       } else {
-        showDeviceFailure(error, "重新定位");
+        showDeviceFailure(error, "重新定位", options.onNativeOverlayVisibilityChange);
       }
       return null;
     } finally {
