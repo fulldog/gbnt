@@ -1,0 +1,58 @@
+# Woodpecker：main/master 推送或手动触发后，构建并发布 Go API + 管理后台静态包。
+# 小程序不走这套发布（需微信侧合法域名，产物也不放 Nginx root）。
+#
+# Secrets（必填）：deploy_host、deploy_user、ssh_private_key
+# 远端约定与 docs/operations/linux-deploy.md 一致：仓库根 /opt/www/gbnt
+# 部署账号需能 rsync 写入上述路径，且可用 sudo -n systemctl restart gbnt。
+# 不要把 configs/config.yaml、storage/uploads、logs 打进产物（密钥与用户文件留在服务器）。
+
+when:
+  - event: [push, manual]
+    branch: [main, master]
+
+steps:
+  - name: build-server
+    image: golang:1.27-bookworm
+    depends_on: []
+    environment:
+      CGO_ENABLED: "0"
+      GOOS: linux
+      GOARCH: amd64
+      GOPROXY: https://goproxy.cn,direct
+      GOMAXPROCS: "1"
+    commands:
+      - cd apps/server
+      - go build -p 1 -trimpath -ldflags "-s -w" -o gbnt.service .
+      - test -x gbnt.service
+
+  - name: build-admin
+    image: node:22-bookworm
+    depends_on: []
+    environment:
+      CI: "true"
+    commands:
+      - corepack enable
+      - corepack prepare pnpm@11.25.0 --activate
+      - pnpm install --frozen-lockfile
+      # 同域部署：不要设置 VITE_API_BASE_URL，请求走同源 /api 与 /uploads
+      - pnpm --filter @gbnt/admin-web build
+      - test -f apps/admin-web/dist/index.html
+
+  - name: publish
+    image: alpine:3.21
+    depends_on: [build-server, build-admin]
+    environment:
+      DEPLOY_HOST:
+        from_secret: deploy_host
+      DEPLOY_USER:
+        from_secret: deploy_user
+      SSH_PRIVATE_KEY:
+        from_secret: ssh_private_key
+      DEPLOY_PATH: /opt/www/gbnt
+      PUBLISH_SRC: apps/server/gbnt.service apps/admin-web/dist
+      PUBLISH_DEST: apps/server/gbnt.service apps/admin-web/dist
+      REMOTE_AFTER: chmod +x /opt/www/gbnt/apps/server/gbnt.service && sudo -n systemctl restart gbnt
+      DEPLOY_HEALTH_URL: https://www.weilone.com/api/health
+    commands:
+      - apk add --no-cache bash rsync openssh-client curl
+      - bash /opt/www/mini-cicd/deploy-remote.sh
