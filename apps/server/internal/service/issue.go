@@ -49,7 +49,7 @@ type IssueInput struct {
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
 	ReportUserID            uint64          `json:"report_user_id"`             // 上报人账号：App 由登录用户注入；后台旧版必填，新版手工填报可不关联账号
-	AssigneeUser            uint64          `json:"assignee_user"`              // 需整改时必填；App 注入当前用户；须启用且所属组织与表单 org_id 互为上下级或同一节点
+	AssigneeUser            uint64          `json:"assignee_user"`              // 需整改时必填；App 注入当前用户；须启用；用户 org_id=0 不限组织，否则须与表单 org_id 同枝（同一节点或互为上下级）
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 兼容历史请求；创建忽略该值，状态由排查清单推导
 }
@@ -390,7 +390,7 @@ func (s *IssueService) requireOrgID(ctx context.Context, orgID uint64) error {
 	return nil
 }
 
-// requireAssigneeInFormOrg 可选责任人：0 跳过；非 0 须启用，且用户组织与表单组织互为上下级或同一节点。
+// requireAssigneeInFormOrg 可选责任人：0 跳过；非 0 须启用。用户 org_id=0（如超管）不限落点组织；其余须与表单组织同枝。
 func (s *IssueService) requireAssigneeInFormOrg(ctx context.Context, assigneeUser, formOrgID uint64) error {
 	if assigneeUser == 0 {
 		return nil
@@ -405,7 +405,11 @@ func (s *IssueService) requireAssigneeInFormOrg(ctx context.Context, assigneeUse
 	if user.Status != 1 {
 		return errIssueAssigneeDisabled
 	}
-	if user.OrgID == 0 || formOrgID == 0 {
+	// [PRD] 未挂组织的账号（org_id=0）可作任意落点的责任人，小程序上报即当前登录用户。
+	if user.OrgID == 0 {
+		return nil
+	}
+	if formOrgID == 0 {
 		return errIssueAssigneeOrg
 	}
 	var orgs []model.SysOrg

@@ -28,7 +28,7 @@ type IssueUpdateInput struct {
 	ReporterName            *string         `json:"reporter_name"`              // 上报人姓名快照；空字符串清除
 	ReporterPhone           *string         `json:"reporter_phone"`             // 上报联系电话；空字符串清除
 	ReportUserID            *uint64         `json:"report_user_id"`             // 上报账号关联；0 解除关联，姓名快照独立保留
-	AssigneeUser            *uint64         `json:"assignee_user"`              // 责任人；省略保留；待整改/整改中不允许为 0，非 0 须启用且属于相关组织
+	AssigneeUser            *uint64         `json:"assignee_user"`              // 责任人；省略保留；待整改/整改中不允许为 0；非 0 须启用；用户 org_id=0 不限组织，否则须与表单组织同枝
 	ReporterSignatureFileID *string         `json:"reporter_signature_file_id"` // 新签名附件 ID；省略保留原签名，不允许清空
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 当前类型完整表单；省略保留，旧版字段兼容保留
 	Status                  *string         `json:"status"`                     // 兼容旧调用方显式状态更新；普通编辑不提交该字段

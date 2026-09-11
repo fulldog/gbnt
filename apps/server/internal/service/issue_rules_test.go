@@ -372,4 +372,17 @@ func TestRequireAssigneeInFormOrg(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	t.Run("未挂组织豁免", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(0, 1))}
+		if err := s.requireAssigneeInFormOrg(context.Background(), 8, 3); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("未挂组织已停用", func(t *testing.T) {
+		s := &IssueService{DB: testutil.NewQueryDB(t, userStep(0, 0))}
+		err := s.requireAssigneeInFormOrg(context.Background(), 8, 3)
+		if err == nil || !strings.Contains(err.Error(), "整改人已停用") {
+			t.Fatalf("got %v", err)
+		}
+	})
 }
