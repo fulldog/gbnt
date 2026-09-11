@@ -23,7 +23,7 @@ steps:
       GOOS: linux
       GOARCH: amd64
       GOPROXY: https://goproxy.cn,direct
-      GOMAXPROCS: "1"
+      GOMAXPROCS: "4"
     commands:
       - cd apps/server
       - go build -p 1 -trimpath -ldflags "-s -w" -o gbnt.service .
@@ -58,5 +58,4 @@ steps:
       REMOTE_AFTER: chmod +x /opt/www/gbnt/apps/server/gbnt.service && sudo -n systemctl restart gbnt
       DEPLOY_HEALTH_URL: https://www.weilone.com/api/health
     commands:
-      - apk add --no-cache bash rsync openssh-client curl
       - bash /opt/www/mini-cicd/deploy-remote.sh
