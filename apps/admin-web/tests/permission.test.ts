@@ -60,6 +60,16 @@ beforeEach(() => {
 });
 
 describe("前端权限收敛", () => {
+  it.each(["create", "edit", "delete", "import", "export"])("%s 仅隐含同模块查看，不额外授予其他操作", async (action) => {
+    useAuthStore().applyUser({ ...user, apis: [102] });
+    vi.spyOn(adminApi.roles, "listApis").mockResolvedValue([catalog[0]!, { ...catalog[1]!, action }]);
+    const permission = usePermissionStore();
+    await permission.loadCatalog();
+    expect(permission.can("web.rectify", "view")).toBe(true);
+    expect(permission.can("web.sys-roles", "view")).toBe(false);
+    expect(permission.can("web.rectify", action === "delete" ? "create" : "delete")).toBe(false);
+  });
+
   it("用后端 API 数字 ID 映射 module/action", async () => {
     const auth = useAuthStore();
     auth.applyUser(user);

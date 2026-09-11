@@ -1,10 +1,12 @@
 import type {
   ApiClient,
+  CreateRoleInput,
   RoleInput,
   RolePermissionResult,
   SysApi,
   SysRole,
   UpdateRolePermissionInput,
+  UpdateRoleInput,
 } from "@gbnt/api-client";
 
 export function createRolesApi(client: ApiClient) {
@@ -13,15 +15,17 @@ export function createRolesApi(client: ApiClient) {
       return client.request<SysRole[]>("/api/sys/roles");
     },
 
-    create(input: RoleInput): Promise<SysRole> {
-      return client.request<SysRole, RoleInput>("/api/sys/roles", {
+    /** 提交英文code、备注和权限并自动命名；返回内部id与英文code，RoleInput仅供旧调用兼容。 */
+    create(input: CreateRoleInput | RoleInput): Promise<SysRole> {
+      return client.request<SysRole, CreateRoleInput | RoleInput>("/api/sys/roles", {
         method: "POST",
         body: input,
       });
     },
 
-    update(id: number, input: RoleInput): Promise<SysRole> {
-      return client.request<SysRole, RoleInput>(`/api/sys/roles/${id}`, {
+    /** 路径仍使用内部数字id；英文code、备注及api_ids在同一事务内保存。 */
+    update(id: number, input: UpdateRoleInput): Promise<SysRole> {
+      return client.request<SysRole, UpdateRoleInput>(`/api/sys/roles/${id}`, {
         method: "PUT",
         body: input,
       });

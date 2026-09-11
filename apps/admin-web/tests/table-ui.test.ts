@@ -2,7 +2,10 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { computed, defineComponent, h, inject, provide, type Component, type ComputedRef, type PropType } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
-import { ElMessage, ElTree } from "element-plus";
+import { ElCheckbox, ElMessage, ElMessageBox, ElSwitch } from "element-plus";
+import PermissionMatrix from "@/components/PermissionMatrix.vue";
+import RoleFormDialog from "@/views/system/RoleFormDialog.vue";
+import { roleCatalog, sysRole } from "./fixtures/roles";
 import StreetLedgerView from "@/views/ledger/StreetLedgerView.vue";
 import SurveyLedgerView from "@/views/ledger/SurveyLedgerView.vue";
 import StreetLedgerSheet from "@/components/ledger/StreetLedgerSheet.vue";
@@ -22,11 +25,12 @@ import OpLogView from "@/views/system/OpLogView.vue";
 import WorkbenchView from "@/views/workbench/WorkbenchView.vue";
 
 const api = vi.hoisted(() => ({
+  auth: { getMe: vi.fn() },
   ledger: { getStreetReport: vi.fn(), getSurveyReport: vi.fn(), getStreetRows: vi.fn(), getStreetStatistics: vi.fn(),
     getSurveyRows: vi.fn(), getSurveyStatistics: vi.fn(), listStreetOrgOptions: vi.fn(), listSurveyOrgOptions: vi.fn() },
-  users: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), update: vi.fn() },
-  orgs: { list: vi.fn() },
-  roles: { list: vi.fn(), listApis: vi.fn(), getPermissions: vi.fn(), updatePermissions: vi.fn() },
+  users: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), resetPassword: vi.fn() },
+  orgs: { list: vi.fn(), remove: vi.fn() },
+  roles: { list: vi.fn(), listApis: vi.fn(), getPermissions: vi.fn(), updatePermissions: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   opLogs: { list: vi.fn() },
   workbench: {
     getStats: vi.fn(),
@@ -34,14 +38,20 @@ const api = vi.hoisted(() => ({
     getTodos: vi.fn().mockResolvedValue({ list: [], total: 0, page: 1, size: 20, today: "2026-09-05" }),
   },
 }));
+const session = vi.hoisted(() => ({
+  auth: { user: null as { role_id: number } | null, applyUser: vi.fn(), reset: vi.fn() },
+  permission: { can: vi.fn(() => true), reset: vi.fn(), loadCatalog: vi.fn(), catalogAvailable: false, catalog: [] as import("@gbnt/api-client").SysApi[] },
+  router: { replace: vi.fn() },
+}));
 vi.mock("@/api/runtime", () => ({ useAdminApi: () => api }));
 vi.mock("@/utils/ledger-export", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/utils/ledger-export")>();
   return { ...actual, exportLedgerTable: vi.fn(actual.exportLedgerTable) };
 });
 vi.mock("@/utils/download", () => ({ downloadBlob: vi.fn() }));
-vi.mock("@/stores/permission", () => ({ usePermissionStore: () => ({ can: () => true }) }));
-vi.mock("@/stores/auth", () => ({ useAuthStore: () => ({ user: null }) }));
+vi.mock("@/stores/permission", () => ({ usePermissionStore: () => session.permission }));
+vi.mock("@/stores/auth", () => ({ useAuthStore: () => session.auth }));
+vi.mock("vue-router", async (importOriginal) => ({ ...await importOriginal<typeof import("vue-router")>(), useRouter: () => session.router }));
 vi.mock("@/components/TypeDistributionChart.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("element-plus", async (importOriginal) => ({
   ...await importOriginal<typeof import("element-plus")>(),
@@ -54,7 +64,10 @@ const TableStub = defineComponent({
   name: "ElTable",
   props: { data: { type: Array as PropType<Row[]>, default: () => [] } },
   setup(props, { slots }) {
-    provide("test-table-rows", computed(() => props.data));
+    function flatten(rows: Row[]): Row[] {
+      return rows.flatMap((row) => [row, ...flatten((row.children ?? []) as Row[])]);
+    }
+    provide("test-table-rows", computed(() => flatten(props.data)));
     return () => h("div", { "data-testid": "table" }, slots.default?.());
   },
 });
@@ -133,10 +146,14 @@ const user = {
   is_super_admin: false, status: 1, created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:00Z",
   org_name: "北城街道", org_path: "区 / 北城街道", role_name: "街道管理员",
 };
-const role = { id: 2, name: "街道管理员", desc: "", status: 1, created_at: "", updated_at: "" };
+const role = { id: 2, code: "street-admin", name: "街道管理员", desc: "", status: 1, created_at: "", updated_at: "" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  session.auth.user = null;
+  session.permission.catalogAvailable = false;
+  session.permission.catalog = [];
+  session.permission.can.mockReset().mockReturnValue(true);
   vi.mocked(exportLedgerTable).mockReset().mockResolvedValue(undefined);
   for (const group of Object.values(api)) for (const method of Object.values(group)) method.mockReset();
   api.ledger.listStreetOrgOptions.mockResolvedValue([]);
@@ -152,6 +169,7 @@ beforeEach(() => {
   api.roles.list.mockResolvedValue([]);
   api.roles.listApis.mockResolvedValue([]);
   api.roles.getPermissions.mockResolvedValue({ api_ids: [] });
+  api.roles.update.mockResolvedValue(role);
   api.opLogs.list.mockResolvedValue({ list: [], total: 0 });
 });
 afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); });
@@ -468,33 +486,228 @@ describe("工作人员展示与表单候选", () => {
   });
 });
 
+describe("组织和人员操作栏对齐原型", () => {
+  it("组织行依次为新增单位、修改、删除，根删除与末级新增禁用，父单位删除给出提示", async () => {
+    api.orgs.list.mockResolvedValue([
+      { id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1 },
+      { id: 2, parent_id: 1, type: "district", name: "区", sort: 1 },
+      { id: 3, parent_id: 2, type: "street", name: "街道", sort: 1 },
+      { id: 4, parent_id: 3, type: "village", name: "村", sort: 1 },
+    ]);
+    const wrapper = render(OrgView);
+    await flushPromises();
+    const rows = wrapper.findAll(".table-actions");
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      const buttons = row.findAll("button");
+      expect(buttons.map((button) => button.text())).toEqual(["新增单位", "修改", "删除"]);
+      expect(buttons.every((button) => button.attributes("icon") === undefined)).toBe(true);
+    }
+    expect(rows[0]!.findAll("button")[2]!.attributes("disabled")).toBeDefined();
+    expect(rows[3]!.findAll("button")[0]!.attributes("disabled")).toBeDefined();
+    await rows[1]!.findAll("button")[2]!.trigger("click");
+    expect(ElMessage.warning).toHaveBeenCalledWith("请先删除下级单位");
+    expect(ElMessageBox.confirm).not.toHaveBeenCalled();
+    expect(api.orgs.remove).not.toHaveBeenCalled();
+    await rows[3]!.findAll("button")[2]!.trigger("click");
+    await flushPromises();
+    expect(api.orgs.remove).toHaveBeenCalledWith(4);
+  });
+
+  it("组织按钮继续按新增、修改、删除权限分别控制", async () => {
+    session.permission.can.mockImplementation((...args: unknown[]) => args[1] === "edit");
+    api.orgs.list.mockResolvedValue([{ id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1 }]);
+    const wrapper = render(OrgView);
+    await flushPromises();
+    expect(wrapper.get(".table-actions").findAll("button").map((button) => button.text())).toEqual(["修改"]);
+  });
+
+  it("人员操作只有重置密码、编辑、删除，重置使用主色并保留二次确认", async () => {
+    api.users.list.mockResolvedValue({ list: [user], total: 1, page: 1, size: 20 });
+    const wrapper = render(UserView);
+    await flushPromises();
+    const actions = wrapper.get('[data-column="操作"]');
+    expect(actions.attributes("width")).toBe("220");
+    expect(wrapper.findAllComponents(ButtonStub).filter((button) => button.element.closest('[data-column="操作"]')).map((button) => [button.text(), button.vm.$attrs.type])).toEqual([
+      ["重置密码", "primary"], ["编辑", "primary"], ["删除", "danger"],
+    ]);
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce("cancel");
+    await click(wrapper, "重置密码");
+    await flushPromises();
+    expect(api.users.resetPassword).not.toHaveBeenCalled();
+    await click(wrapper, "重置密码");
+    await flushPromises();
+    expect(ElMessageBox.confirm).toHaveBeenLastCalledWith(expect.stringContaining("密码将重置为账号"), "重置密码", expect.anything());
+    expect(api.users.resetPassword).toHaveBeenCalledWith(user.id);
+  });
+
+  it.each([0, 1])("状态%s切换只写状态，等待期间锁定同一行且不能重复提交", async (initial) => {
+    api.users.list.mockResolvedValueOnce({ list: [{ ...user, status: initial }], total: 1, page: 1, size: 20 })
+      .mockResolvedValue({ list: [{ ...user, status: initial === 1 ? 0 : 1 }], total: 1, page: 1, size: 20 });
+    const pending = deferred<null>();
+    api.users.updateStatus.mockReturnValueOnce(pending.promise);
+    const wrapper = render(UserView);
+    await flushPromises();
+    const control = wrapper.getComponent(ElSwitch);
+    await control.trigger("click");
+    expect(control.props("loading")).toBe(true);
+    expect(control.props("modelValue")).toBe(initial === 1);
+    expect(wrapper.get(".table-actions").findAll("button").every((button) => button.attributes("disabled") !== undefined)).toBe(true);
+    await control.props("beforeChange")?.();
+    expect(api.users.updateStatus).toHaveBeenCalledExactlyOnceWith(user.id, { status: initial === 1 ? 0 : 1 });
+    expect(api.users.update).not.toHaveBeenCalled();
+    pending.resolve(null);
+    await flushPromises();
+    expect(wrapper.getComponent(ElSwitch).props("modelValue")).toBe(initial !== 1);
+    expect(wrapper.getComponent(ElSwitch).props("loading")).toBe(false);
+  });
+
+  it("状态保存失败不改变开关，解锁后可重试", async () => {
+    api.users.list.mockResolvedValue({ list: [user], total: 1, page: 1, size: 20 });
+    api.users.updateStatus.mockRejectedValue(new Error("状态保存失败"));
+    const wrapper = render(UserView);
+    await flushPromises();
+    const control = wrapper.getComponent(ElSwitch);
+    await control.trigger("click");
+    await flushPromises();
+    expect(control.props("modelValue")).toBe(true);
+    expect(control.props("loading")).toBe(false);
+    expect(ElMessage.error).toHaveBeenCalledWith("状态保存失败");
+    await control.trigger("click");
+    await flushPromises();
+    expect(api.users.updateStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("超级管理员和无修改权限账号的状态开关不可操作", async () => {
+    session.permission.can.mockImplementation((...args: unknown[]) => args[1] !== "edit");
+    api.users.list.mockResolvedValue({ list: [{ ...user, id: 1, is_super_admin: true }, user], total: 2, page: 1, size: 20 });
+    const wrapper = render(UserView);
+    await flushPromises();
+    for (const control of wrapper.findAllComponents(ElSwitch)) {
+      expect(control.props("disabled")).toBe(true);
+      await control.props("beforeChange")?.();
+    }
+    expect(api.users.updateStatus).not.toHaveBeenCalled();
+    expect(wrapper.get('[data-column="操作"]').text()).toContain("超级管理员");
+    expect(wrapper.get('[data-column="操作"]').findAll("button").map((button) => button.text())).toEqual(["删除"]);
+  });
+});
+
 describe("其他列表回归", () => {
+  it("角色表七列、仅修改删除、查询条件显式应用且ID精确匹配", async () => {
+    api.roles.list.mockResolvedValue([sysRole(7, "系统配置员"), sysRole(8, "系统配置员"), sysRole(9, "汇总管理员")]);
+    api.roles.listApis.mockResolvedValue(roleCatalog);
+    const wrapper = render(RoleView);
+    await flushPromises();
+    expect(wrapper.findAll("[data-column]").map((item) => item.attributes("data-column"))).toEqual(["序号", "角色名称", "角色ID", "备注", "创建时间", "状态", "操作"]);
+    expect(wrapper.get('[data-column="操作"]').findAll("button").map((item) => item.text())).toEqual(["修改", "删除", "修改", "删除", "修改", "删除"]);
+    const inputs = wrapper.findAllComponents({ name: "ElInput" });
+    inputs[0]!.vm.$emit("update:modelValue", "系统配置");
+    await flushPromises();
+    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(3);
+    await wrapper.get(".query-panel form").trigger("submit");
+    expect((wrapper.getComponent(TableStub).props("data") as Row[]).map((row) => row.id)).toEqual([8, 7]);
+    inputs[1]!.vm.$emit("update:modelValue", " TEST-7 ");
+    await wrapper.get(".query-panel form").trigger("submit");
+    expect((wrapper.getComponent(TableStub).props("data") as Row[]).map((row) => row.id)).toEqual([7]);
+    expect(wrapper.get('[data-column="角色ID"]').text()).toContain("test-7");
+    inputs[1]!.vm.$emit("update:modelValue", "1.2");
+    await wrapper.get(".query-panel form").trigger("submit");
+    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(1);
+    await click(wrapper, "重置");
+    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(3);
+  });
+
+  it("角色分页默认10条，删除末页末条回到有效页", async () => {
+    const list = Array.from({ length: 11 }, (_, index) => sysRole(index + 2));
+    api.roles.list.mockResolvedValueOnce(list).mockResolvedValueOnce(list.filter((row) => row.id !== 2));
+    const wrapper = render(RoleView);
+    await flushPromises();
+    const pagination = wrapper.getComponent({ name: "ElPagination" });
+    expect(pagination.props("pageSize")).toBe(10);
+    pagination.vm.$emit("update:current-page", 2);
+    await flushPromises();
+    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(1);
+    await click(wrapper, "删除");
+    await flushPromises();
+    expect(api.roles.remove).toHaveBeenCalledWith(2);
+    expect(pagination.props("currentPage")).toBe(1);
+    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(10);
+  });
+
+  it("状态开关仅发送status，失败不改变状态，内置管理员保持禁用", async () => {
+    api.roles.list.mockResolvedValue([sysRole(1, "管理员"), sysRole(7)]);
+    api.roles.listApis.mockResolvedValue(roleCatalog);
+    api.roles.update.mockRejectedValueOnce(new Error("状态保存失败")).mockResolvedValueOnce({ ...sysRole(7), status: 0 });
+    const wrapper = render(RoleView);
+    await flushPromises();
+    const switches = wrapper.findAllComponents(ElSwitch);
+    expect(switches[1]!.props("disabled")).toBe(true);
+    await switches[0]!.trigger("click");
+    await flushPromises();
+    expect(switches[0]!.props("modelValue")).toBe(true);
+    expect(ElMessage.error).toHaveBeenCalledWith("状态保存失败");
+    await switches[0]!.trigger("click");
+    await flushPromises();
+    expect(api.roles.update).toHaveBeenLastCalledWith(7, { status: 0 });
+    expect(switches[0]!.props("modelValue")).toBe(false);
+    expect(wrapper.get('[data-column="操作"]').findAll("button").slice(2).every((item) => item.attributes("disabled") !== undefined)).toBe(true);
+  });
+
+  it("只有新增没有修改授权能力时不能进入组合创建", async () => {
+    session.permission.can.mockImplementation((...args: unknown[]) => args[1] !== "edit");
+    const wrapper = render(RoleView);
+    await flushPromises();
+    expect(wrapper.findAll("button").find((item) => item.text() === "新增角色")?.attributes("disabled")).toBeDefined();
+  });
+
+  it.each([false, true])("修改自身角色刷新身份，失去角色页权限后跳转；请求失败=%s", async (failed) => {
+    session.auth.user = { role_id: 7 };
+    api.roles.listApis.mockResolvedValue(roleCatalog);
+    const nextUser = { role_id: 7, apis: [1, 2] };
+    if (failed) api.auth.getMe.mockRejectedValue(new Error("角色已停用"));
+    else api.auth.getMe.mockResolvedValue(nextUser);
+    const wrapper = render(RoleView);
+    await flushPromises();
+    wrapper.getComponent(RoleFormDialog).vm.$emit("saved", sysRole(7), false);
+    await flushPromises();
+    expect(api.auth.getMe).toHaveBeenCalledTimes(1);
+    expect(session.router.replace).toHaveBeenCalledWith(failed ? "/login" : "/workbench");
+    if (failed) expect(session.auth.reset).toHaveBeenCalled();
+    else {
+      expect(session.auth.applyUser).toHaveBeenCalledWith(nextUser);
+      expect(session.permission.loadCatalog).toHaveBeenCalled();
+      expect(session.permission.catalogAvailable).toBe(true);
+      expect(session.permission.catalog).toEqual(roleCatalog);
+    }
+  });
+
   it("权限树只展示需要 RBAC 的接口，直接保存不扩展同组的部分勾选", async () => {
     api.roles.list.mockResolvedValue([role]);
     api.roles.listApis.mockResolvedValue([
-      { id: 1, module: "web.rectify", action: "view", name: "列表", method: "GET", path: "/api/issues", sort: 1, is_jwt: true, is_rbac: true },
-      { id: 2, module: "web.rectify", action: "view", name: "详情", method: "GET", path: "/api/issues/:id", sort: 2, is_jwt: true, is_rbac: 1 },
+      { id: 1, module: "web.rectify", action: "view", name: "列表", method: "GET", path: "/api/issues", sort: 1, is_jwt: true, is_rbac: true, role_code_supported: true, duty: { key: "rectify", label: "专项整改", role_name: "专项整改员", sort: 2 } },
+      { id: 2, module: "web.rectify", action: "view", name: "详情", method: "GET", path: "/api/issues/:id", sort: 2, is_jwt: true, is_rbac: 1, role_code_supported: true, duty: { key: "rectify", label: "专项整改", role_name: "专项整改员", sort: 2 } },
       { id: 3, module: "web.auth", action: "view", name: "当前用户", method: "GET", path: "/api/me", sort: 3, is_jwt: true, is_rbac: false },
     ]);
     api.roles.getPermissions.mockResolvedValue({ api_ids: [1] });
-    const wrapper = render(RoleView, { ElTree: false });
+    const wrapper = render(RoleView);
     await flushPromises();
-    await click(wrapper, "授权");
+    await click(wrapper, "修改");
     await flushPromises();
-    const tree = wrapper.getComponent(ElTree);
-    expect(tree.vm.getCheckedKeys(false)).toEqual([1]);
-    expect(tree.vm.getHalfCheckedKeys()).toEqual(["module:web.rectify"]);
-    expect(tree.text()).toContain("列表");
-    expect(tree.text()).toContain("详情");
+    const tree = wrapper.getComponent(PermissionMatrix);
+    expect(tree.props("modelValue")).toEqual([1]);
+    expect(tree.findAllComponents(ElCheckbox).find((item) => item.attributes("aria-label") === "专项整改：查")?.props("indeterminate")).toBe(true);
+    expect(tree.text()).toContain("专项整改");
     expect(tree.text()).not.toContain("当前用户");
-    await click(wrapper, "保存权限");
+    await click(wrapper, "保存");
     await flushPromises();
-    expect(api.roles.updatePermissions).toHaveBeenCalledWith(role.id, { api_ids: [1] });
+    expect(api.roles.update).toHaveBeenCalledWith(role.id, { code: "street-admin", desc: "", api_ids: [1] });
+    expect(api.roles.updatePermissions).not.toHaveBeenCalled();
   });
 
   it.each([
     ["组织", OrgView, api.orgs.list, [{ id: 1, parent_id: 0, type: "root", name: "测试组织", sort: 0 }], "刷新表格"],
-    ["角色", RoleView, api.roles.list, [role], "刷新"],
+    ["角色", RoleView, api.roles.list, [role], "刷新表格"],
     ["日志", OpLogView, api.opLogs.list, { list: [{ id: 1, username: "测试账号" }], total: 1 }, "刷新表格"],
   ] as const)("%s 刷新失败时清除旧表并显示可重试错误", async (_, component, request, response, refreshLabel) => {
     request.mockResolvedValueOnce(response);
@@ -513,12 +726,12 @@ describe("其他列表回归", () => {
     api.roles.getPermissions.mockRejectedValueOnce(new Error("权限读取失败"));
     const wrapper = render(RoleView);
     await flushPromises();
-    await click(wrapper, "授权");
+    await click(wrapper, "修改");
     await flushPromises();
     expect(wrapper.text()).toContain("权限读取失败");
-    const save = wrapper.findAll("button").find((button) => button.text() === "保存权限")!;
+    const save = wrapper.findAll("button").find((button) => button.text() === "保存")!;
     expect(save.attributes("disabled")).toBeDefined();
-    expect(api.roles.updatePermissions).not.toHaveBeenCalled();
+    expect(api.roles.update).not.toHaveBeenCalled();
   });
 
   it("工作台刷新失败后隐藏之前成功的指标", async () => {

@@ -82,9 +82,10 @@ func (SysUser) TableName() string { return "sys_users" }
 
 // SysRole 角色。
 type SysRole struct {
-	Name   string `gorm:"size:64;comment:角色名称" json:"name"`
-	Desc   string `gorm:"size:255;comment:角色说明" json:"desc"`
-	Status int    `gorm:"default:1;comment:状态 1启用 0禁用" json:"status"`
+	Name   string  `gorm:"size:64;comment:角色名称" json:"name"`
+	Desc   string  `gorm:"size:255;comment:角色说明" json:"desc"`
+	Status int     `gorm:"default:1;comment:状态 1启用 0禁用" json:"status"`
+	Code   *string `gorm:"size:64;uniqueIndex:uk_sys_roles_code;comment:业务角色ID 英文唯一标识" json:"code"` // 与内部数字主键独立；可空用于旧库增量升级
 	Base
 }
 

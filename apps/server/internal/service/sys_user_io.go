@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"gbnt/apps/server/internal/model"
+	"gbnt/apps/server/internal/rolecode"
 	"gbnt/apps/server/pkg/xlsxutil"
 )
 
@@ -25,6 +27,7 @@ const (
 	colUsername           = "登录账号"
 	colOrg                = "所属单位"
 	colRole               = "角色名称"
+	colRoleID             = "角色ID"
 	colStatus             = "状态"
 	colCreatedAt          = "创建时间"
 )
@@ -133,9 +136,42 @@ func resolveRoleIDByName(roles []model.SysRole, name string) (uint64, error) {
 		return 0, fmt.Errorf("角色不存在: %s", name)
 	}
 	if len(found) > 1 {
-		return 0, fmt.Errorf("角色名称不唯一: %s", name)
+		return 0, fmt.Errorf("角色名称不唯一: %s，请填写角色ID", name)
 	}
 	return found[0].ID, nil
+}
+
+// resolveImportedRole 按英文角色ID定位；兼容旧数字主键及未提供ID时的唯一名称。
+func resolveImportedRole(roles []model.SysRole, rawID, name string) (uint64, error) {
+	rawID, name = strings.TrimSpace(rawID), strings.TrimSpace(name)
+	if rawID == "" {
+		return resolveRoleIDByName(roles, name)
+	}
+	legacyNumeric := strings.IndexFunc(rawID, func(c rune) bool { return c < '0' || c > '9' }) == -1
+	var id uint64
+	var code string
+	var err error
+	if legacyNumeric {
+		id, err = strconv.ParseUint(rawID, 10, 64)
+		if err != nil || id == 0 {
+			return 0, errors.New("旧版数字角色ID须为正整数")
+		}
+	} else {
+		code, err = rolecode.Normalize(rawID)
+		if err != nil {
+			return 0, err
+		}
+	}
+	for _, role := range roles {
+		if (legacyNumeric && role.ID != id) || (!legacyNumeric && (role.Code == nil || *role.Code != code)) {
+			continue
+		}
+		if name != "" && name != role.Name {
+			return 0, fmt.Errorf("角色ID %s 与角色名称 %s 不一致", rawID, name)
+		}
+		return role.ID, nil
+	}
+	return 0, fmt.Errorf("角色ID %s 不存在", rawID)
 }
 
 // parseImportStatus 空则启用；接受 启用/停用/1/0。
@@ -185,7 +221,7 @@ func (s *SysService) userListQuery(orgID uint64, keyword string) *gorm.DB {
 	return q
 }
 
-// ExportUsers 导出人员 xlsx（不分页，筛选同列表）。
+// ExportUsers 导出人员xlsx（不分页）；角色ID为英文标识，数字关联键不对外展示。
 func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 	var users []model.SysUser
 	if err := s.userListQuery(orgID, keyword).Order("id DESC").Find(&users).Error; err != nil {
@@ -200,18 +236,27 @@ func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 		return nil, err
 	}
 	roleName := map[uint64]string{}
+	roleCodes := map[uint64]string{}
 	for _, r := range roles {
 		roleName[r.ID] = r.Name
+		if r.Code != nil {
+			roleCodes[r.ID] = *r.Code
+		}
 	}
 
-	headers := []string{colName, colPhone, colUsername, colOrg, colRole, colStatus, colCreatedAt}
+	headers := []string{colName, colPhone, colUsername, colOrg, colRoleID, colRole, colStatus, colCreatedAt}
 	rows := make([][]any, 0, len(users))
 	for _, u := range users {
+		// 未绑定或关联缺失的历史人员仍可导出空角色列，不能因此阻塞整个导出。
+		if _, exists := roleName[u.RoleID]; exists && roleCodes[u.RoleID] == "" {
+			return nil, errors.New("存在尚未配置英文角色ID的人员角色，请先完成角色标识迁移")
+		}
 		rows = append(rows, []any{
 			u.Name,
 			u.Phone,
 			u.Username,
 			orgPathFromRoot(orgs, u.OrgID),
+			roleCodes[u.RoleID],
 			roleName[u.RoleID],
 			formatUserStatus(u.Status),
 			u.CreatedAt.In(time.Local).Format(userIOCreatedAtLayout),
@@ -220,7 +265,7 @@ func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
 	return xlsxutil.Export(headers, rows)
 }
 
-// ImportUsers 从 xlsx 仅新增人员；校验失败或账号已存在则整批不落库。
+// ImportUsers 从xlsx新增人员；角色ID优先、名称兼容，任一校验失败则整批不落库。
 func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -278,7 +323,13 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		phone := cellAt(row, colIdx[colPhone])
 		username := cellAt(row, colIdx[colUsername])
 		orgPath := cellAt(row, colIdx[colOrg])
-		roleName := cellAt(row, colIdx[colRole])
+		roleName, roleIDRaw := "", ""
+		if idx, ok := colIdx[colRole]; ok {
+			roleName = cellAt(row, idx)
+		}
+		if idx, ok := colIdx[colRoleID]; ok {
+			roleIDRaw = cellAt(row, idx)
+		}
 		statusRaw := ""
 		if idx, ok := colIdx[colStatus]; ok {
 			statusRaw = cellAt(row, idx)
@@ -305,7 +356,7 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		if oerr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, oerr)
 		}
-		roleID, rerr := resolveRoleIDByName(roles, roleName)
+		roleID, rerr := resolveImportedRole(roles, roleIDRaw, roleName)
 		if rerr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, rerr)
 		}
@@ -375,10 +426,15 @@ func mapUserImportHeaders(header []string) (map[string]int, error) {
 		}
 		idx[h] = i
 	}
-	for _, must := range []string{colName, colPhone, colUsername, colOrg, colRole} {
+	for _, must := range []string{colName, colPhone, colUsername, colOrg} {
 		if _, ok := idx[must]; !ok {
 			return nil, fmt.Errorf("缺少表头: %s", must)
 		}
+	}
+	_, hasRoleID := idx[colRoleID]
+	_, hasRoleName := idx[colRole]
+	if !hasRoleID && !hasRoleName {
+		return nil, errors.New("缺少表头: 角色ID或角色名称")
 	}
 	return idx, nil
 }
@@ -391,8 +447,8 @@ func cellAt(row []string, i int) string {
 }
 
 func userImportRowEmpty(row []string, colIdx map[string]int) bool {
-	for _, key := range []string{colName, colPhone, colUsername, colOrg, colRole} {
-		if cellAt(row, colIdx[key]) != "" {
+	for _, key := range []string{colName, colPhone, colUsername, colOrg, colRoleID, colRole} {
+		if idx, ok := colIdx[key]; ok && cellAt(row, idx) != "" {
 			return false
 		}
 	}

@@ -6,6 +6,7 @@ import type {
   ImportResult,
   SysUser,
   UpdateUserInput,
+  UpdateUserStatusInput,
   UserListQuery,
   UserListResult,
 } from "@gbnt/api-client";
@@ -15,6 +16,7 @@ import { checkDisplayFields, responseArray, responseInteger, responseRecord } fr
 export type ExportUsersQuery = Pick<UserListQuery, "org_id" | "keyword">;
 
 export interface ImportUsersInput {
+  /** 人员xlsx；英文角色ID优先，兼容旧文件的数字主键或唯一角色名称。 */
   file: Blob;
 }
 
@@ -84,6 +86,14 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
+    /** 仅更新账号状态；与编辑人员共用 web.sys-staff/edit 权限。 */
+    updateStatus(id: number, input: UpdateUserStatusInput): Promise<null> {
+      return client.request<null, UpdateUserStatusInput>(`/api/sys/users/${id}/status`, {
+        method: "PUT",
+        body: input,
+      });
+    },
+
     remove(id: number): Promise<null> {
       return client.request<null>(`/api/sys/users/${id}`, { method: "DELETE" });
     },
@@ -94,6 +104,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
+    /** 导出包含英文角色ID和角色名称；人员关联仍使用内部数字role_id。 */
     async exportFile(query: ExportUsersQuery = {}): Promise<DownloadResult<Blob>> {
       const response = await client.raw<Blob>("/api/sys/users/export", {
         query: { ...query },
