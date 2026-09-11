@@ -121,3 +121,31 @@ func TestMapUserImportHeadersOptionalStatus(t *testing.T) {
 		t.Fatal("want missing header")
 	}
 }
+
+func TestImportRoleIDDisambiguatesAndKeepsOldNames(t *testing.T) {
+	roles := []model.SysRole{{Base: model.Base{ID: 2}, Name: "系统配置员"}, {Base: model.Base{ID: 3}, Name: "系统配置员"}, {Base: model.Base{ID: 4}, Name: "原角色"}}
+	for _, tc := range []struct {
+		id, name string
+		want     uint64
+		failure  bool
+	}{
+		{"2", "系统配置员", 2, false}, {"3", "", 3, false}, {"", "原角色", 4, false},
+		{"", "系统配置员", 0, true}, {"2", "原角色", 0, true}, {"99", "原角色", 0, true},
+		{"2.5", "", 0, true}, {"0", "", 0, true}, {"-1", "", 0, true}, {"", "", 0, true},
+	} {
+		id, err := resolveImportedRole(roles, tc.id, tc.name)
+		if (err != nil) != tc.failure || id != tc.want {
+			t.Errorf("%+v: id=%d err=%v", tc, id, err)
+		}
+	}
+	if _, err := mapUserImportHeaders([]string{colName, colPhone, colUsername, colOrg, colRoleID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mapUserImportHeaders([]string{colName, colPhone, colUsername, colOrg}); err == nil {
+		t.Fatal("应要求角色ID或名称列")
+	}
+	idx := map[string]int{colRoleID: 3}
+	if userImportRowEmpty([]string{"", "", "", "2"}, idx) {
+		t.Fatal("仅ID非空行不能跳过校验")
+	}
+}

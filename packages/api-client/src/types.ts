@@ -426,16 +426,49 @@ export interface UpdateUserInput {
   status?: number;
 }
 
+/** 管理端仅更新账号状态，不修改人员资料、角色或密码。 */
+export interface UpdateUserStatusInput {
+  /** 0 停用，1 启用。 */
+  status: 0 | 1;
+}
+
 export interface SysRole extends BaseRecord {
+  /** 对外英文角色ID；id 仍为内部关联主键。旧后端可能缺失。 */
+  code?: string | null;
   name: string;
   desc: string;
   status: number;
 }
 
+/** 旧客户端角色入参，保留兼容；新页面使用 CreateRoleInput / UpdateRoleInput。 */
 export interface RoleInput {
   name: string;
   desc: string;
   status: number;
+}
+
+/** 一次创建角色和授权；名称由后端生成，角色默认启用。 */
+export interface CreateRoleInput {
+  /** 英文开头，支持英文、数字、_、-，最多64位；服务端统一小写并保证唯一。 */
+  code: string;
+  desc: string;
+  api_ids: number[];
+}
+
+/** 只更新传入字段；api_ids 未传保持原权限，空数组表示清空。 */
+export interface UpdateRoleInput {
+  code?: string;
+  name?: string;
+  desc?: string;
+  status?: 0 | 1;
+  api_ids?: number[];
+}
+
+export interface RoleDuty {
+  key: string;
+  label: string;
+  role_name: string;
+  sort: number;
 }
 
 export interface RolePermissionResult {
@@ -447,6 +480,10 @@ export interface UpdateRolePermissionInput {
 }
 
 export interface SysApi extends BaseRecord {
+  /** 授权目录接口附加的英文角色ID服务能力标记。 */
+  role_code_supported?: boolean;
+  /** 后端职责元数据；旧服务或尚未配置职责的模块可能缺失。 */
+  duty?: RoleDuty;
   method: string;
   path: string;
   name: string;

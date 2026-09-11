@@ -104,17 +104,6 @@ type OrgUpdateInput struct {
 	Name string `json:"name"` // 组织名称（必填）
 }
 
-// RoleInput 创建/更新角色入参。
-type RoleInput struct {
-	Name   string `json:"name"`   // 角色名称
-	Desc   string `json:"desc"`   // 角色说明
-	Status int    `json:"status"` // 1 启用 / 0 禁用；新建为 0 时默认 1
-}
-
-func (in RoleInput) ToModel(id uint64) *model.SysRole {
-	return &model.SysRole{Name: in.Name, Desc: in.Desc, Status: in.Status, Base: model.Base{ID: id}}
-}
-
 // RoleAPIsInput 覆盖角色 API 授权。
 type RoleAPIsInput struct {
 	APIIDs []uint64 `json:"api_ids" binding:"required"` // 授权的 API 主键列表
@@ -415,35 +404,6 @@ func (s *SysService) ListRoles() ([]model.SysRole, error) {
 
 }
 
-func (s *SysService) CreateRole(ctx context.Context, r *model.SysRole) error {
-
-	if r.Status == 0 {
-
-		r.Status = 1
-
-	}
-
-	return s.db(ctx).Create(r).Error
-
-}
-
-func (s *SysService) UpdateRole(ctx context.Context, r *model.SysRole) error {
-
-	if r.ID == perm.SuperAdminRoleID {
-
-		return errors.New("管理员角色不可编辑")
-
-	}
-
-	updates := map[string]interface{}{
-
-		"name": r.Name, "desc": r.Desc, "status": r.Status,
-	}
-
-	return s.db(ctx).Model(&model.SysRole{}).Where("id = ?", r.ID).Updates(updates).Error
-
-}
-
 func (s *SysService) DeleteRole(ctx context.Context, id uint64) error {
 
 	if id == perm.SuperAdminRoleID {
@@ -509,37 +469,12 @@ func (s *SysService) GetRoleAPIs(roleID uint64) ([]uint64, error) {
 // SetRoleAPIs 覆盖设置角色 API 权限。
 
 func (s *SysService) SetRoleAPIs(ctx context.Context, roleID uint64, apiIDs []uint64) error {
-
-	if roleID == perm.SuperAdminRoleID {
-
-		return errors.New("管理员角色不可编辑")
-
+	// 非空切片标记显式更新；空数组表示清空，不能被当作未传权限。
+	if apiIDs == nil {
+		apiIDs = []uint64{}
 	}
-
-	return s.db(ctx).Transaction(func(tx *gorm.DB) error {
-
-		if err := tx.Unscoped().Where("role_id = ?", roleID).Delete(&model.SysRoleAPI{}).Error; err != nil {
-
-			return err
-
-		}
-
-		for _, aid := range apiIDs {
-
-			row := model.SysRoleAPI{RoleID: roleID, APIID: aid}
-
-			if err := tx.Create(&row).Error; err != nil {
-
-				return err
-
-			}
-
-		}
-
-		return nil
-
-	})
-
+	_, err := s.UpdateRole(ctx, roleID, UpdateRoleInput{APIIDs: apiIDs})
+	return err
 }
 
 func (s *SysService) InvalidateRoleCache(roleID uint64) {

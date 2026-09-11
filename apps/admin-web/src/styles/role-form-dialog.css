@@ -1,0 +1,11 @@
+/* ElDialog 容器不继承调用方的 scoped 标记；用专属类限定，避免影响其他弹窗。 */
+.el-dialog.role-form-dialog { display: flex; flex-direction: column; max-height: 80dvh; }
+.role-form-dialog .el-dialog__header { flex-shrink: 0; padding: 14px 16px; }
+.role-form-dialog .el-dialog__headerbtn { top: 2px; right: 4px; }
+.role-form-dialog .el-dialog__body { min-height: 0; max-height: none; padding: 24px; overflow: auto; }
+.role-form-dialog .el-dialog__footer { flex-shrink: 0; padding: 12px 16px; }
+
+@media (max-width: 540px) {
+  .el-dialog.role-form-dialog { margin-top: 4dvh; max-height: 92dvh; }
+  .role-form-dialog .el-dialog__body { padding: 16px; }
+}

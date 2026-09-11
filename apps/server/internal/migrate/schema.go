@@ -45,6 +45,9 @@ func ensureSchema(db *gorm.DB) error {
 	if err := db.AutoMigrate(projectModels()...); err != nil {
 		return err
 	}
+	if err := ensureRoleCodes(db); err != nil {
+		return err
+	}
 	if err := ensureFacilityCodes(db); err != nil {
 		return err
 	}

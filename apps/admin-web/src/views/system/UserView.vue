@@ -28,6 +28,7 @@ const page = shallowRef(1);
 const size = shallowRef(20);
 const formVisible = shallowRef(false);
 const editingUser = shallowRef<AdminUser | null>(null);
+const busyUsers = reactive(new Set<number>());
 const filters = reactive({ org_id: undefined as number | undefined, keyword: "" });
 const { data: orgs, loading: orgsLoading, loadError: orgsError, hasLoaded: orgsReady, run: loadOrgs } = useLatestQuery<SysOrg[]>({
   initial: () => [],
@@ -82,11 +83,14 @@ function createUser(): void {
 }
 
 function editUser(user: AdminUser): void {
+  if (user.is_super_admin || busyUsers.has(user.id)) return;
   editingUser.value = user;
   formVisible.value = true;
 }
 
 async function removeUser(user: AdminUser): Promise<void> {
+  if (user.is_super_admin || busyUsers.has(user.id)) return;
+  busyUsers.add(user.id);
   try {
     await ElMessageBox.confirm(`确定删除账号“${user.username}”吗？`, "删除确认", {
       confirmButtonText: "删除",
@@ -104,10 +108,14 @@ async function removeUser(user: AdminUser): Promise<void> {
     }
   } catch (error) {
     if (!isCancelled(error)) ElMessage.error(errorMessage(error, "工作人员删除失败"));
+  } finally {
+    busyUsers.delete(user.id);
   }
 }
 
 async function resetPassword(user: AdminUser): Promise<void> {
+  if (user.is_super_admin || busyUsers.has(user.id)) return;
+  busyUsers.add(user.id);
   try {
     await ElMessageBox.confirm(`密码将重置为账号“${user.username}”，是否继续？`, "重置密码", {
       confirmButtonText: "重置",
@@ -118,23 +126,27 @@ async function resetPassword(user: AdminUser): Promise<void> {
     ElMessage.success("密码已重置");
   } catch (error) {
     if (!isCancelled(error)) ElMessage.error(errorMessage(error, "密码重置失败"));
+  } finally {
+    busyUsers.delete(user.id);
   }
 }
 
-async function toggleStatus(user: AdminUser): Promise<void> {
+async function toggleStatus(user: AdminUser): Promise<boolean> {
+  if (user.is_super_admin || busyUsers.has(user.id) || !permission.can('web.sys-staff', 'edit')) return false;
+  busyUsers.add(user.id);
+  const status = user.status === 1 ? 0 : 1;
   try {
-    await api.users.update(user.id, {
-      name: user.name,
-      phone: user.phone,
-      org_id: user.org_id,
-      role_id: user.role_id,
-      status: user.status === 1 ? 0 : 1,
-    });
-    ElMessage.success(user.status === 1 ? "账号已停用" : "账号已启用");
+    await api.users.updateStatus(user.id, { status });
+    result.value = { ...result.value, list: result.value.list.map((row) => row.id === user.id ? { ...row, status } : row) };
+    ElMessage.success(status === 0 ? "账号已停用" : "账号已启用");
     await load();
   } catch (error) {
     ElMessage.error(errorMessage(error, "状态更新失败"));
+  } finally {
+    busyUsers.delete(user.id);
   }
+  // 由成功响应更新列表，不让开关提前更改状态；失败时保持原值。
+  return false;
 }
 
 async function exportUsers(): Promise<void> {
@@ -192,7 +204,9 @@ onMounted(() => {
           :show-file-list="false"
           :http-request="importUsers"
         >
-          <ElButton :icon="Upload">导入 Excel</ElButton>
+          <ElTooltip content="角色ID填写英文标识（如 admin、test）；兼容旧文件的数字ID或唯一角色名称。">
+            <ElButton :icon="Upload">导入 Excel</ElButton>
+          </ElTooltip>
         </ElUpload>
         <ElButton v-if="permission.can('web.sys-staff', 'create')" type="primary" :icon="Plus" @click="createUser">新增人员</ElButton>
       </TableToolbar>
@@ -204,15 +218,24 @@ onMounted(() => {
         <ElTableColumn v-if="visibleColumns.includes('phone')" prop="phone" label="手机号" min-width="135"  align="center"/>
         <ElTableColumn v-if="visibleColumns.includes('org')" label="所属组织" min-width="220" show-overflow-tooltip align="center"><template #default="scope">{{ displayOrg(scope.row.org_id, scope.row.org_path || scope.row.org_name) }}</template></ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('role')" label="角色" min-width="130" align="center"><template #default="scope">{{ displayRole(asUser(scope.row)) }}</template></ElTableColumn>
-        <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="90" align="center"><template #default="scope"><ElTag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? "启用" : "停用" }}</ElTag></template></ElTableColumn>
+        <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="90" align="center">
+          <template #default="scope">
+            <ElSwitch
+              :model-value="scope.row.status === 1"
+              :loading="busyUsers.has(scope.row.id)"
+              :disabled="scope.row.is_super_admin || !permission.can('web.sys-staff', 'edit')"
+              v-bind="{ 'aria-label': `${scope.row.username}账号状态`, title: scope.row.is_super_admin ? '超级管理员不可停用' : !permission.can('web.sys-staff', 'edit') ? '无修改权限' : scope.row.status === 1 ? '点击停用账号' : '点击启用账号' }"
+              :before-change="() => toggleStatus(asUser(scope.row))"
+            />
+          </template>
+        </ElTableColumn>
         <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
-        <ElTableColumn label="操作" width="280" fixed="right" align="center">
+        <ElTableColumn label="操作" width="220" fixed="right" align="center">
           <template #default="scope">
             <div v-if="!scope.row.is_super_admin" class="table-actions">
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" @click="editUser(asUser(scope.row))">编辑</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="warning" @click="toggleStatus(asUser(scope.row))">{{ scope.row.status === 1 ? "停用" : "启用" }}</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="warning" @click="resetPassword(asUser(scope.row))">重置密码</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'delete')" link type="danger" @click="removeUser(asUser(scope.row))">删除</ElButton>
+              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" :disabled="busyUsers.has(scope.row.id)" @click="resetPassword(asUser(scope.row))">重置密码</ElButton>
+              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" :disabled="busyUsers.has(scope.row.id)" @click="editUser(asUser(scope.row))">编辑</ElButton>
+              <ElButton v-if="permission.can('web.sys-staff', 'delete')" link type="danger" :disabled="busyUsers.has(scope.row.id)" @click="removeUser(asUser(scope.row))">删除</ElButton>
             </div>
             <ElTag v-else type="danger" effect="plain">超级管理员</ElTag>
           </template>

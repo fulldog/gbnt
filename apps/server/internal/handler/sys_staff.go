@@ -17,6 +17,7 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 		users.POST("/import", d.ImportUsers)
 		users.POST("", d.CreateUser)
 		users.PUT("/:id", d.UpdateUser)
+		users.PUT("/:id/status", d.UpdateUserStatus)
 		users.POST("/:id/reset-password", d.ResetUserPassword)
 		users.DELETE("/:id", d.DeleteUser)
 	}
@@ -114,6 +115,25 @@ func (d *Deps) UpdateUser(c *gin.Context) {
 		return
 	}
 	response.OK(c, u)
+}
+
+// UpdateUserStatus PUT /api/sys/users/:id/status — 仅更新工作人员状态；body: status（0/1，必填）；需工作人员修改权限，禁止修改超级管理员，成功返回 data:null。
+func (d *Deps) UpdateUserStatus(c *gin.Context) {
+	d.OpLog.Mark(c, "更新用户状态", c.Param("id"))
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
+	var req service.UserStatusInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, "状态必须为0（停用）或1（启用）")
+		return
+	}
+	if err := d.Sys.UpdateUserStatus(c.Request.Context(), id, req); err != nil {
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		return
+	}
+	response.OK(c, nil)
 }
 
 // DeleteUser DELETE /api/sys/users/:id — 删除工作人员（软删）。

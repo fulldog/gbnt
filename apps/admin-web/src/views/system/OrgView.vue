@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { OrgTreeNode, OrgType, SysOrg } from "@gbnt/api-client";
-import { Delete, Edit, Plus } from "@element-plus/icons-vue";
+import { Plus } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, vLoading } from "element-plus";
 import type { FormInstance, FormRules, TableInstance } from "element-plus";
 import { computed, onMounted, reactive, shallowRef, useTemplateRef } from "vue";
@@ -58,6 +58,7 @@ function createRoot(): void {
 }
 
 function createChild(parent: OrgTreeNode): void {
+  if (parent.type === "village") return;
   editing.value = null;
   form.name = "";
   form.parent_id = parent.id;
@@ -98,6 +99,11 @@ async function submit(): Promise<void> {
 }
 
 async function remove(node: OrgTreeNode): Promise<void> {
+  if (node.type === "root") return;
+  if (node.children.length) {
+    ElMessage.warning("请先删除下级单位");
+    return;
+  }
   try {
     await ElMessageBox.confirm(`确定删除组织“${node.name}”吗？`, "删除确认", {
       confirmButtonText: "删除",
@@ -139,22 +145,24 @@ onMounted(() => {
         <ElTableColumn label="组织类型" width="120"><template #default="scope">{{ ORG_TYPE_LABELS[scope.row.type as OrgType] }}</template></ElTableColumn>
         <ElTableColumn prop="sort" label="排序" width="100" align="center" />
         <ElTableColumn prop="id" label="组织 ID" width="110" align="center" />
-        <ElTableColumn label="操作" width="240" fixed="right">
+        <ElTableColumn label="操作" width="240" fixed="right" align="center">
           <template #default="scope">
             <div class="table-actions">
               <ElButton
-                v-if="permission.can('web.sys-org', 'create') && scope.row.type !== 'village'"
+                v-if="permission.can('web.sys-org', 'create')"
                 link
                 type="primary"
-                :icon="Plus"
+                :disabled="scope.row.type === 'village'"
+                v-bind="{ title: scope.row.type === 'village' ? '村/社区为当前末级，不能新增下级单位' : undefined }"
                 @click="createChild(asOrgNode(scope.row))"
-              >新增下级</ElButton>
-              <ElButton v-if="permission.can('web.sys-org', 'edit')" link type="primary" :icon="Edit" @click="edit(asOrgNode(scope.row))">改名</ElButton>
+              >新增单位</ElButton>
+              <ElButton v-if="permission.can('web.sys-org', 'edit')" link type="primary" @click="edit(asOrgNode(scope.row))">修改</ElButton>
               <ElButton
-                v-if="permission.can('web.sys-org', 'delete') && scope.row.type !== 'root' && !scope.row.children.length"
+                v-if="permission.can('web.sys-org', 'delete')"
                 link
                 type="danger"
-                :icon="Delete"
+                :disabled="scope.row.type === 'root'"
+                v-bind="{ title: scope.row.type === 'root' ? '根组织不可删除' : undefined }"
                 @click="remove(asOrgNode(scope.row))"
               >删除</ElButton>
             </div>

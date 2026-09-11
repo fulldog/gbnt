@@ -34,7 +34,9 @@ export const usePermissionStore = defineStore("permission", () => {
     if (!catalogAvailable.value) return true;
 
     const matchingIds = catalog.value
-      .filter((item) => item.module === module && item.action === action)
+      // 与后端 actionSatisfies 一致：操作权限隐含同模块查看，但不隐含其他写权限。
+      .filter((item) => item.enabled !== false && item.module === module &&
+        (item.action === action || (action === "view" && ["create", "edit", "delete", "import", "export"].includes(item.action))))
       .map((item) => item.id);
     return matchingIds.some((id) => permissions.includes(id));
   }

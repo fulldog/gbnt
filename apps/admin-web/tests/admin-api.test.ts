@@ -54,6 +54,19 @@ describe("管理端台账 API 边界", () => {
 });
 
 describe("管理端独立读取契约", () => {
+  it.each([0, 1] as const)("人员状态%s使用专用接口，不提交其他资料", async (status) => {
+    const { users, request } = setup(null);
+    expect(await users.updateStatus(2, { status })).toBeNull();
+    expect(request).toHaveBeenCalledExactlyOnceWith("/api/sys/users/2/status", { method: "PUT", body: { status } });
+  });
+
+  it("状态接口失败不回退到整行更新", async () => {
+    const { users, request } = setup(null);
+    request.mockRejectedValue(new Error("服务尚未更新"));
+    await expect(users.updateStatus(2, { status: 0 })).rejects.toThrow("服务尚未更新");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("按原 query 分页并 trim 关键字，保留复杂基础 Issue 字段", async () => {
     const result = { list: [issue], total: 1, page: 2, size: 20 };
     const { issues, request } = setup(result);

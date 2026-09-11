@@ -114,7 +114,7 @@ function updateStatus(value: string | number | boolean | undefined): void {
         <ElFormItem label="所属组织" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" :clearable="false" /></ElFormItem>
         <ElFormItem label="角色" prop="role_id">
           <ElSelect v-model="form.role_id" class="w-full" filterable>
-            <ElOption v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" :disabled="role.status !== 1" />
+            <ElOption v-for="role in roles" :key="role.id" :label="`${role.name}（角色ID：${role.code || '未配置'}）`" :value="role.id" :disabled="role.status !== 1" />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="状态">
