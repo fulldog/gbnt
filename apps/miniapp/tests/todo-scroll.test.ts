@@ -32,7 +32,7 @@ describe("待办列表区域刷新", () => {
     expect(regions).toHaveBeenCalledTimes(2);
     tree.resolve({ list: todoRegions });
     await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(3));
-    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, type: "well", org_id: 12 });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, type: "well" });
 
     rows.resolve(page(2));
     await refreshing;

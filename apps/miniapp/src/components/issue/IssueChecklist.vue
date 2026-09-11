@@ -21,7 +21,7 @@ const props = defineProps<{
 const items = computed<ChecklistDisplayItem[]>(() =>
   props.issue.type_ext.checklist.map((quiz) => ({
     type: quiz.type,
-    label: quizLabel(quiz.type),
+    label: quizLabel(quiz.type, props.issue),
     answer: quiz.value ? "是" : "否",
     description: quiz.desc.trim(),
     abnormal: quizIndicatesIssue(quiz, props.issue),

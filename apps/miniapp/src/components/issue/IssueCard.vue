@@ -7,6 +7,7 @@ import { issueDeadlineHint } from "@/utils/issue-deadline";
 import { issueTypeLabel } from "@/domain/issues/definitions";
 import {
   formatDateTime,
+  formatPublishedTime,
   hasValidCoordinates,
   issueChecklistPhotos,
   issueSummary,
@@ -47,7 +48,7 @@ function preview(urls: readonly string[], index: number): void {
       <view class="issue-card__header">
         <view class="issue-card__who">
           <text class="issue-card__title">{{ reporter }}</text>
-          <text class="issue-card__time" :aria-label="formatDateTime(issue.created_at)"> · {{ formatDateTime(issue.created_at).slice(5, 10) }}</text>
+          <text class="issue-card__time" :aria-label="formatDateTime(issue.created_at)"> · {{ formatPublishedTime(issue.created_at, now) }}</text>
         </view>
         <text class="issue-card__plan" :class="`tone-${plan.tone}`">{{ plan.label }}</text>
       </view>
@@ -110,11 +111,13 @@ function preview(urls: readonly string[], index: number): void {
 .issue-card__who {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .issue-card__title {
   font-size: 14px;
   font-weight: 600;
-  overflow-wrap: anywhere;
 }
 .issue-card__time {
   color: #8a94a3;
@@ -164,7 +167,7 @@ function preview(urls: readonly string[], index: number): void {
 .issue-card__location {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
   margin-top: 8px;
   color: var(--gb-color-primary);
 }

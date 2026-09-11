@@ -9,7 +9,11 @@ vi.mock("vue", async (importOriginal) => {
 });
 
 const scopes: ReturnType<typeof effectScope>[] = [];
-afterEach(() => { scopes.splice(0).forEach((scope) => scope.stop()); vi.restoreAllMocks(); });
+afterEach(() => {
+  scopes.splice(0).forEach((scope) => scope.stop());
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 function controls() {
   const enabled = shallowRef(true);
   const scope = effectScope(); scopes.push(scope);
@@ -18,53 +22,104 @@ function controls() {
 }
 
 describe("登录输入框焦点交接", () => {
-  it("等待小程序视图层确认旧框释放，不能仅等 Vue 逻辑层刷新就聚焦新框", async () => {
+  it("正常切换在同一次更新中下发新目标，并等待小程序视图层确认", async () => {
     let finishViewUpdate = () => {};
     const page = { $nextTick: vi.fn(() => new Promise<void>((resolve) => { finishViewUpdate = resolve; })) };
     vi.mocked(getCurrentInstance).mockReturnValueOnce({ proxy: page } as unknown as ReturnType<typeof getCurrentInstance>);
     const c = controls(); c.onFieldFocus("username");
     const pending = c.requestFocus("password");
     await nextTick();
-    expect(c.focusTarget.value).toBeNull();
+    expect(c.focusTarget.value).toBe("password");
     expect(page.$nextTick).toHaveBeenCalledOnce();
     finishViewUpdate(); await pending;
     expect(c.focusTarget.value).toBe("password");
   });
 
-  it("账号切密码时先释放旧框，旧框迟到的失焦不能撤销密码聚焦", async () => {
+  it("键盘下一项原子切换目标，旧框迟到的失焦不能撤销密码聚焦", async () => {
+    vi.useFakeTimers();
     const c = controls();
     c.onFieldFocus("username");
-    c.onFieldTouch("password");
-    const transfer = c.onFieldTap("password");
-    expect(c.focusTarget.value).toBeNull();
+    const transfer = c.requestFocus("password");
+    expect(c.focusTarget.value).toBe("password");
     await transfer;
     c.onFieldBlur("username");
     expect(c.focusTarget.value).toBe("password");
     c.onFieldFocus("password");
+    await vi.advanceTimersByTimeAsync(80);
     c.onFieldBlur("username");
     expect(c.focusTarget.value).toBe("password");
     c.onFieldBlur("password");
     expect(c.focusTarget.value).toBeNull();
   });
 
-  it("默认聚焦先于 tap 到达时仍完成交接，主动释放产生的 blur 不会取消新目标", async () => {
-    const c = controls(); c.onFieldFocus("username"); c.onFieldTouch("password");
-    c.onFieldFocus("password");
-    const transfer = c.onFieldTap("password");
+  it.each(["username", "password"] as const)("首次直接触摸 %s 时通过视图层下发聚焦命令", async (field) => {
+    const page = { $nextTick: vi.fn(() => Promise.resolve()) };
+    vi.mocked(getCurrentInstance).mockReturnValueOnce({ proxy: page } as unknown as ReturnType<typeof getCurrentInstance>);
+    const c = controls();
+    const transfer = c.onFieldTouch(field);
+    expect(c.focusTarget.value).toBe(field);
     await transfer;
-    c.onFieldBlur("password");
-    expect(c.focusTarget.value).toBe("password");
-    c.onFieldFocus("password");
-    c.onFieldBlur("password");
-    expect(c.focusTarget.value).toBeNull();
+    expect(page.$nextTick).toHaveBeenCalledOnce();
+    expect(c.focusTarget.value).toBe(field);
+    c.onFieldFocus(field);
+    expect(c.focusTarget.value).toBe(field);
   });
 
   it("点击当前已聚焦的输入框不重置光标，也不自动再弹键盘", async () => {
-    const c = controls(); c.onFieldFocus("password"); c.onFieldTouch("password");
-    const pending = c.onFieldTap("password");
+    vi.useFakeTimers();
+    const page = { $nextTick: vi.fn(() => Promise.resolve()) };
+    vi.mocked(getCurrentInstance).mockReturnValueOnce({ proxy: page } as unknown as ReturnType<typeof getCurrentInstance>);
+    const c = controls(); await c.onFieldTouch("password"); c.onFieldFocus("password");
+    await vi.advanceTimersByTimeAsync(80);
+    await c.onFieldTouch("password");
     expect(c.focusTarget.value).toBe("password");
-    await pending;
+    expect(page.$nextTick).toHaveBeenCalledOnce();
     c.onFieldBlur("password"); await nextTick();
+    expect(c.focusTarget.value).toBeNull();
+  });
+
+  it("直接从账号点到密码，迟到的账号 blur 不会清除密码焦点", async () => {
+    vi.useFakeTimers();
+    const c = controls();
+    await c.onFieldTouch("username"); c.onFieldFocus("username");
+    await vi.advanceTimersByTimeAsync(80);
+    const transfer = c.onFieldTouch("password");
+    expect(c.focusTarget.value).toBe("password");
+    await transfer;
+    c.onFieldBlur("username");
+    expect(c.focusTarget.value).toBe("password");
+    c.onFieldFocus("password");
+    c.onFieldBlur("username");
+    expect(c.focusTarget.value).toBe("password");
+  });
+
+  it("Android 目标框 focus 后立即 blur 时自动补发一次聚焦", async () => {
+    vi.useFakeTimers();
+    const c = controls(); c.onFieldFocus("username");
+    await c.onFieldTouch("password");
+    c.onFieldBlur("username");
+    c.onFieldFocus("password");
+    c.onFieldBlur("password");
+    expect(c.focusTarget.value).toBeNull();
+    await nextTick(); await nextTick();
+    expect(c.focusTarget.value).toBe("password");
+    c.onFieldFocus("password");
+    await vi.advanceTimersByTimeAsync(80);
+    c.onFieldBlur("password");
+    expect(c.focusTarget.value).toBeNull();
+  });
+
+  it("等待程序交接时直接触摸其他输入框，以最后一次触摸为准", async () => {
+    const c = controls();
+    const pending = c.requestFocus("password");
+    const replacement = c.onFieldTouch("username");
+    await Promise.all([pending, replacement]);
+    expect(c.focusTarget.value).toBe("username");
+  });
+
+  it("原生 focus 事件只记录当前输入框，不反向创建受控聚焦命令", () => {
+    const c = controls();
+    c.onFieldFocus("username");
     expect(c.focusTarget.value).toBeNull();
   });
 

@@ -34,11 +34,11 @@ function errorText(error: unknown): string {
 }
 
 function validate(): string {
-  if (!oldPassword.value) return "请填写原密码";
+  if (!oldPassword.value) return "请填写旧密码";
   if (!newPassword.value) return "请填写新密码";
   if (!confirmPassword.value) return "请再次输入新密码";
   if (newPassword.value !== confirmPassword.value) return "两次输入的新密码不一致";
-  if (oldPassword.value === newPassword.value) return "新密码不能与原密码相同";
+  if (oldPassword.value === newPassword.value) return "新密码不能与旧密码相同";
   if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,14}$/.test(newPassword.value)) {
     return "新密码须为 6～14 位字母与数字组合";
   }
@@ -89,18 +89,19 @@ onLoad(async () => {
       </view>
 
       <view class="password-field">
-        <text class="password-field__label">原密码</text>
+        <text class="password-field__label">旧密码</text>
         <view class="password-field__control">
           <input
             v-model="oldPassword"
             class="password-field__input"
             :password="!showOldPassword"
-            placeholder="请输入原密码"
+            placeholder="请输入旧密码"
+            maxlength="14"
             :disabled="submitting"
           />
           <button
             class="password-field__toggle"
-            :aria-label="showOldPassword ? '隐藏原密码' : '显示原密码'"
+            :aria-label="showOldPassword ? '隐藏旧密码' : '显示旧密码'"
             @tap="toggleVisibility('old')"
           >
             {{ showOldPassword ? "隐藏" : "显示" }}
@@ -115,7 +116,7 @@ onLoad(async () => {
             v-model="newPassword"
             class="password-field__input"
             :password="!showNewPassword"
-            placeholder="请输入新密码"
+            placeholder="6～14 位"
             maxlength="14"
             :disabled="submitting"
           />
@@ -136,7 +137,7 @@ onLoad(async () => {
             v-model="confirmPassword"
             class="password-field__input"
             :password="!showConfirmPassword"
-            placeholder="请再次输入新密码"
+            placeholder="再次输入新密码"
             maxlength="14"
             :disabled="submitting"
             confirm-type="done"
@@ -159,7 +160,7 @@ onLoad(async () => {
         :disabled="!canSubmit"
         :loading="submitting"
       >
-        {{ submitting ? "正在保存" : "确认修改" }}
+        {{ submitting ? "正在提交" : "提交" }}
       </button>
     </form>
   </view>
@@ -194,7 +195,7 @@ onLoad(async () => {
 }
 
 .password-field + .password-field {
-  margin-top: 17px;
+  margin-top: 16px;
 }
 
 .password-field__label {

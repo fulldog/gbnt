@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createReportForm,
-  hasReportProgress,
   replaceIssueType,
   type ReportFormState,
 } from "@/domain/issues/form";
@@ -30,11 +29,14 @@ function validWellForm(): ReportFormState {
   form.details.outletDamaged = "0";
   form.details.casingTotal = "1";
   form.details.casingDamaged = "0";
+  form.panoramaPhotos = [photo("panorama")];
   const capturedAt = Date.now() - 61_000;
   for (const quiz of form.quizzes) {
     quiz.value = true;
     if (quiz.type === "water_out") {
       quiz.photos = [photo("water-1", capturedAt), photo("water-2", Date.now())];
+    } else if (quiz.type !== "wiring_ok") {
+      quiz.photos = [photo(`${quiz.type}-1`)];
     }
   }
   form.signatureFileId = "signature-1";
@@ -42,24 +44,19 @@ function validWellForm(): ReportFormState {
 }
 
 describe("巡查上报领域规则", () => {
-  it("空白表单不生成恢复草稿，实际填写后才视为有进度", () => {
-    const form = createReportForm();
-    expect(hasReportProgress(form)).toBe(false);
-
-    form.address = "测试地址";
-    expect(hasReportProgress(form)).toBe(true);
-  });
-
-  it("按当前后端 6 项机井契约生成 payload", () => {
+  it("按当前后端新版机井契约生成 payload", () => {
     const form = validWellForm();
     form.code = " 01号 ";
 
     const payload = buildCreateIssueInput(form);
 
+    if (payload.type !== "well") throw new Error("机井上报应生成 well payload");
     expect(payload.type).toBe("well");
     expect(payload.code).toBe("01号");
-    expect(payload.type_ext.checklist).toHaveLength(6);
-    expect(payload.type_ext.checklist.at(-1)?.type).toBe("transformer_ok");
+    expect(payload.type_ext.schema_version).toBe(2);
+    expect(payload.type_ext.panorama_files).toEqual(["panorama"]);
+    expect(payload.type_ext.checklist).toHaveLength(5);
+    expect(payload.type_ext.checklist.some((item) => item.type === "transformer_ok")).toBe(false);
     expect(payload.reporter_signature_file_id).toBe("signature-1");
     expect(payload.plan_date).toBeUndefined();
   });
@@ -104,15 +101,15 @@ describe("巡查上报领域规则", () => {
     );
   });
 
-  it("道路字段严格保留后端 tree_survive", () => {
+  it("道路使用新版三项排查契约且不再强制历史林网字段", () => {
     const form = validWellForm();
     replaceIssueType(form, "road");
     form.details.length = "1.2";
     form.details.width = "4";
     form.details.thickness = "0.2";
-    form.details.treeSurvive = "30";
     for (const quiz of form.quizzes) {
-      quiz.value = true;
+      quiz.value = quiz.type !== "has_road_damage";
+      if (quiz.type === "has_road_damage") quiz.photos = [photo("road-damage")];
     }
     form.signatureFileId = "signature-road";
 
@@ -121,10 +118,12 @@ describe("巡查上报领域规则", () => {
     if (payload.type !== "road") {
       throw new Error("道路上报应生成 road payload");
     }
-    expect(payload.type_ext.tree_survive).toBe(30);
+    expect(payload.type_ext.schema_version).toBe(2);
+    expect(payload.type_ext.tree_survive).toBeUndefined();
     expect(payload.type_ext.checklist.map((item) => item.type)).toEqual([
       "has_shoulder",
       "has_ash",
+      "has_road_damage",
     ]);
   });
 
@@ -133,7 +132,6 @@ describe("巡查上报领域规则", () => {
     replaceIssueType(form, "forest");
     form.details.handoverCount = "100";
     form.details.existingCount = "95";
-    form.details.surviveRate = "95";
     for (const quiz of form.quizzes) {
       quiz.value = false;
     }
@@ -150,5 +148,24 @@ describe("巡查上报领域规则", () => {
     form.details.outletDamaged = "1";
 
     expect(reportNeedsRectify(form)).toBe(true);
+  });
+
+  it("机井全景照片在基本信息步骤校验并写入独立附件字段", () => {
+    const form = validWellForm();
+    form.panoramaPhotos = [];
+    expect(validateBasicStep(form)).toContain("全景照片至少上传 1 张");
+  });
+
+  it("变压器型号和林网整数在前端拦截，避免提交后才由后端拒绝", () => {
+    const transformer = validWellForm();
+    replaceIssueType(transformer, "transformer");
+    transformer.details.capacity = "100";
+    expect(validateBasicStep(transformer)).toContain("请填写变压器型号");
+
+    const forest = validWellForm();
+    replaceIssueType(forest, "forest");
+    forest.details.handoverCount = "100.5";
+    forest.details.existingCount = "90";
+    expect(validateBasicStep(forest)).toContain("移交株数必须是非负整数");
   });
 });

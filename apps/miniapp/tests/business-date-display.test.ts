@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Issue } from "@gbnt/api-client";
 import { businessToday, calendarDate, calendarDayDifference, millisecondsUntilBusinessMidnight } from "@/utils/business-date";
-import { formatDateTime, issueEditableRectifyQuizzes, issuePlanHint, issueSummary } from "@/utils/issue-display";
+import { formatDateTime, formatPublishedTime, issueEditableRectifyQuizzes, issuePlanHint, issueSummary } from "@/utils/issue-display";
 
 function issue(patch: Record<string, unknown> = {}): Issue {
   return {
@@ -20,6 +20,15 @@ describe("business date display", () => {
     expect(formatDateTime("2026-09-05T16:12:00Z")).toBe("2026-09-06 00:12");
     expect(formatDateTime("2026-09-05T16:12:00+08:00")).toBe("2026-09-05 16:12");
     expect(formatDateTime("2026-09-05 16:12:00")).toBe("2026-09-05 16:12");
+  });
+
+  it("formats todo publish time relatively for the first week", () => {
+    const now = Date.parse("2026-09-11T10:30:00+08:00");
+    expect(formatPublishedTime("2026-09-11T10:29:31+08:00", now)).toBe("刚刚");
+    expect(formatPublishedTime("2026-09-11T09:30:00+08:00", now)).toBe("1小时前");
+    expect(formatPublishedTime("2026-09-06T10:30:00+08:00", now)).toBe("5天前");
+    expect(formatPublishedTime("2026-09-03T10:30:00+08:00", now)).toBe("9-3");
+    expect(formatPublishedTime("invalid", now)).toBe("—");
   });
 
   it.each(["garbage", "2026-02-30", "0001-01-01T00:00:00Z", "2026-13-01"])("never displays invalid dates as NaN: %s", (date) => {

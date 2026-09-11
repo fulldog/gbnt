@@ -56,7 +56,7 @@
         {
           "path": "issue/map",
           "style": {
-            "navigationBarTitleText": "问题位置"
+            "navigationBarTitleText": "位置"
           }
         },
         {

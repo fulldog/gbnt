@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onLoad, onPullDownRefresh, onReachBottom, onShow, onUnload } from "@dcloudio/uni-app";
 import MineIssueCard from "@/components/mine/MineIssueCard.vue";
-import { useBusinessToday } from "@/composables/useBusinessToday";
+import { useBusinessNow } from "@/composables/useBusinessNow";
 import {
   normalizeMineScope,
   useMineIssueList,
@@ -12,7 +12,7 @@ interface MineListRouteQuery {
 }
 
 const listState = useMineIssueList();
-const today = useBusinessToday();
+const now = useBusinessNow();
 let showCount = 0;
 
 function openDetail(id: number): void {
@@ -69,10 +69,8 @@ onUnload(listState.invalidate);
       </button>
     </view>
 
-    <view v-else-if="listState.isEmpty.value" class="mine-list-state">
-      <view class="mine-list-state__empty-mark" aria-hidden="true">
-        <image class="mine-list-state__icon" src="/static/icons/list-muted.svg" mode="aspectFit" />
-      </view>
+    <view v-else-if="listState.isEmpty.value" class="mine-list-state mine-list-state--empty">
+      <image class="mine-list-state__empty-image" src="/static/illustrations/todo-empty.svg" mode="widthFix" aria-hidden="true" />
       <text class="mine-list-state__title">{{ listState.scopeMeta.value.empty }}</text>
       <text class="mine-list-state__message">下拉页面可重新获取数据</text>
     </view>
@@ -87,7 +85,7 @@ onUnload(listState.invalidate);
           v-for="item in listState.items.value"
           :key="item.id"
           :issue="item"
-          :today="today"
+          :now="now"
           @open="openDetail"
           @preview="previewImages"
         />
@@ -129,7 +127,7 @@ onUnload(listState.invalidate);
 }
 
 .mine-list-page__content {
-  padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
+  padding: 8px 0 calc(24px + env(safe-area-inset-bottom));
 }
 
 .mine-list-page__summary {
@@ -193,8 +191,7 @@ onUnload(listState.invalidate);
   border-radius: 50%;
 }
 
-.mine-list-state__mark,
-.mine-list-state__empty-mark {
+.mine-list-state__mark {
   display: flex;
   width: 54px;
   height: 54px;
@@ -203,6 +200,16 @@ onUnload(listState.invalidate);
   margin-bottom: 14px;
   border-radius: 50%;
   background: #ffffff;
+}
+
+.mine-list-state--empty {
+  min-height: 0;
+  padding-top: 36px;
+}
+
+.mine-list-state__empty-image {
+  width: 200px;
+  margin-bottom: -30px;
 }
 
 .mine-list-state__icon {

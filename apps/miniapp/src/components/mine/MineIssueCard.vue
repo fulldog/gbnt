@@ -2,7 +2,7 @@
 import type { MiniappIssue } from "@/api/types";
 import IssueCard from "@/components/issue/IssueCard.vue";
 
-defineProps<{ issue: MiniappIssue; today?: string }>();
+defineProps<{ issue: MiniappIssue; now?: number }>();
 const emit = defineEmits<{
   open: [id: number];
   preview: [urls: string[], current: string];
@@ -18,5 +18,5 @@ function openMap(id: number): void {
 </script>
 
 <template>
-  <IssueCard :issue="issue" :today="today" @open="emit('open', $event)" @map="openMap" @preview="preview" />
+  <IssueCard :issue="issue" :now="now" @open="emit('open', $event)" @map="openMap" @preview="preview" />
 </template>

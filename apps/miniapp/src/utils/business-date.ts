@@ -19,11 +19,18 @@ export function calendarDate(value: unknown): string | null {
 export function businessDateTime(value: unknown): string | null {
   if (!calendarDate(value) || typeof value !== "string") return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const timestamp = businessTimestamp(value);
+  if (timestamp === null) return null;
+  return new Date(timestamp + SHANGHAI_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
+}
+
+/** 将后端日期时间转换为时刻；无时区值按北京时间解释。 */
+export function businessTimestamp(value: unknown): number | null {
+  if (!calendarDate(value) || typeof value !== "string") return null;
   const normalized = value.trim().replace(" ", "T");
   const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
   const timestamp = Date.parse(hasTimezone ? normalized : `${normalized}+08:00`);
-  if (!Number.isFinite(timestamp)) return null;
-  return new Date(timestamp + SHANGHAI_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
 export function calendarDayDifference(target: string, today: string): number | null {

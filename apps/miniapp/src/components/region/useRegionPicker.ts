@@ -37,6 +37,7 @@ export function useRegionPicker(
   // ID 三元组保存候选，null 三元组表示全选；整体 null 表示尚无有效候选。
   const pendingIds = shallowRef<RegionIds | null>(null);
   const isFilter = computed(() => getMode() === "filter");
+  const allLabel = computed(() => ALL_NAMES[getStartLevel() === "street" ? 1 : 0]);
   const districts = computed(() => {
     if (getStartLevel() === "street") {
       const streets: OrgTreeNode[] = [];
@@ -77,9 +78,9 @@ export function useRegionPicker(
     return find(getTree(), []) ?? [];
   });
   const selectedLabel = computed(() => getSelectedId() === null && isFilter.value
-    ? ALL_NAMES[0] : selectedPath.value.filter((node) => getStartLevel() !== "street" || ["street", "village"].includes(node.type)).map((node) => node.name).join(""));
+    ? allLabel.value : selectedPath.value.filter((node) => getStartLevel() !== "street" || ["street", "village"].includes(node.type)).map((node) => node.name).join(""));
   const selectedName = computed(() => getSelectedId() === null && isFilter.value
-    ? ALL_NAMES[0] : selectedPath.value[selectedPath.value.length - 1]?.name ?? "");
+    ? allLabel.value : selectedPath.value[selectedPath.value.length - 1]?.name ?? "");
 
   function streetsOf(node: OrgTreeNode | undefined): OrgTreeNode[] {
     return node?.children.filter((child) => child.type === "street") ?? [];
@@ -91,7 +92,9 @@ export function useRegionPicker(
 
   function options(nodes: readonly OrgTreeNode[], column: 0 | 1 | 2): RegionOption[] {
     const result: RegionOption[] = nodes.map(({ id, name }) => ({ id, name }));
-    return isFilter.value ? [{ id: null, name: ALL_NAMES[column] }, ...result] : result;
+    // 从街道开始时，第 0 列只是隐藏的容器，不能再插入“全部区域”占用索引。
+    return isFilter.value && (column !== 0 || getStartLevel() !== "street")
+      ? [{ id: null, name: ALL_NAMES[column] }, ...result] : result;
   }
 
   const columns = computed<RegionColumns>(() => {
@@ -112,12 +115,14 @@ export function useRegionPicker(
     const ids = pendingIds.value;
     if (!opened.value || !ids) return null;
     if (ids[0] === null) {
-      return isFilter.value && ids[1] === null && ids[2] === null ? { id: null, label: ALL_NAMES[0] } : null;
+      return isFilter.value && ids[1] === null && ids[2] === null ? { id: null, label: allLabel.value } : null;
     }
     const entry = districts.value.find((item) => item.node.id === ids[0]);
     if (!entry) return null;
     const street = streetsOf(entry.node).find((node) => node.id === ids[1]);
-    if (getStartLevel() === "street" && !street) return null;
+    if (getStartLevel() === "street" && !street) {
+      return isFilter.value && ids[1] === null && ids[2] === null ? { id: null, label: allLabel.value } : null;
+    }
     if (ids[1] !== null && !street) return null;
     const village = villagesOf(street).find((node) => node.id === ids[2]);
     if (ids[2] !== null && !village) return null;
@@ -131,7 +136,9 @@ export function useRegionPicker(
 
   function initialIds(): RegionIds | null {
     const selectedId = getSelectedId();
-    if (isFilter.value && selectedId === null) return [null, null, null];
+    if (isFilter.value && selectedId === null) {
+      return [getStartLevel() === "street" ? districts.value[0]!.node.id : null, null, null];
+    }
     for (const { node: district } of districts.value) {
       const streets = streetsOf(district);
       if (district.id === selectedId && (isFilter.value || district.children.length === 0)) return [district.id, null, null];

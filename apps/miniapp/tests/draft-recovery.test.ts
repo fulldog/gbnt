@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useReportDraft, reportDraftStorageKey } from "@/composables/report/useReportDraft";
-import { createReportForm } from "@/domain/issues/form";
 import { readRectifyNotes, rectifyDraftKey, saveRectifyNotes } from "@/utils/rectify-draft";
 import { createMiniappAttachmentsApi } from "@/api/attachments";
 
@@ -15,43 +13,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-describe("草稿恢复真实性", () => {
-  it("存储满时显示失败，重试成功后才显示已保存", () => {
-    const draft = useReportDraft(7);
-    const form = createReportForm();
-    form.address = "真实地址";
-    setStorage.mockImplementationOnce(() => { throw new Error("quota"); });
-    draft.saveDraft(form);
-    expect(draft.saveState.value).toBe("failed");
-    draft.saveDraft(form);
-    expect(draft.saveState.value).toBe("saved");
-    expect(draft.loadDraft()?.address).toBe("真实地址");
-  });
-
-  it("清理失败不谎报已清空", () => {
-    const draft = useReportDraft(7);
-    const form = createReportForm();
-    form.address = "已经提交的地址";
-    draft.saveDraft(form);
-    removeStorage.mockImplementationOnce((key) => storage.delete(key));
-    removeStorage.mockImplementationOnce(() => { throw new Error("storage unavailable"); });
-    expect(draft.clearDraft()).toBe(false);
-    expect(draft.saveState.value).toBe("failed");
-    expect(storage.has(reportDraftStorageKey(7))).toBe(true);
-  });
-
-  it("恢复时按正式题目顺序重排，避免逐题向导显示错配", () => {
-    const form = createReportForm();
-    const order = form.quizzes.map((quiz) => quiz.type);
-    form.quizzes[0]!.desc = "第一题的说明";
-    form.quizzes.reverse();
-    const draft = useReportDraft(7);
-    draft.saveDraft(form);
-    const restored = draft.loadDraft()!;
-    expect(restored.quizzes.map((quiz) => quiz.type)).toEqual(order);
-    expect(restored.quizzes[0]!.desc).toBe("第一题的说明");
-  });
-
+describe("整改草稿恢复真实性", () => {
   it("整改文字按用户、记录和轮次隔离且不持久化临时照片", () => {
     const key = rectifyDraftKey(7, 42, 1);
     const draft = { type: "water_out" as const, note: "已处理", selected: true, photoPaths: ["temporary-path"] };

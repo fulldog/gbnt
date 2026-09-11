@@ -64,6 +64,8 @@ export interface ReportFormState {
   address: string;
   lat: number | null;
   lng: number | null;
+  /** 机井全景照片，独立于逐题现场照片。 */
+  panoramaPhotos: UploadedPhoto[];
   planDate: string;
   signatureFileId: string;
   signaturePreviewUrl: string;
@@ -117,6 +119,23 @@ export function createQuizForm(type: IssueType): QuizFormItem[] {
   }));
 }
 
+/** 将旧草稿迁入当前题目集合；保留同题答案，新增题留空，退出题不再提交。 */
+export function normalizeReportFormSchema(form: ReportFormState): void {
+  form.panoramaPhotos ??= [];
+  const current = createQuizForm(form.type);
+  const previousTypes = form.quizzes.map((item) => item.type);
+  const nextTypes = current.map((item) => item.type);
+  const schemaChanged = previousTypes.length !== nextTypes.length ||
+    previousTypes.some((type, index) => type !== nextTypes[index]);
+  form.quizzes = current.map((empty) =>
+    form.quizzes.find((item) => item.type === empty.type) ?? empty,
+  );
+  if (schemaChanged) {
+    form.signatureFileId = "";
+    form.signaturePreviewUrl = "";
+  }
+}
+
 export function createReportForm(type: IssueType = "well"): ReportFormState {
   return {
     type,
@@ -127,6 +146,7 @@ export function createReportForm(type: IssueType = "well"): ReportFormState {
     address: "",
     lat: null,
     lng: null,
+    panoramaPhotos: [],
     planDate: "",
     signatureFileId: "",
     signaturePreviewUrl: "",
@@ -136,40 +156,11 @@ export function createReportForm(type: IssueType = "well"): ReportFormState {
   };
 }
 
-/** 只有用户实际填写或切换过内容时才保留草稿，避免空表单反复提示恢复。 */
-export function hasReportProgress(form: ReportFormState): boolean {
-  if (form.signatureStrokes?.length) return true;
-  const initial = createReportForm();
-  if (
-    form.type !== initial.type ||
-    form.projectYear !== initial.projectYear ||
-    form.orgId !== initial.orgId ||
-    form.orgLabel !== initial.orgLabel ||
-    form.code !== initial.code ||
-    form.address !== initial.address ||
-    form.lat !== initial.lat ||
-    form.lng !== initial.lng ||
-    form.planDate !== initial.planDate ||
-    form.signatureFileId !== initial.signatureFileId ||
-    form.signaturePreviewUrl !== initial.signaturePreviewUrl
-  ) {
-    return true;
-  }
-
-  const detailKeys = Object.keys(initial.details) as Array<keyof ReportDetailsForm>;
-  if (detailKeys.some((key) => form.details[key] !== initial.details[key])) {
-    return true;
-  }
-
-  return form.quizzes.some(
-    (item) => item.value !== null || item.desc.trim() !== "" || item.photos.length > 0,
-  );
-}
-
 export function replaceIssueType(form: ReportFormState, type: IssueType): void {
   form.type = type;
   form.details = createReportDetails();
   form.quizzes = createQuizForm(type);
+  form.panoramaPhotos = [];
   form.planDate = "";
   form.signatureFileId = "";
   form.signaturePreviewUrl = "";

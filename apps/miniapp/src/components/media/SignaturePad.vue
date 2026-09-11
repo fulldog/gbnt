@@ -19,14 +19,10 @@ let rect = { left: 0, top: 0, width: 320, height: 480 };
 let revision = 0;
 let disposed = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
-let pendingDraw: Promise<void> = Promise.resolve();
+let cancelExport: (() => void) | null = null;
 
-function commit(reserve: boolean): Promise<void> {
-  if (!context) return Promise.resolve();
-  const ctx = context;
-  const draw = new Promise<void>((resolve) => ctx.draw(reserve, resolve));
-  pendingDraw = Promise.all([pendingDraw, draw]).then(() => undefined);
-  return pendingDraw;
+function commit(reserve: boolean): void {
+  context?.draw(reserve);
 }
 function strokeStyle(): void {
   context!.setStrokeStyle("#1a1a1a"); context!.setLineWidth(2.5);
@@ -52,11 +48,11 @@ function drawPoint(point: Point, previous?: Point): void {
     ctx.setFillStyle("#1a1a1a"); ctx.arc(point.x * rect.width, point.y * rect.height, 1.25, 0, Math.PI * 2); ctx.fill();
   }
 }
-async function redraw(): Promise<void> {
+function redraw(): void {
   if (!context || disposed) return;
   drawPaper();
   for (const stroke of strokes) stroke.forEach((point, index) => drawPoint(point, stroke[index - 1]));
-  await commit(false);
+  commit(false);
 }
 async function measure(): Promise<void> {
   await nextTick();
@@ -105,16 +101,47 @@ function clear(): void {
 }
 async function exportPng(): Promise<{ filePath: string; revision: number }> {
   end();
-  if (!ready.value || !hasInk.value) throw new Error("请先完成电子签名");
-  while (true) { const draw = pendingDraw; await draw; if (draw === pendingDraw) break; }
-  if (disposed || !hasInk.value) throw new Error("请先完成电子签名");
+  if (!ready.value || !context || !hasInk.value || disposed || !props.active) throw new Error("请先完成电子签名");
+  if (cancelExport) throw new Error("签名正在导出，请稍候");
+  const ctx = context;
   const exportedRevision = revision;
   const ratio = Math.min(uni.getSystemInfoSync().pixelRatio || 1, 3);
-  return new Promise((resolve, reject) => uni.canvasToTempFilePath({
-    canvasId, fileType: "png", quality: 1, destWidth: Math.round(rect.width * ratio), destHeight: Math.round(rect.height * ratio),
-    success: (result) => resolve({ filePath: result.tempFilePath, revision: exportedRevision }),
-    fail: (error) => reject(new Error(error.errMsg || "签名导出失败")),
-  }, instance?.proxy));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => finish(new Error("签名导出超时，请重试，已填写内容已保留")), 10_000);
+    function finish(error?: Error, filePath?: string): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      cancelExport = null;
+      if (error) reject(error);
+      else resolve({ filePath: filePath!, revision: exportedRevision });
+    }
+    cancelExport = () => finish(new Error("签名导出已取消，请重试"));
+    try {
+      // 提交时从完整笔迹重绘一帧，只等待这一帧；不累计等待书写过程的历史回调。
+      drawPaper();
+      for (const stroke of strokes) stroke.forEach((point, index) => drawPoint(point, stroke[index - 1]));
+      ctx.draw(false, () => {
+        if (settled) return;
+        if (disposed || !props.active || revision !== exportedRevision) {
+          finish(new Error("签名已变更，请重试"));
+          return;
+        }
+        try {
+          uni.canvasToTempFilePath({
+            canvasId, fileType: "png", quality: 1, destWidth: Math.round(rect.width * ratio), destHeight: Math.round(rect.height * ratio),
+            success: (result) => {
+              if (revision !== exportedRevision) finish(new Error("签名已变更，请重试"));
+              else if (!result.tempFilePath) finish(new Error("签名图片生成失败，请重试"));
+              else finish(undefined, result.tempFilePath);
+            },
+            fail: (error) => finish(new Error(error.errMsg || "签名导出失败")),
+          }, instance?.proxy);
+        } catch (error) { finish(error instanceof Error ? error : new Error("签名导出失败")); }
+      });
+    } catch (error) { finish(error instanceof Error ? error : new Error("签名绘制失败")); }
+  });
 }
 function getRevision(): number { return revision; }
 watch(() => props.strokes, (value) => {
@@ -122,10 +149,10 @@ watch(() => props.strokes, (value) => {
   strokes = JSON.parse(JSON.stringify(value)); current = null; revision += 1;
   hasInk.value = strokes.some((stroke) => stroke.length > 0); void redraw();
 });
-watch(() => props.active, (value) => { if (value) void measure(); else end(); });
+watch(() => props.active, (value) => { if (value) void measure(); else { end(); cancelExport?.(); } });
 onMounted(() => { context = uni.createCanvasContext(canvasId, instance?.proxy); ready.value = true; void measure(); });
-onHide(end);
-onBeforeUnmount(() => { end(); disposed = true; if (timer !== undefined) clearTimeout(timer); });
+onHide(() => { end(); cancelExport?.(); });
+onBeforeUnmount(() => { end(); disposed = true; cancelExport?.(); if (timer !== undefined) clearTimeout(timer); });
 defineExpose({ clear, exportPng, getRevision, hasInk });
 </script>
 

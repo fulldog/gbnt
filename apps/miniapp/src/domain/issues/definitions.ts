@@ -1,3 +1,8 @@
+import {
+  ISSUE_FORM_QUIZZES,
+  issueQuizIsAbnormal,
+  type IssueQuizDefinition,
+} from "@gbnt/api-client";
 import type {
   BridgeKind,
   FacilityBuildKind,
@@ -12,11 +17,8 @@ export interface SelectOption<TValue extends string | number> {
   value: TValue;
 }
 
-export interface QuizDefinition {
-  type: QuizType;
-  label: string;
+export interface QuizDefinition extends IssueQuizDefinition {
   help: string;
-  negative: boolean;
 }
 
 export const ISSUE_TYPE_OPTIONS: readonly SelectOption<IssueType>[] = [
@@ -50,113 +52,30 @@ export const VOLTAGE_OPTIONS: readonly SelectOption<TransformerVoltage>[] = [
   { value: "0.4kv", label: "0.4 kV" },
 ];
 
+function quizHelp(definition: IssueQuizDefinition): string {
+  if (definition.type === "water_out") {
+    return "选择“是”时须现场拍摄至少两张照片，首张与第二张间隔不少于 60 秒。";
+  }
+  if (definition.observationOnly) {
+    return "请选择现场实际情况，此项只记录现状。";
+  }
+  return definition.negative ? "选择“是”表示存在问题。" : "选择“否”表示存在问题。";
+}
+
+function formQuizDefinitions(type: IssueType): readonly QuizDefinition[] {
+  return ISSUE_FORM_QUIZZES[type].map((definition) => ({
+    ...definition,
+    help: quizHelp(definition),
+  }));
+}
+
+/** 创建表单直接复用共享新版契约，避免页面题目与服务端校验再次漂移。 */
 export const QUIZ_DEFINITIONS: Readonly<Record<IssueType, readonly QuizDefinition[]>> = {
-  well: [
-    {
-      type: "water_out",
-      label: "机井是否出水",
-      help: "选择“是”时须现场拍摄至少两张照片，首张与第二张间隔不少于 60 秒。",
-      negative: false,
-    },
-    {
-      type: "pipe_ok",
-      label: "管道是否按要求连接",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "wiring_ok",
-      label: "走线是否规范",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "box_ok",
-      label: "配电箱是否完好",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "cover_ok",
-      label: "井台、井盖是否完整",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "transformer_ok",
-      label: "变压器是否完好",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-  ],
-  road: [
-    {
-      type: "has_shoulder",
-      label: "是否有路肩",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "has_ash",
-      label: "是否有灰土层",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-  ],
-  bridge: [
-    {
-      type: "needs_rectify",
-      label: "是否需要整改",
-      help: "选择“是”表示存在问题。",
-      negative: true,
-    },
-  ],
-  forest: [
-    {
-      type: "broken_belt",
-      label: "林带是否断带",
-      help: "选择“是”表示存在问题。",
-      negative: true,
-    },
-    {
-      type: "dead_trees",
-      label: "是否有枯死木",
-      help: "选择“是”表示存在问题。",
-      negative: true,
-    },
-    {
-      type: "pest",
-      label: "是否发现病虫害",
-      help: "选择“是”表示存在问题。",
-      negative: true,
-    },
-  ],
-  transformer: [
-    {
-      type: "powered",
-      label: "是否通电",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "device_ok",
-      label: "设备是否完好",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "cabinet_ok",
-      label: "配电设施是否完好",
-      help: "选择“否”表示存在问题。",
-      negative: false,
-    },
-    {
-      type: "illegal_wire",
-      label: "是否私拉乱接",
-      help: "选择“是”表示存在问题。",
-      negative: true,
-    },
-  ],
+  well: formQuizDefinitions("well"),
+  road: formQuizDefinitions("road"),
+  bridge: formQuizDefinitions("bridge"),
+  forest: formQuizDefinitions("forest"),
+  transformer: formQuizDefinitions("transformer"),
 };
 
 export function issueTypeLabel(type: IssueType): string {
@@ -170,5 +89,5 @@ export function quizDefinition(type: QuizType): QuizDefinition | undefined {
 }
 
 export function quizIndicatesIssue(definition: QuizDefinition, value: boolean): boolean {
-  return definition.negative ? value : !value;
+  return issueQuizIsAbnormal(definition, value);
 }

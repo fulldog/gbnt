@@ -6,7 +6,7 @@ import { createMineApi } from "@/api/mine";
 import { createAuthApi } from "@/api/auth";
 import { parseAuthUser, parseIssue, parseIssuePage, parseMineIssuePage, parseMineStats, parseRegions } from "@/api/response";
 import { createRegionsApi } from "@/api/regions";
-import { issueTypeInfoRows, issueAbnormalQuizzes, issueChecklistPhotos, issueReporter } from "@/utils/issue-display";
+import { issueTypeInfoRows, issueAbnormalQuizzes, issueChecklistPhotos, issueReporter, quizLabel } from "@/utils/issue-display";
 
 function rawIssue(): Record<string, any> {
   return {
@@ -49,6 +49,7 @@ describe("miniapp business response normalization", () => {
     expect(issue.type_ext.checklist).toHaveLength(5);
     expect(issueChecklistPhotos(issue)).toEqual([{ file_id: "panorama", url: "/panorama.png" }]);
     expect(issue.rectify_records).toHaveLength(1);
+    expect(quizLabel("transformer_ok")).toBe("变压器是否完好");
   });
   it("fills optional display fields but never invents coordinates or facility measurements", () => {
     const result = parseIssue(rawIssue());

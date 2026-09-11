@@ -88,9 +88,8 @@ function submit(): void {
             <view class="rectify-form__remove-mark" aria-hidden="true"><image class="rectify-form__remove-icon" src="/static/icons/close-white.svg" mode="aspectFit" /></view>
           </button>
         </view>
-        <button v-if="photoPaths.length < 6" class="rectify-form__add-photo" :disabled="busy" @tap="choosePhotos">
-          <image class="rectify-form__add-icon" src="/static/icons/plus-primary.svg" mode="aspectFit" aria-hidden="true" />
-          <text>整改照片</text>
+        <button v-if="photoPaths.length < 6" class="rectify-form__add-photo" :disabled="busy" aria-label="添加整改照片" @tap="choosePhotos">
+          <image class="rectify-form__add-icon" src="/static/icons/plus-muted.svg" mode="aspectFit" aria-hidden="true" />
         </button>
       </view>
     </view>
@@ -107,30 +106,36 @@ function submit(): void {
 }
 .rectify-form__photos {
   display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-  margin-top: 20rpx;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .rectify-form__photo-wrap,
 .rectify-form__photo-button,
 .rectify-form__add-photo {
-  width: 72px;
-  height: 72px;
+  flex: 0 0 88px;
+  width: 88px;
+  height: 88px;
 }
 
 .rectify-form__photo-wrap {
   position: relative;
 }
 
-.rectify-form__photo-button,
-.rectify-form__add-photo {
+.rectify-form__photo-button {
   min-height: 0;
   padding: 0;
   overflow: hidden;
-  border: 1rpx solid var(--gb-color-border, #dfe5ec);
-  border-radius: var(--gb-radius-sm, 12rpx);
-  background: #f7f9fc;
+  border: 0;
+  border-radius: 6px;
+  background: #f0f2f5;
   line-height: 1;
 }
 
@@ -148,8 +153,8 @@ function submit(): void {
 
 .rectify-form__remove {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: 0;
+  right: 0;
   z-index: 2;
   display: flex;
   align-items: flex-start;
@@ -165,18 +170,22 @@ function submit(): void {
 
 .rectify-form__add-photo {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8rpx;
-  color: var(--gb-color-text-secondary, #566176);
-  font-size: 14px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 1.5px dashed #c5ccd6;
+  border-radius: 6px;
+  background: #fff;
+  color: #a0aab8;
+  line-height: 1;
 }
 
 .rectify-form__add-icon {
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
 }
 
 .rectify-form__hint {
@@ -213,16 +222,15 @@ function submit(): void {
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid #fff;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, .55);
+  width: 24px;
+  height: 24px;
+  border-radius: 0 6px 0 6px;
+  background: rgba(207, 19, 34, .8);
 }
 .rectify-form__remove-icon {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 .rectify-form__actions {
   position: fixed;

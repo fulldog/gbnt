@@ -99,10 +99,6 @@ function selectVoltage(event: PickerEventLike): void {
           <text class="form-label">厚度</text>
           <input class="form-input" type="digit" :value="details.thickness" placeholder="请输入" @input="update('thickness', $event)" /><text class="form-unit">米</text>
         </view>
-        <view class="form-field">
-          <text class="form-label">林网存活数</text>
-          <input class="form-input" type="digit" :value="details.treeSurvive" placeholder="请输入" @input="update('treeSurvive', $event)" /><text class="form-unit">棵</text>
-        </view>
       </view>
     </template>
 
@@ -140,10 +136,6 @@ function selectVoltage(event: PickerEventLike): void {
           <input class="form-input" type="digit" :value="details.existingCount" placeholder="请输入" @input="update('existingCount', $event)" /><text class="form-unit">株</text>
         </view>
       </view>
-      <view class="form-field">
-        <text class="form-label">存活率</text>
-        <input class="form-input" type="digit" :value="details.surviveRate" placeholder="0–100" @input="update('surviveRate', $event)" /><text class="form-unit">%</text>
-      </view>
     </template>
 
     <template v-else>
@@ -166,6 +158,8 @@ function selectVoltage(event: PickerEventLike): void {
         </view>
       </view>
     </template>
+
+    <slot name="after-type-fields" />
 
     <view class="form-field">
       <text class="form-label">负责人</text>

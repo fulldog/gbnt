@@ -24,7 +24,7 @@ const checkingSession = shallowRef(true);
 const pageActive = shallowRef(true);
 const compactLayout = shallowRef(false);
 const sliderRef = shallowRef<SliderExpose | null>(null);
-const { focusTarget, onFieldTouch, onFieldTap, requestFocus, onFieldFocus, onFieldBlur, releaseFocus } =
+const { focusTarget, onFieldTouch, requestFocus, onFieldFocus, onFieldBlur, releaseFocus } =
   useLoginInputFocus(() => pageActive.value && !checkingSession.value && !authStore.loading);
 
 function togglePassword(): void {
@@ -120,7 +120,7 @@ onShow(() => { pageActive.value = true; });
         </view>
 
         <view class="login-field">
-          <view class="login-field__control" @touchstart.stop="onFieldTouch('username')" @tap.stop="onFieldTap('username')">
+          <view class="login-field__control" @touchstart="onFieldTouch('username')" @tap.stop>
             <image class="login-field__prefix" src="/static/icons/user-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="username"
@@ -143,7 +143,7 @@ onShow(() => { pageActive.value = true; });
         </view>
 
         <view class="login-field">
-          <view class="login-field__control" @touchstart.stop="onFieldTouch('password')" @tap.stop="onFieldTap('password')">
+          <view class="login-field__control" @touchstart="onFieldTouch('password')" @tap.stop>
             <image class="login-field__prefix" src="/static/icons/lock-muted.png" mode="aspectFit" aria-hidden="true" />
             <input
               v-model="password"
@@ -449,7 +449,7 @@ onShow(() => { pageActive.value = true; });
   height: 44px;
   align-items: center;
   justify-content: center;
-  margin: 16px 0 0;
+  margin: 20px 0 0;
   border-radius: 6px;
   background: var(--gbnt-primary, #015cbb);
   color: #ffffff;

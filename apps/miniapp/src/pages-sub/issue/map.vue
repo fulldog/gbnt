@@ -86,8 +86,8 @@ function haversineMeters(lng1: number, lat1: number, lng2: number, lat2: number)
 
 function formatDistance(meters: number): string {
   if (!Number.isFinite(meters)) return "—";
-  if (meters < 1000) return `${Math.round(meters)} 米`;
-  return `${(meters / 1000).toFixed(2)} 千米`;
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  return `${(meters / 1000).toFixed(2)}km`;
 }
 
 function locateCurrent(): void {

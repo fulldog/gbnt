@@ -48,7 +48,10 @@ function openPage(path: string): void {
 }
 
 async function loadMineData(): Promise<void> {
-  if (loading.value) return;
+  if (loading.value) {
+    uni.stopPullDownRefresh();
+    return;
+  }
   loading.value = true;
   errorMessage.value = "";
   let sessionToken: string | null = null;
@@ -152,7 +155,7 @@ onPullDownRefresh(() => {
         </view>
       </view>
 
-      <view class="mine-section mine-section--menu">
+      <view class="mine-section mine-section--menu mine-section--password">
         <button
           class="mine-menu-row"
           @tap="openPage('/pages-sub/account/change-password')"
@@ -207,7 +210,7 @@ onPullDownRefresh(() => {
 
 .mine-page__profile {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
 }
 
@@ -231,6 +234,7 @@ onPullDownRefresh(() => {
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  padding-top: 2px;
 }
 
 .mine-page__name-row {
@@ -243,6 +247,7 @@ onPullDownRefresh(() => {
 .mine-page__name {
   font-size: 22px;
   font-weight: 600;
+  line-height: 1.3;
   word-break: break-all;
 }
 
@@ -331,6 +336,8 @@ onPullDownRefresh(() => {
   color: var(--gbnt-primary);
   font-size: 22px;
   font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .mine-stat__label {
@@ -342,6 +349,10 @@ onPullDownRefresh(() => {
 .mine-section--menu {
   padding: 0;
   margin-bottom: 0;
+}
+
+.mine-section--password {
+  margin-bottom: 8px;
 }
 
 .mine-section__title--menu {

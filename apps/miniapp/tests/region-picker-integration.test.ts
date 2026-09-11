@@ -11,8 +11,8 @@ const village: OrgTreeNode = { id: 3, name: "甲村", type: "village", parent_id
 const tree: OrgTreeNode[] = [{ id: 1, name: "甲区", type: "district", parent_id: 0, sort: 0,
   children: [{ id: 2, name: "甲街道", type: "street", parent_id: 1, sort: 0, children: [village] }] }];
 
-function picker(mode: "leaf" | "filter" = "filter") {
-  const props = vue.reactive({ tree, value: null as number | null, label: "", mode, loading: false, error: "", disabled: false });
+function picker(mode: "leaf" | "filter" = "filter", startLevel: "district" | "street" = "district") {
+  const props = vue.reactive({ tree, value: null as number | null, label: "", mode, startLevel, loading: false, error: "", disabled: false });
   const emit = vi.fn();
   let hide = () => {};
   vi.stubGlobal("uni", { hideKeyboard: vi.fn() });
@@ -76,19 +76,33 @@ describe("共享行政区划组件接入", () => {
     expect(emit).toHaveBeenCalledWith("select", { id: 3, label: "甲区甲街道甲村" });
   });
 
-  it("待办必须选具体村，拒绝全选和父级，清除其他筛选保留村", async () => {
+  it("街道两列初始展示全部街道，确认后才回填具体街道", () => {
+    const { state, props, emit } = picker("filter", "street");
+    expect(state.triggerLabel.value).toBe("全部街道");
+    state.show();
+    state.onChange({ detail: { value: [1, 0] } });
+    expect(state.triggerLabel.value).toBe("全部街道");
+    state.commit();
+    expect(emit).toHaveBeenCalledWith("select", { id: 2, label: "甲街道" });
+    props.value = 2;
+    expect(state.triggerLabel.value).toBe("甲街道");
+  });
+
+  it("待办默认全选，可选权限内街道或村，清除筛选恢复全选", async () => {
     const { state, loader } = setupTodo(11);
     await state.loadRegions();
-    expect(loader).not.toHaveBeenCalled();
-    state.changeRegion({ id: null, label: "全部区域" });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10 });
     state.changeRegion({ id: 11, label: "甲街道" });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, org_id: 11 });
+    const requests = loader.mock.calls.length;
     state.changeRegion({ id: 22, label: "其他街道的村" });
-    expect(loader).not.toHaveBeenCalled();
+    state.changeRegion({ id: -1, label: "隐藏容器" });
+    expect(loader).toHaveBeenCalledTimes(requests);
     state.changeRegion({ id: 12, label: "甲街道甲村" });
     await state.reload({ keyword: "1188", status: "done", type: "well" });
     expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, keyword: "1188", status: "done", type: "well", org_id: 12 });
     state.clearAllFilters();
-    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, org_id: 12 });
+    expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10 });
   });
 
   it("创建和筛选只引用同一个组件，弹窗不再渲染底部已选路径", () => {

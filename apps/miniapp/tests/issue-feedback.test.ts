@@ -18,7 +18,7 @@ function issue(): MiniappIssue {
 function detail() {
   const item = issue();
   const auth = reactive({ user: { id: 7 } });
-  const api = { issues: { get: vi.fn().mockResolvedValue(item), deleteReported: vi.fn().mockResolvedValue(null), submitFeedback: vi.fn().mockResolvedValue({ ...item, status: "done" }) },
+  const api = { issues: { get: vi.fn().mockResolvedValue(item), submitFeedback: vi.fn().mockResolvedValue({ ...item, status: "done" }) },
     attachments: { uploadImages: vi.fn().mockResolvedValue({ list: [{ file_id: "photo-1" }] }) } };
   const uni = { setNavigationBarTitle: vi.fn(), showToast: vi.fn(), showModal: vi.fn(), navigateBack: vi.fn(), switchTab: vi.fn() };
   vi.stubGlobal("uni", uni);
@@ -27,15 +27,16 @@ function detail() {
     "@dcloudio/uni-app": { onLoad: vi.fn(), onPullDownRefresh: vi.fn(), onShareAppMessage: vi.fn(), onShareTimeline: vi.fn(), onUnload: (callback: () => void) => { unload = callback; } },
     "@/api/runtime": { miniappApi: api, toAssetUrl: (url: string) => url },
     "@/components/issue/IssueChecklist.vue": {}, "@/components/issue/IssueInfoList.vue": {},
+    "@/components/issue/IssuePhotoGrid.vue": {},
     "@/components/issue/IssueRectifyHistory.vue": {}, "@/components/issue/IssueRectifyResult.vue": {},
     "@/components/issue/RectifyForm.vue": {}, "@/components/common/RecoverableImage.vue": {},
     "@/stores/auth": { useAuthStore: () => auth }, "@/utils/rectify-draft": drafts, "@/utils/regions": regions,
     "@/composables/useBusinessToday": { useBusinessToday: () => shallowRef("2026-09-10") },
     "@/domain/issues/definitions": { issueTypeLabel: () => "道路" }, "@/utils/issue-display": display,
   }) as unknown as {
-    issueId: Ref<number>; issue: Ref<MiniappIssue>; canDelete: Ref<boolean>; canRectify: Ref<boolean>;
+    issueId: Ref<number>; issue: Ref<MiniappIssue>; canRectify: Ref<boolean>;
     rectifyFormRef: Ref<{ discardSubmitted: () => void }>;
-    loadDetail: () => Promise<void>; requestDelete: () => void;
+    loadDetail: () => Promise<void>;
     submitRectification: (draft: { note: string; photoPaths: string[] }) => Promise<void>;
   };
   state.issueId.value = 9;
@@ -43,7 +44,7 @@ function detail() {
   return { state, auth, api, uni, discard, unload: () => unload() };
 }
 
-describe("整单反馈及本人删除", () => {
+describe("整单整改反馈", () => {
   it("上传一次并使用整单接口，成功后清理草稿并展示完成状态", async () => {
     const { state, api, discard } = detail();
     await state.loadDetail();
@@ -65,20 +66,13 @@ describe("整单反馈及本人删除", () => {
     expect(api.attachments.uploadImages).toHaveBeenCalledOnce();
     expect(discard).toHaveBeenCalledOnce();
   });
-  it("上报人和整改人按账号 ID 判断，删除取消时没有请求", async () => {
-    const { state, auth, api, uni } = detail();
+  it("只有整改责任人可以提交反馈", async () => {
+    const { state, auth, api } = detail();
     await state.loadDetail();
     auth.user.id = 8;
-    expect(state.canDelete.value).toBe(false); expect(state.canRectify.value).toBe(false);
-    state.requestDelete(); await state.submitRectification({ note: "修复", photoPaths: ["/p"] });
-    expect(uni.showModal).not.toHaveBeenCalled(); expect(api.issues.submitFeedback).not.toHaveBeenCalled();
-    auth.user.id = 7; state.requestDelete();
-    const modal = uni.showModal.mock.calls[0]![0];
-    await modal.success({ confirm: false });
-    expect(api.issues.deleteReported).not.toHaveBeenCalled();
-    await modal.success({ confirm: true });
-    expect(api.issues.deleteReported).toHaveBeenCalledWith(9);
-    expect(uni.navigateBack).toHaveBeenCalledOnce();
+    expect(state.canRectify.value).toBe(false);
+    await state.submitRectification({ note: "修复", photoPaths: ["/p"] });
+    expect(api.issues.submitFeedback).not.toHaveBeenCalled();
   });
   it("离开页面后迟到的照片上传结果不能再提交反馈", async () => {
     const { state, api, unload } = detail();
@@ -89,7 +83,7 @@ describe("整单反馈及本人删除", () => {
     unload(); resolve({ list: [{ file_id: "photo-1" }] }); await pending;
     expect(api.issues.submitFeedback).not.toHaveBeenCalled();
   });
-  it("正式 API 方法同步路径、方法、反馈参数和删除空响应", async () => {
+  it("正式 API 方法同步反馈路径、参数及旧版本删除契约", async () => {
     const request = vi.fn((options) => options.success({ statusCode: 200, data: { code: 0, data: options.method === "DELETE" ? null : issue(), message: "ok" }, header: {} }));
     const client = createMiniappApiClient({ baseUrl: "https://example.test", request });
     const api = createIssuesApi(client);

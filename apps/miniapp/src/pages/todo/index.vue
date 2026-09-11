@@ -31,7 +31,7 @@ const auth = useAuthStore();
 const region = useTodoRegion(() => auth.user);
 const { tree: regionTree, loading: regionLoading, error: regionError, ready: regionReady } = region;
 const paged = usePagedIssues((query) => {
-  if (!region.ready.value || query.org_id !== region.selectedId.value) return Promise.reject(new Error("请选择具体村／社区"));
+  if (!region.ready.value || query.org_id !== region.selectedId.value) return Promise.reject(new Error("行政区划尚未就绪，请重新加载"));
   return miniappApi.todos.list(query);
 });
 const {
@@ -67,6 +67,7 @@ const hasActiveFilters = computed(
   () =>
     filters.value.type !== "all" ||
     filters.value.status !== "all" ||
+    filters.value.orgId !== undefined ||
     filters.value.keyword !== "",
 );
 
@@ -209,7 +210,7 @@ onUnload(() => {
         </picker>
         <view class="todo-page__region-filter">
           <RegionPicker
-            mode="village"
+            mode="filter"
             start-level="street"
             :tree="regionTree"
             :value="region.selectedId.value ?? null"
@@ -260,8 +261,8 @@ onUnload(() => {
         </view>
 
         <view v-if="!regionReady" class="todo-page__state">
-          <text class="todo-page__state-title">{{ regionLoading ? '正在加载行政区划…' : regionError ? '行政区划加载失败' : '请选择具体村／社区' }}</text>
-          <text class="todo-page__state-text">{{ regionError || '选择行政区划后查看该村／社区的待办记录。' }}</text>
+          <text class="todo-page__state-title">{{ regionLoading ? '正在加载行政区划…' : regionError ? '行政区划加载失败' : '暂无可用行政区划' }}</text>
+          <text class="todo-page__state-text">{{ regionError || (regionLoading ? '正在获取当前账号可查看的行政区划。' : '请联系管理员检查账号所属行政区划。') }}</text>
           <button v-if="regionError" class="todo-page__retry" @tap="loadRegions">重新加载</button>
         </view>
         <view v-else-if="isInitialLoading" class="todo-page__state">
@@ -276,9 +277,7 @@ onUnload(() => {
         </view>
 
         <view v-else-if="!items.length" class="todo-page__state">
-          <view class="todo-page__empty-icon" aria-hidden="true">
-            <image class="todo-page__empty-check" src="/static/icons/check-primary.svg" mode="aspectFit" />
-          </view>
+          <image class="todo-page__empty-image" src="/static/illustrations/todo-empty.svg" mode="widthFix" aria-hidden="true" />
           <text class="todo-page__state-title">暂无符合条件的记录</text>
           <text class="todo-page__state-text">可以调整筛选条件，或下拉刷新后重试。</text>
           <button v-if="hasActiveFilters" class="todo-page__retry" @tap="clearAllFilters">
@@ -506,21 +505,9 @@ onUnload(() => {
   animation: todo-spin 800ms linear infinite;
 }
 
-.todo-page__empty-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 108rpx;
-  height: 108rpx;
-  margin-bottom: 28rpx;
-  border-radius: 50%;
-  background: rgba(1, 92, 187, 0.08);
-}
-
-.todo-page__empty-check {
-  flex: none;
-  width: 26px;
-  height: 26px;
+.todo-page__empty-image {
+  width: 200px;
+  margin-bottom: -20px;
 }
 
 .todo-page__state-title {

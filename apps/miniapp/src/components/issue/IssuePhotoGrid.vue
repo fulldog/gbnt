@@ -7,10 +7,12 @@ const props = withDefaults(
     urls: readonly string[];
     max?: number;
     compact?: boolean;
+    large?: boolean;
   }>(),
   {
     max: 9,
     compact: false,
+    large: false,
   },
 );
 
@@ -22,7 +24,7 @@ const visibleUrls = computed(() => props.urls.slice(0, props.max));
 </script>
 
 <template>
-  <view v-if="visibleUrls.length" class="photo-grid" :class="{ 'photo-grid--compact': compact, 'photo-grid--one': visibleUrls.length === 1, 'photo-grid--two': visibleUrls.length === 2 }">
+  <view v-if="visibleUrls.length" class="photo-grid" :class="{ 'photo-grid--compact': compact, 'photo-grid--large': large, 'photo-grid--one': visibleUrls.length === 1, 'photo-grid--two': visibleUrls.length === 2 }">
     <view
       v-for="(url, index) in visibleUrls"
       :key="`${url}-${index}`"
@@ -79,6 +81,10 @@ const visibleUrls = computed(() => props.urls.slice(0, props.max));
   height: 72px;
   padding: 0;
   border-radius: 6px;
+}
+.photo-grid--compact.photo-grid--large .photo-grid__item {
+  width: 80px;
+  height: 80px;
 }
 .photo-grid__more {
   position: absolute;

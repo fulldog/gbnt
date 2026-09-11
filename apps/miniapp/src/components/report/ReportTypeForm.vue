@@ -6,6 +6,7 @@ import type { OrgTreeNode, FacilityCodeMode } from "@gbnt/api-client";
 import type { ReportTypeDraft } from "@/composables/report/useReportWorkspace";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import SignaturePad from "@/components/media/SignaturePad.vue";
+import PhotoPicker from "@/components/media/PhotoPicker.vue";
 import RecoverableImage from "@/components/common/RecoverableImage.vue";
 import IssueTypeFields from "@/components/report/IssueTypeFields.vue";
 import QuizCard from "@/components/report/QuizCard.vue";
@@ -17,6 +18,7 @@ import {
 } from "@/domain/issues/definitions";
 import {
   changeQuizAnswer,
+  normalizeReportFormSchema,
   restoreReportCodeMode,
   type QuizFormItem,
   type ReportDetailsForm,
@@ -52,6 +54,7 @@ const emit = defineEmits<{
 }>();
 const step = shallowRef(props.draft.step);
 const form = reactive<ReportFormState>(JSON.parse(JSON.stringify(props.draft.form)));
+normalizeReportFormSchema(form);
 restoreReportCodeMode(form);
 watch(() => props.initialPosition, (point) => {
   if (point && form.lat === null && form.lng === null) {
@@ -71,13 +74,30 @@ let active = true;
 let submitted = false;
 let latestSignatureUploadToken = 0;
 let activeSignatureUploadToken: number | null = null;
-const { choosing: choosingLocation, choose } = useLocation();
+let loadingShown = false;
+const {
+  choosing: choosingLocation,
+  refreshing: refreshingLocation,
+  busy: locationBusy,
+  choose,
+  refresh,
+} = useLocation();
 const regionTree = computed(() => props.regionTree);
 const regionsLoading = computed(() => props.regionsLoading);
 const regionsError = computed(() => props.regionsError);
 const codeError = shallowRef("");
 watch(() => [form.orgId, form.type, form.code, form.codeMode], () => { codeError.value = ""; });
 function load(): void { emit("retryRegions"); }
+function showLoading(title: string): void {
+  uni.showLoading({ title, mask: true });
+  loadingShown = true;
+}
+function hideLoading(): void {
+  // showToast 与 showLoading 共用提示层；成功或错误提示后不能再次 hideLoading。
+  if (!loadingShown) return;
+  loadingShown = false;
+  uni.hideLoading();
+}
 function saveDraft(_form?: ReportFormState): void {
   if (!active || submitted) return;
   emit("save", { form: JSON.parse(JSON.stringify(form)) as ReportFormState, step: step.value });
@@ -113,11 +133,19 @@ function showFirstError(nextErrors: string[]): void {
 }
 
 // 照片组件卸载时仍会回传 pending=false；按来源题目处理，不能再读取已经变化的 currentQuiz。
-function setPhotosPending({ type, value }: { type: QuizFormItem['type']; value: boolean }): void {
+function setPhotoSourcePending(type: string, value: boolean): void {
   if (!active) return;
   const next = new Set(pendingPhotos.value);
   if (value) next.add(type); else next.delete(type);
   pendingPhotos.value = next;
+}
+
+function setPhotosPending({ type, value }: { type: QuizFormItem['type']; value: boolean }): void {
+  setPhotoSourcePending(type, value);
+}
+
+function setPanoramaPending(value: boolean): void {
+  setPhotoSourcePending("well-panorama", value);
 }
 
 function blockForPhotos(): boolean {
@@ -174,21 +202,37 @@ function updateQuizPhotos({ type, value }: { type: QuizFormItem['type']; value: 
   saveDraft(form);
 }
 
-async function chooseLocation(): Promise<void> {
+function updatePanoramaPhotos(value: UploadedPhoto[]): void {
+  if (!active) return;
+  form.panoramaPhotos = value;
+  saveDraft(form);
+}
+
+function applyLocation(location: { address: string; latitude: number; longitude: number }): void {
+  form.address = location.address;
+  form.lat = location.latitude;
+  form.lng = location.longitude;
+  saveDraft(form);
+}
+
+async function selectLocationOnMap(): Promise<void> {
   try {
-    const location = await choose();
-    if (!location) {
-      return;
-    }
-    form.address = location.address;
-    form.lat = location.latitude;
-    form.lng = location.longitude;
+    const center = hasLocation.value
+      ? { latitude: form.lat as number, longitude: form.lng as number }
+      : props.initialPosition ?? undefined;
+    const location = await choose(center);
+    if (location) applyLocation(location);
   } catch (error) {
     uni.showToast({
       title: error instanceof Error ? error.message : "选择位置失败",
       icon: "none",
     });
   }
+}
+
+async function refreshCurrentLocation(): Promise<void> {
+  const location = await refresh();
+  if (location) applyLocation(location);
 }
 
 function currentStepErrors(): string[] {
@@ -247,20 +291,24 @@ async function uploadSignature(): Promise<boolean> {
   activeSignatureUploadToken = uploadToken;
   uploadingSignature.value = true;
   try {
+    showLoading("正在生成签名");
     const signature = await signatureRef.value?.exportPng();
     if (!signature) {
       throw new Error("签名板尚未准备完成");
     }
     if (!isCurrentSignatureUpload(uploadToken, signature.revision)) {
+      hideLoading();
       if (active) uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
       return false;
     }
 
+    showLoading("正在上传签名");
     const result = await miniappApi.attachments.uploadImages({
       files: [{ filePath: signature.filePath, fileType: "image" }],
       watermark: false,
     });
     if (!isCurrentSignatureUpload(uploadToken, signature.revision)) {
+      hideLoading();
       if (active) uni.showToast({ title: "签名已变更，请重新确认", icon: "none" });
       return false;
     }
@@ -274,13 +322,15 @@ async function uploadSignature(): Promise<boolean> {
     saveDraft(form);
     return true;
   } catch (error) {
-    if (active) uni.showToast({
+    hideLoading();
+    if (active && props.visible) uni.showToast({
       title: error instanceof Error ? error.message : "签名上传失败",
       icon: "none",
     });
     return false;
   } finally {
     if (activeSignatureUploadToken === uploadToken) {
+      hideLoading();
       activeSignatureUploadToken = null;
       uploadingSignature.value = false;
     }
@@ -288,26 +338,26 @@ async function uploadSignature(): Promise<boolean> {
 }
 
 async function submit(): Promise<void> {
-  if (!props.visible || submitting.value || uploadingSignature.value || blockForPhotos()) {
+  if (!props.visible || submitted || submitting.value || uploadingSignature.value || blockForPhotos()) {
     return;
   }
   const nextErrors = validateSubmitStep(form, false);
   if (nextErrors.length > 0) { showFirstError(nextErrors); return; }
   if (!form.signatureFileId && !(await uploadSignature())) return;
   submitting.value = true;
-  uni.showLoading({ title: "正在提交", mask: true });
   try {
+    showLoading("正在提交");
     const input = buildCreateIssueInput(form);
     form.submissionAttempt = prepareIssueSubmission(input, form.submissionAttempt);
     saveDraft();
     const issue = await miniappApi.issues.create({ ...input, request_id: form.submissionAttempt.requestId });
     if (!active) return;
     submitted = true;
-    uni.hideLoading();
+    hideLoading();
     emit("submitted", issue.code);
     if (issue.display_warning) uni.showToast({ title: issue.display_warning, icon: "none", duration: 3500 });
   } catch (error) {
-    uni.hideLoading();
+    hideLoading();
     if (!active) return;
     if (error instanceof ApiError && error.code === FACILITY_CODE_CONFLICT) {
       codeError.value = error.message;
@@ -322,7 +372,7 @@ async function submit(): Promise<void> {
       duration: 3000,
     });
   } finally {
-    uni.hideLoading();
+    hideLoading();
     submitting.value = false;
   }
 }
@@ -334,7 +384,8 @@ watch(form, () => {
 }, { deep: true });
 
 watch(() => JSON.stringify({ type: form.type, year: form.projectYear, org: form.orgId,
-  address: form.address, lat: form.lat, lng: form.lng, code: form.code, codeMode: form.codeMode, details: form.details, quizzes: form.quizzes, planDate: form.planDate }),
+  address: form.address, lat: form.lat, lng: form.lng, code: form.code, codeMode: form.codeMode, details: form.details,
+  panoramaPhotos: form.panoramaPhotos, quizzes: form.quizzes, planDate: form.planDate }),
 () => {
   if (draftReady.value && form.signatureFileId) resetSignatureUpload();
 }, { flush: "sync" });
@@ -346,6 +397,7 @@ onHide(() => {
   }
 });
 onBeforeUnmount(() => {
+  hideLoading();
   if (!submitted) saveDraft();
   emit("busy", false);
   active = false;
@@ -400,22 +452,31 @@ onBeforeUnmount(() => {
             <text v-if="codeError" class="code-error">{{ codeError }}</text>
           </view>
         </view>
-        <IssueTypeFields :type="form.type" :details="form.details" @update-field="updateDetail" />
-        <view class="location-row">
-          <template v-if="hasLocation">
-            <view class="location-pin" aria-hidden="true">
-              <image class="location-icon" src="/static/icons/map-pin-primary.svg" mode="aspectFit" />
+        <IssueTypeFields :type="form.type" :details="form.details" @update-field="updateDetail">
+          <template #after-type-fields>
+            <view v-if="form.type === 'well'" class="panorama-field">
+              <text class="panorama-label"><text class="required">*</text>全景照片</text>
+              <PhotoPicker
+                :model-value="form.panoramaPhotos"
+                :location="locationInput"
+                @update:model-value="updatePanoramaPhotos"
+                @pending="setPanoramaPending"
+                @permission-denied="emit('permissionDenied')"
+              />
             </view>
-            <textarea class="location-address" :value="form.address" maxlength="300" auto-height
-              placeholder="可补充详细地址" @input="updateText('address', $event)" />
-            <button class="location-button" :disabled="choosingLocation"
-              :aria-label="choosingLocation ? '正在获取定位' : '重新获取定位'" @tap="chooseLocation">
-              <image class="location-icon" :class="{ 'location-icon--loading': choosingLocation }"
-                src="/static/icons/refresh-primary.svg" mode="aspectFit" aria-hidden="true" />
-            </button>
           </template>
-          <button v-else class="location-acquire" :disabled="choosingLocation" :loading="choosingLocation" @tap="chooseLocation">
-            {{ choosingLocation ? '正在获取定位…' : '获取定位' }}
+        </IssueTypeFields>
+        <view class="location-row">
+          <button class="location-button location-button--map" :disabled="locationBusy"
+            :aria-label="choosingLocation ? '正在打开地图' : '打开地图选择位置'" @tap="selectLocationOnMap">
+            <image class="location-icon" src="/static/icons/map-pin-primary.svg" mode="aspectFit" aria-hidden="true" />
+          </button>
+          <textarea class="location-address" :value="form.address" maxlength="300" auto-height
+            placeholder="请选择定位或填写详细地址" @input="updateText('address', $event)" />
+          <button class="location-button" :disabled="locationBusy"
+            :aria-label="refreshingLocation ? '正在重新定位' : '重新定位'" @tap="refreshCurrentLocation">
+            <image class="location-icon" :class="{ 'location-icon--loading': refreshingLocation }"
+              src="/static/icons/refresh-primary.svg" mode="aspectFit" aria-hidden="true" />
           </button>
         </view>
       </view>
@@ -463,8 +524,8 @@ onBeforeUnmount(() => {
       <button v-if="step < totalSteps" class="primary-button" :disabled="hasPendingPhotos" @tap="nextStep">
         下一步
       </button>
-      <button v-else class="primary-button" :disabled="submitting || uploadingSignature || hasPendingPhotos" @tap="submit">
-        {{ submitting ? "正在提交…" : "提交巡查记录" }}
+      <button v-else class="primary-button" :loading="submitting || uploadingSignature" :disabled="submitting || uploadingSignature || hasPendingPhotos" @tap="submit">
+        {{ uploadingSignature ? "正在处理签名…" : submitting ? "正在提交…" : "提交巡查记录" }}
       </button>
     </view>
   </view>
@@ -524,6 +585,17 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
 }
+.panorama-field {
+  padding: 12px 0 8px;
+  border-bottom: 1px solid #eef2f6;
+}
+.panorama-label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
 .code-control { flex: 1; min-width: 0; text-align: right; }
 .code-mode-options { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
 .code-mode-options button { margin: 0; padding: 4px 10px; font-size: 13px; line-height: 24px; background: #f1f4f8; color: var(--color-text-secondary); }
@@ -573,15 +645,6 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 14px 0 8px;
 }
-.location-pin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 0;
-}
 .location-icon {
   flex: none;
   width: 18px;
@@ -620,22 +683,9 @@ onBeforeUnmount(() => {
 .location-button[disabled] {
   opacity: .6;
 }
-.location-acquire {
-  width: 100%;
-  min-height: 40px;
-  margin: 0;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 14px;
-  line-height: 40px;
-}
-.location-acquire[disabled] {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  opacity: .6;
+.location-button--map {
+  width: 24px;
+  height: 32px;
 }
 .quiz-list {
   margin: 12px 16px 20px;

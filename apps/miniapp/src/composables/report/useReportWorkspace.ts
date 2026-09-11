@@ -1,8 +1,6 @@
-import { shallowRef } from "vue";
 import type { IssueType } from "@gbnt/api-client";
-import { createReportForm, restoreReportCodeMode, type ReportFormState } from "@/domain/issues/form";
-import { ISSUE_TYPE_OPTIONS, QUIZ_DEFINITIONS } from "@/domain/issues/definitions";
-import { isReportFormState, useReportDraft } from "./useReportDraft";
+import { createReportForm, type ReportFormState } from "@/domain/issues/form";
+import { ISSUE_TYPE_OPTIONS } from "@/domain/issues/definitions";
 
 export interface ReportTypeDraft { form: ReportFormState; step: number }
 export interface ReportWorkspace {
@@ -20,74 +18,39 @@ export function selectWorkspaceType(workspace: ReportWorkspace, type: IssueType)
   workspace.drafts[type] ??= createTypeDraft(type);
   workspace.activeType = type;
 }
+
 export function workspaceStorageKey(userId: number): string {
   return `gbnt:miniapp:report-draft:v3:user:${userId}`;
 }
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-function validStrokes(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.length <= 1000 && value.every((stroke) =>
-    Array.isArray(stroke) && stroke.length <= 20000 && stroke.every((point) => record(point) &&
-      typeof point.x === "number" && point.x >= 0 && point.x <= 1 &&
-      typeof point.y === "number" && point.y >= 0 && point.y <= 1)));
-}
 
-/** 每个账号保存五类独立草稿，切换只修改 activeType，提交只清理指定类型。 */
-export function useReportWorkspace(owner: () => number | null) {
-  const saveState = shallowRef<"idle" | "saved" | "failed">("idle");
-  function save(workspace: ReportWorkspace): boolean {
-    const id = owner();
-    if (!id) { saveState.value = "failed"; return false; }
+const LEGACY_REPORT_DRAFT_KEY = "gbnt:miniapp:report-draft:v1";
+
+/**
+ * 巡查表单只在当前页面会话内保留。进入或离开页面时清除历史版本曾写入的草稿，
+ * 避免升级后的客户端继续恢复旧数据。
+ */
+export function clearStoredReportDrafts(ownerUserId: number | null): void {
+  const keys = new Set([LEGACY_REPORT_DRAFT_KEY]);
+  if (ownerUserId && Number.isInteger(ownerUserId) && ownerUserId > 0) {
+    keys.add(
+      `gbnt:miniapp:report-draft:v2:user:${ownerUserId}`,
+    );
+    keys.add(
+      workspaceStorageKey(ownerUserId),
+    );
+  }
+  try {
+    for (const key of uni.getStorageInfoSync().keys) {
+      if (key.startsWith("gbnt:miniapp:report-draft:")) keys.add(key);
+    }
+  } catch {
+    // 旧基础库无法枚举时，仍会清理全局键和当前账号键。
+  }
+  for (const key of keys) {
     try {
-      uni.setStorageSync(workspaceStorageKey(id), {
-        version: 3, ownerUserId: id, workspace: JSON.parse(JSON.stringify(workspace)),
-      });
-      saveState.value = "saved";
-      return true;
-    } catch { saveState.value = "failed"; return false; }
-  }
-  function load(): ReportWorkspace {
-    const id = owner();
-    if (!id) return createReportWorkspace();
-    let stored: unknown;
-    try { stored = uni.getStorageSync(workspaceStorageKey(id)); } catch { /* 读取失败时不应用未知数据。 */ }
-    if (record(stored) && stored.version === 3 && stored.ownerUserId === id &&
-      record(stored.workspace) && record(stored.workspace.drafts)) {
-      const workspace = createReportWorkspace();
-      for (const { value: type } of ISSUE_TYPE_OPTIONS) {
-        const draft = stored.workspace.drafts[type];
-        if (!record(draft) || !isReportFormState(draft.form) || draft.form.type !== type || !validStrokes(draft.form.signatureStrokes)) continue;
-        const form = JSON.parse(JSON.stringify(draft.form)) as ReportFormState;
-        form.signatureStrokes ??= [];
-        restoreReportCodeMode(form);
-        form.quizzes = QUIZ_DEFINITIONS[type].map((definition) => form.quizzes.find((quiz) => quiz.type === definition.type)!);
-        workspace.drafts[type] = { form, step: typeof draft.step === "number" && Number.isInteger(draft.step)
-          ? Math.min(Math.max(draft.step, 1), QUIZ_DEFINITIONS[type].length + 2) : 1 };
-      }
-      selectWorkspaceType(workspace, stored.workspace.activeType as IssueType);
-      return workspace;
+      uni.removeStorageSync(key);
+    } catch {
+      // 表单已不再读取持久化草稿；清理失败不影响本次使用，下次进入时继续尝试。
     }
-    // 旧版只有一份草稿。迁入其原有类型，保留内容，不弹恢复或放弃对话框。
-    const legacy = useReportDraft(id);
-    const form = legacy.loadDraft();
-    if (form) {
-      restoreReportCodeMode(form);
-      // 旧版自动填入的 2023 无法证明用户主动选择，迁移时要求重新选择年度并重新签名。
-      if (form.projectYear === 2023) {
-        form.projectYear = null;
-        form.signatureFileId = "";
-        form.signaturePreviewUrl = "";
-      }
-      const workspace = { activeType: form.type, drafts: { [form.type]: { form, step: 1 } } };
-      if (save(workspace)) legacy.clearDraft();
-      return workspace;
-    }
-    return createReportWorkspace();
   }
-  function clearType(workspace: ReportWorkspace, type: IssueType): boolean {
-    workspace.drafts[type] = createTypeDraft(type);
-    return save(workspace);
-  }
-  return { load, save, clearType, saveState };
 }

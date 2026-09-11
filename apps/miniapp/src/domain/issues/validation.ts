@@ -59,24 +59,25 @@ function validateDetails(form: ReportFormState, errors: string[]): void {
       ) {
         errors.push("护筒损坏数量不能大于总数");
       }
+      if (form.panoramaPhotos.length < 1) errors.push("全景照片至少上传 1 张");
+      if (form.panoramaPhotos.length > 6) errors.push("全景照片最多上传 6 张");
       break;
     case "road":
       validateRequiredNumber(details.length, "道路长度", errors);
       validateRequiredNumber(details.width, "道路宽度", errors);
       validateRequiredNumber(details.thickness, "道路厚度", errors);
-      validateRequiredNumber(details.treeSurvive, "林网树木存活数量", errors);
       break;
     case "bridge":
       validateRequiredNumber(details.length, "长度", errors);
       validateRequiredNumber(details.width, "宽度", errors);
       break;
     case "forest":
-      validateRequiredNumber(details.handoverCount, "移交株数", errors);
-      validateRequiredNumber(details.existingCount, "现有株数", errors);
-      validateRequiredNumber(details.surviveRate, "存活率", errors, 100);
+      validateRequiredNumber(details.handoverCount, "移交株数", errors, undefined, true);
+      validateRequiredNumber(details.existingCount, "现有株数", errors, undefined, true);
       break;
     case "transformer":
       validateRequiredNumber(details.capacity, "变压器容量", errors);
+      if (!details.transformerModel.trim()) errors.push("请填写变压器型号");
       break;
   }
   validateKeeperPhone(details.keeperPhone, errors);
@@ -110,7 +111,7 @@ export function quizNeedsPhoto(type: QuizType, value: boolean): boolean {
   if (!definition) {
     return false;
   }
-  return quizIndicatesIssue(definition, value) || type === "water_out";
+  return definition.mustImg || quizIndicatesIssue(definition, value);
 }
 
 export function quizMinimumPhotos(type: QuizType, value: boolean): number {

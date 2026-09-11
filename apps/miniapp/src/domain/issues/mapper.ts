@@ -28,7 +28,7 @@ function checklist<TType extends QuizType>(form: ReportFormState): QuizBool<TTyp
       type: definition.type,
       value: item.value,
       desc: item.desc.trim(),
-      mustImg: indicatesIssue || definition.type === "water_out",
+      mustImg: definition.mustImg || indicatesIssue,
       files: item.photos.map((photo) => photo.fileId),
     } as QuizBool<TType>;
   });
@@ -60,6 +60,8 @@ export function buildCreateIssueInput(form: ReportFormState): MiniappCreateIssue
         ...base,
         type: "well",
         type_ext: {
+          schema_version: 2,
+          panorama_files: form.panoramaPhotos.map((photo) => photo.fileId),
           build_kind: form.details.buildKind,
           outlet_total: numeric(form.details.outletTotal),
           outlet_damaged: numeric(form.details.outletDamaged),
@@ -75,10 +77,10 @@ export function buildCreateIssueInput(form: ReportFormState): MiniappCreateIssue
         ...base,
         type: "road",
         type_ext: {
+          schema_version: 2,
           length: numeric(form.details.length),
           width: numeric(form.details.width),
           thickness: numeric(form.details.thickness),
-          tree_survive: numeric(form.details.treeSurvive),
           keeper_name,
           keeper_phone,
           checklist: checklist<RoadQuizType>(form),
@@ -89,6 +91,7 @@ export function buildCreateIssueInput(form: ReportFormState): MiniappCreateIssue
         ...base,
         type: "bridge",
         type_ext: {
+          schema_version: 2,
           kind: form.details.bridgeKind,
           length: numeric(form.details.length),
           width: numeric(form.details.width),
@@ -102,9 +105,9 @@ export function buildCreateIssueInput(form: ReportFormState): MiniappCreateIssue
         ...base,
         type: "forest",
         type_ext: {
+          schema_version: 2,
           handover_count: numeric(form.details.handoverCount),
           existing_count: numeric(form.details.existingCount),
-          survive_rate: numeric(form.details.surviveRate),
           keeper_name,
           keeper_phone,
           checklist: checklist<ForestQuizType>(form),
@@ -115,6 +118,7 @@ export function buildCreateIssueInput(form: ReportFormState): MiniappCreateIssue
         ...base,
         type: "transformer",
         type_ext: {
+          schema_version: 2,
           capacity: numeric(form.details.capacity),
           model: form.details.transformerModel.trim(),
           voltage: form.details.voltage,

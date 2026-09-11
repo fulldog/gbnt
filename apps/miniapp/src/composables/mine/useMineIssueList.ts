@@ -13,8 +13,8 @@ export interface MineScopeMeta {
 
 export const MINE_SCOPE_META: Record<MineScope, MineScopeMeta> = {
   reported: { title: "我上报", empty: "暂无上报记录" },
-  pending: { title: "待整改", empty: "暂无待整改记录" },
-  done: { title: "已整改", empty: "暂无已整改记录" },
+  pending: { title: "待整改", empty: "暂无待整改" },
+  done: { title: "已整改", empty: "暂无已整改" },
 };
 
 export function normalizeMineScope(value: unknown): MineScope {

@@ -8,6 +8,7 @@ import IssueChecklist from "@/components/issue/IssueChecklist.vue";
 import IssueInfoList from "@/components/issue/IssueInfoList.vue";
 import IssueRectifyResult from "@/components/issue/IssueRectifyResult.vue";
 import IssueRectifyHistory from "@/components/issue/IssueRectifyHistory.vue";
+import IssuePhotoGrid from "@/components/issue/IssuePhotoGrid.vue";
 import RectifyForm from "@/components/issue/RectifyForm.vue";
 import RecoverableImage from "@/components/common/RecoverableImage.vue";
 import { useAuthStore } from "@/stores/auth";
@@ -42,7 +43,6 @@ const organizationName = shallowRef("");
 const loading = shallowRef(false);
 const error = shallowRef("");
 const submitting = shallowRef(false);
-const deleting = shallowRef(false);
 const showHistory = shallowRef(false);
 const uploadedFileIds = new Map<string, string>();
 let requestSequence = 0;
@@ -71,7 +71,6 @@ const hasUnsupportedRectification = computed(
     (issue.value?.status === "new" || issue.value?.status === "pending") &&
     abnormalQuizzes.value.length === 0,
 );
-const canDelete = computed(() => Boolean(auth.user?.id && issue.value?.report_user_id === auth.user.id));
 const currentRecords = computed(() => issue.value?.rectify_records.filter((record) => (record.round ?? 0) === (issue.value?.rectify_round ?? 0)) ?? []);
 const hasLocation = computed(() =>
   issue.value ? hasValidCoordinates(issue.value.lat, issue.value.lng) : false,
@@ -79,6 +78,11 @@ const hasLocation = computed(() =>
 const signatureUrl = computed(() =>
   issue.value?.reporter_signature?.url ? toAssetUrl(issue.value.reporter_signature.url) : "",
 );
+const panoramaUrls = computed(() => {
+  const item = issue.value;
+  if (!item || item.type !== "well") return [];
+  return (item.type_ext.panorama_photos ?? []).map((photo) => toAssetUrl(photo.url)).filter(Boolean);
+});
 const showAdditionalInfo = shallowRef(false);
 const infoRows = computed<IssueInfoRow[]>(() => {
   const item = issue.value;
@@ -132,7 +136,7 @@ async function loadOrganizationName(targetIssue: Issue, requestId: number): Prom
 }
 
 async function loadDetail(): Promise<void> {
-  if (!issueId.value || submitting.value || deleting.value) return;
+  if (!issueId.value || submitting.value) return;
   const requestId = ++requestSequence;
   loading.value = true;
   error.value = "";
@@ -166,6 +170,12 @@ function previewSignature(): void {
   uni.previewImage({ current: signatureUrl.value, urls: [signatureUrl.value] });
 }
 
+function previewPanorama(index: number): void {
+  const urls = panoramaUrls.value;
+  if (!urls[index]) return;
+  uni.previewImage({ current: urls[index], urls: [...urls] });
+}
+
 async function uploadRectifyPhotos(paths: readonly string[], item: Issue): Promise<string[]> {
   if (!hasValidCoordinates(item.lat, item.lng) || !item.address.trim()) {
     throw new Error("原记录缺少有效定位，请先由后台补齐地址和坐标，不能生成虚假水印");
@@ -196,7 +206,7 @@ async function uploadRectifyPhotos(paths: readonly string[], item: Issue): Promi
 
 async function submitRectification(draft: RectifyFeedbackDraft): Promise<void> {
   const item = issue.value;
-  if (!item || !canRectify.value || submitting.value || loading.value || deleting.value) return;
+  if (!item || !canRectify.value || submitting.value || loading.value) return;
   submitting.value = true;
   try {
     const fileIds = await uploadRectifyPhotos(draft.photoPaths, item);
@@ -212,27 +222,6 @@ async function submitRectification(draft: RectifyFeedbackDraft): Promise<void> {
   } catch (cause) {
     if (active) uni.showToast({ title: errorMessage(cause, "整改提交失败"), icon: "none", duration: 3000 });
   } finally { submitting.value = false; }
-}
-
-function requestDelete(): void {
-  const item = issue.value;
-  if (!item || !canDelete.value || deleting.value || submitting.value || loading.value) return;
-  uni.showModal({
-    title: "删除上报", content: "确定删除这条本人上报的记录？删除后将从列表中移除。", confirmText: "删除", confirmColor: "#cf1322",
-    success: async (result) => {
-      if (!active || !result.confirm || !canDelete.value || deleting.value || submitting.value || loading.value) return;
-      deleting.value = true;
-      try {
-        await miniappApi.issues.deleteReported(item.id);
-        if (!active) return;
-        rectifyFormRef.value?.discardSubmitted();
-        uni.showToast({ title: "已删除", icon: "success" });
-        uni.navigateBack({ fail: () => uni.switchTab({ url: "/pages/todo/index" }) });
-      } catch (cause) {
-        if (active) uni.showToast({ title: errorMessage(cause, "删除失败"), icon: "none" });
-      } finally { deleting.value = false; }
-    },
-  });
 }
 
 onShareAppMessage(() => ({
@@ -302,6 +291,10 @@ onUnload(() => {
           <text v-if="plan" class="detail-page__section-note" :class="`tone-text-${plan.tone}`">{{ plan.label }}</text>
         </view>
         <IssueInfoList :rows="infoRows" />
+        <view v-if="panoramaUrls.length" class="detail-page__panorama">
+          <text class="detail-page__panorama-label">全景照片</text>
+          <IssuePhotoGrid :urls="panoramaUrls" compact @preview="previewPanorama" />
+        </view>
         <button class="detail-page__more" :aria-expanded="showAdditionalInfo" @tap="showAdditionalInfo = !showAdditionalInfo">
           <text>补充信息</text>
           <view class="detail-page__more-action">
@@ -341,7 +334,9 @@ onUnload(() => {
         <text v-else class="detail-page__empty-text">暂无签名图片</text>
       </view>
 
-      <IssueRectifyResult v-if="issue.status === 'done' && currentRecords.length" :records="currentRecords" />
+      <view v-if="issue.status === 'done' && currentRecords.length" class="detail-page__result-section">
+        <IssueRectifyResult :records="currentRecords" />
+      </view>
       <view v-if="issue.rectify_records.length" class="detail-page__section">
         <button class="detail-page__more" :aria-expanded="showHistory" @tap="showHistory = !showHistory">
           <text>历史整改记录</text><text>{{ showHistory ? '收起' : '查看' }}</text>
@@ -358,7 +353,7 @@ onUnload(() => {
           :key="`${issue.id}:${issue.rectify_round ?? 0}`"
           :items="editableQuizzes"
           :storage-key="draftKey"
-          :submitting="submitting || loading || deleting"
+          :submitting="submitting || loading"
           @submit="submitRectification"
         />
       </view>
@@ -372,9 +367,6 @@ onUnload(() => {
 
       <view v-if="(issue.status === 'new' || issue.status === 'pending') && !issue.assignee_user" class="detail-page__warning">
         <text>该工单尚未指派整改人，请联系管理员指派。</text>
-      </view>
-      <view v-if="canDelete" class="detail-page__delete-wrap">
-        <button class="detail-page__delete" :disabled="deleting || submitting || loading" @tap="requestDelete">{{ deleting ? '正在删除' : '删除上报' }}</button>
       </view>
     </template>
   </view>
@@ -420,10 +412,22 @@ onUnload(() => {
   font-size: 14px;
 }
 
+.detail-page__panorama {
+  padding: 6px 0 0;
+}
+
+.detail-page__panorama-label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--gb-color-text-secondary, #6b7a90);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
 .detail-page__location {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 6px;
   width: 100%;
   min-height: 0;
   margin-top: 10px;
@@ -440,15 +444,14 @@ onUnload(() => {
 
 .detail-page__location::after,
 .detail-page__signature-button::after,
-.detail-page__retry::after,
-.detail-page__delete::after {
+.detail-page__retry::after {
   border: 0;
 }
 
 .detail-page__location-icon {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin-top: 2px;
 }
 
@@ -465,11 +468,13 @@ onUnload(() => {
   flex: none;
   align-items: center;
   gap: 2px;
+  margin-top: 1px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--gb-color-primary-soft);
   color: var(--gb-color-primary);
   font-size: 14px;
+  font-weight: 600;
 }
 
 .detail-page__location-chevron {
@@ -625,7 +630,10 @@ onUnload(() => {
   border-top: 0;
 }
 .detail-page__section--signature {
-  border-top: 0;
+  border-top-color: #f5f7fb;
+}
+.detail-page__result-section {
+  border-top: 10px solid #f5f7fb;
 }
 .detail-page--rectify {
   padding-bottom: calc(112px + env(safe-area-inset-bottom));
@@ -657,7 +665,4 @@ onUnload(() => {
 .detail-page__more-icon--expanded {
   transform: rotate(180deg);
 }
-.detail-page__delete-wrap { padding: 4px 16px 28px; border-top: 10px solid #f5f7fb; text-align: center; }
-.detail-page__delete { display: inline-block; min-height: 44px; margin: 0; padding: 12px 16px; border: 0; background: transparent; color: #cf1322; font-size: 14px; line-height: 1.4; }
-.detail-page__delete[disabled] { opacity: .6; }
 </style>

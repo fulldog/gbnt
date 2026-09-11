@@ -24,8 +24,11 @@ function preview(index: number): void {
       <text class="rectify-result__badge">已完成</text>
     </view>
     <text v-for="note in notes" :key="note" class="rectify-result__note">{{ note }}</text>
-    <IssuePhotoGrid v-if="photos.length" :urls="photos" compact @preview="preview" />
-    <text class="rectify-result__time">完成时间：{{ formatDateTime(completedAt) }}</text>
+    <IssuePhotoGrid v-if="photos.length" :urls="photos" compact large @preview="preview" />
+    <view class="rectify-result__time">
+      <image class="rectify-result__time-icon" src="/static/icons/clock-muted.svg" mode="aspectFit" aria-hidden="true" />
+      <text>完成时间：{{ formatDateTime(completedAt) }}</text>
+    </view>
   </view>
 </template>
 
@@ -37,5 +40,6 @@ function preview(index: number): void {
 .rectify-result__title { flex: 1; min-width: 0; color: #0f3d28; font-size: 14px; font-weight: 700; }
 .rectify-result__badge { height: 22px; padding: 0 8px; border-radius: 4px; background: rgba(26, 127, 75, .14); color: #1a7f4b; font-size: 12px; font-weight: 600; line-height: 22px; }
 .rectify-result__note { display: block; margin-bottom: 8px; color: #1a2b22; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
-.rectify-result__time { display: block; margin-top: 10px; color: #1a2b22; font-size: 14px; line-height: 1.4; }
+.rectify-result__time { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #1a2b22; font-size: 14px; line-height: 1.4; }
+.rectify-result__time-icon { flex: none; width: 14px; height: 14px; }
 </style>

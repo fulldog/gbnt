@@ -8,7 +8,13 @@ import ReportTypeForm from "@/components/report/ReportTypeForm.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useRegions } from "@/composables/report/useRegions";
 import { useInspectionAccess } from "@/composables/report/useInspectionAccess";
-import { createReportWorkspace, selectWorkspaceType, useReportWorkspace, type ReportTypeDraft } from "@/composables/report/useReportWorkspace";
+import {
+  clearStoredReportDrafts,
+  createReportWorkspace,
+  createTypeDraft,
+  selectWorkspaceType,
+  type ReportTypeDraft,
+} from "@/composables/report/useReportWorkspace";
 import { ISSUE_TYPE_OPTIONS } from "@/domain/issues/definitions";
 
 const authStore = useAuthStore();
@@ -17,33 +23,38 @@ const draftReady = shallowRef(false);
 const shown = shallowRef(true);
 const workspace = ref(createReportWorkspace());
 const revisions = ref<Partial<Record<IssueType, number>>>({});
+const sessionRevision = shallowRef(0);
 const busyTypes = ref<Partial<Record<IssueType, boolean>>>({});
 const busy = computed(() => Object.values(busyTypes.value).some(Boolean));
 const drafts = computed(() => ISSUE_TYPE_OPTIONS.filter(({ value }) => workspace.value.drafts[value]).map(({ value }) =>
-  ({ type: value, draft: workspace.value.drafts[value]!, key: `${value}:${revisions.value[value] || 0}` })));
+  ({ type: value, draft: workspace.value.drafts[value]!, key: `${sessionRevision.value}:${value}:${revisions.value[value] || 0}` })));
 const { tree, loading: regionsLoading, error: regionsError, load: loadRegions } = useRegions();
-const storage = useReportWorkspace(() => ownerId.value);
 const access = useInspectionAccess();
 let active = true;
 
-function save(): void { if (draftReady.value) storage.save(workspace.value); }
 function saveType(type: IssueType, draft: ReportTypeDraft): void {
-  if (!active || draft.form.type !== type) return;
+  if (!active || !shown.value || draft.form.type !== type) return;
   workspace.value.drafts[type] = draft;
-  save();
 }
 function selectType(type: IssueType): void {
   if (busy.value || !access.ready.value) return;
   selectWorkspaceType(workspace.value, type);
-  save();
   uni.pageScrollTo({ scrollTop: 0, duration: 0 });
 }
 function submitted(type: IssueType, code: string): void {
-  const cleared = storage.clearType(workspace.value, type);
+  workspace.value.drafts[type] = createTypeDraft(type);
   revisions.value[type] = (revisions.value[type] || 0) + 1;
   busyTypes.value[type] = false;
-  uni.showToast({ title: cleared ? `提交成功，设施编号 ${code}` : "上报已成功，草稿清理失败，请勿重复提交", icon: "none", duration: 3500 });
+  uni.showToast({ title: `提交成功，设施编号 ${code}`, icon: "none", duration: 3500 });
   uni.pageScrollTo({ scrollTop: 0, duration: 0 });
+}
+
+function clearFormSession(): void {
+  workspace.value = createReportWorkspace();
+  revisions.value = {};
+  busyTypes.value = {};
+  sessionRevision.value += 1;
+  clearStoredReportDrafts(ownerId.value);
 }
 
 onLoad(async () => {
@@ -51,7 +62,7 @@ onLoad(async () => {
   if (!active) return;
   if (!authStore.isAuthenticated) { uni.reLaunch({ url: "/pages/login/index" }); return; }
   ownerId.value = authStore.user?.id ?? null;
-  workspace.value = storage.load();
+  clearFormSession();
   draftReady.value = true;
   void loadRegions();
   void access.request();
@@ -60,8 +71,15 @@ onShow(() => {
   shown.value = true;
   if (draftReady.value) void access.request();
 });
-onHide(() => { shown.value = false; save(); });
-onUnload(() => { save(); active = false; });
+onHide(() => {
+  shown.value = false;
+  clearFormSession();
+});
+onUnload(() => {
+  shown.value = false;
+  active = false;
+  clearFormSession();
+});
 onShareAppMessage(() => ({ title: "农田专项整治 · 巡查上报", path: "/pages/report/index" }));
 onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" }));
 </script>
@@ -69,7 +87,7 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
 <template>
   <view class="report-page page-shell">
     <PageTopInset />
-    <view v-if="!draftReady" class="access-panel">正在恢复巡查内容…</view>
+    <view v-if="!draftReady" class="access-panel">正在准备巡查表单…</view>
     <template v-else>
       <view v-if="!access.ready.value" class="access-panel">
         <text class="access-title">开启巡查权限</text>
@@ -91,7 +109,6 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
       </view>
       <view v-show="access.ready.value">
         <FacilityTypeTabs :value="workspace.activeType" :disabled="busy" @select="selectType" />
-        <button v-if="storage.saveState.value === 'failed'" class="draft-warning" @tap="save">草稿保存失败，请勿退出，点击重试</button>
         <view v-for="entry in drafts" :key="entry.key" v-show="workspace.activeType === entry.type">
           <ReportTypeForm :draft="entry.draft" :visible="shown && access.ready.value && workspace.activeType === entry.type"
             :initial-position="access.position.value" :region-tree="tree" :regions-loading="regionsLoading" :regions-error="regionsError"
@@ -109,5 +126,4 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
 .access-title { color: var(--color-text); font-size: 20px; font-weight: 600; }
 .access-panel button { width: 100%; margin: 0; }
 .privacy-link { background: transparent; color: var(--color-primary); font-size: 14px; }
-.draft-warning { margin: 10px 16px; padding: 8px 12px; color: #8c4c00; background: #fff3e0; font-size: 12px; }
 </style>

@@ -8,7 +8,7 @@ import type {
 } from "@gbnt/api-client";
 import type { MiniappIssue } from "@/api/types";
 import { formatOrganization } from "./regions";
-import { businessDateTime, businessToday, calendarDate, calendarDayDifference } from "./business-date";
+import { businessDateTime, businessTimestamp, businessToday, calendarDate, calendarDayDifference } from "./business-date";
 import {
   ISSUE_TYPE_OPTIONS as DOMAIN_ISSUE_TYPE_OPTIONS,
   quizDefinition,
@@ -48,8 +48,14 @@ export function issueStatusMeta(status: IssueStatus): DisplayMeta<IssueStatus> {
   return ISSUE_STATUS_META[status] ?? { label: "状态异常", tone: "danger", value: status };
 }
 
-export function quizLabel(type: QuizType): string {
-  return Object.values(ISSUE_FORM_QUIZZES).flat().find((q) => q.type === type)?.label ?? quizDefinition(type)?.label ?? type;
+export function quizLabel(type: QuizType, issue?: Issue): string {
+  const scoped = issue
+    ? issueQuizDefinitions(issue.type, issue.type_ext.schema_version).find((quiz) => quiz.type === type)
+    : undefined;
+  const legacy = DOMAIN_ISSUE_TYPE_OPTIONS
+    .flatMap(({ value }) => issueQuizDefinitions(value, 1))
+    .find((quiz) => quiz.type === type);
+  return scoped?.label ?? Object.values(ISSUE_FORM_QUIZZES).flat().find((quiz) => quiz.type === type)?.label ?? legacy?.label ?? quizDefinition(type)?.label ?? type;
 }
 
 export function quizIndicatesIssue(quiz: QuizBool, issue?: Issue): boolean {
@@ -80,6 +86,25 @@ export function issueEditableRectifyQuizzes(issue: Issue): QuizBool[] {
 
 export function formatDateTime(value: string): string {
   return businessDateTime(value) ?? "—";
+}
+
+/** 待办卡片发布时间：一周内显示相对时间，更早记录显示月日。 */
+export function formatPublishedTime(value: string, now = Date.now()): string {
+  const display = businessDateTime(value);
+  if (!display) return "—";
+  const timestamp = businessTimestamp(value);
+  if (timestamp === null) return "—";
+
+  const minutes = Math.floor(Math.max(0, now - timestamp) / 60_000);
+  if (minutes < 1) return "刚刚";
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}天前`;
+
+  const [, month, day] = display.slice(0, 10).split("-").map(Number);
+  return `${month}-${day}`;
 }
 
 export function formatDate(value: string): string {
@@ -121,7 +146,7 @@ export function issueTypeInfoRows(issue: Issue): IssueInfoRow[] {
     case "well": {
       const ext = issue.type_ext;
       rows = [
-        { label: "建设类型", value: { new: "新建", match: "配套" }[ext.build_kind] ?? "未填写" },
+        { label: "设施类型", value: { new: "新建", match: "配套" }[ext.build_kind] ?? "未填写" },
         { label: "出水口总数", value: withUnit(ext.outlet_total, "个") },
         { label: "出水口损坏", value: withUnit(ext.outlet_damaged, "个") },
         { label: "护筒总数", value: withUnit(ext.casing_total, "个") },
@@ -199,7 +224,7 @@ export function issueChecklistPhotos(issue: Issue): FileItem[] {
 export function issueSummary(issue: Issue): string {
   const checklist = issue.type_ext?.checklist;
   if (!Array.isArray(checklist) || checklist.length !== issueQuizDefinitions(issue.type, issue.type_ext.schema_version).length) return "巡查数据异常，请联系管理员核对";
-  const descriptions = issueAbnormalQuizzes(issue).map((quiz) => quiz.desc?.trim() || `${quizLabel(quiz.type)}：${quiz.value ? "是" : "否"}`);
+  const descriptions = issueAbnormalQuizzes(issue).map((quiz) => quiz.desc?.trim() || `${quizLabel(quiz.type, issue)}：${quiz.value ? "是" : "否"}`);
   if (issue.type === "well") {
     if (issue.type_ext.outlet_damaged > 0) descriptions.push(`出水口损坏 ${issue.type_ext.outlet_damaged} 个`);
     if (issue.type_ext.casing_damaged > 0) descriptions.push(`护筒损坏 ${issue.type_ext.casing_damaged} 个`);

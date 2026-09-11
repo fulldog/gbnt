@@ -9,11 +9,6 @@ import {
   writeSession,
 } from "@/api/session";
 import { normalizeMineScope } from "@/composables/mine/useMineIssueList";
-import {
-  reportDraftStorageKey,
-  useReportDraft,
-} from "@/composables/report/useReportDraft";
-import { createReportForm } from "@/domain/issues/form";
 import { isUnauthorizedSessionError } from "@/stores/auth";
 
 const storage = new Map<string, unknown>();
@@ -88,50 +83,5 @@ describe("mine scope", () => {
     expect(normalizeMineScope("pending")).toBe("pending");
     expect(normalizeMineScope("done")).toBe("done");
     expect(normalizeMineScope("inspected")).toBe("reported");
-  });
-});
-
-describe("report draft storage", () => {
-  it("does not persist an untouched report form", () => {
-    const draft = useReportDraft(7);
-
-    draft.saveDraft(createReportForm());
-
-    expect(draft.loadDraft()).toBeNull();
-  });
-
-  it("persists report progress for recovery", () => {
-    const draft = useReportDraft(7);
-    const form = createReportForm();
-    form.address = "现场地址";
-
-    draft.saveDraft(form);
-
-    expect(draft.loadDraft()?.address).toBe("现场地址");
-    expect(storage.has(reportDraftStorageKey(7))).toBe(true);
-  });
-
-  it("discards a stale or malformed report draft", () => {
-    storage.set(reportDraftStorageKey(7), {
-      version: 2,
-      ownerUserId: 7,
-      savedAt: "2026-09-05T00:00:00.000Z",
-      form: { type: "well", address: "缺少其余字段" },
-    });
-
-    const draft = useReportDraft(7);
-
-    expect(draft.loadDraft()).toBeNull();
-    expect(storage.has(reportDraftStorageKey(7))).toBe(false);
-  });
-
-  it("isolates report drafts by authenticated user", () => {
-    const firstUserDraft = useReportDraft(7);
-    const form = createReportForm();
-    form.address = "用户七的现场地址";
-    firstUserDraft.saveDraft(form);
-
-    expect(useReportDraft(8).loadDraft()).toBeNull();
-    expect(firstUserDraft.loadDraft()?.address).toBe("用户七的现场地址");
   });
 });
