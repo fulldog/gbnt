@@ -9,7 +9,11 @@
 when:
   - event: [push, manual]
     branch: [main, master]
-
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: false
 steps:
   - name: build-server
     image: golang:1.27-bookworm
