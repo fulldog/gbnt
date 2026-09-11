@@ -56,6 +56,6 @@ steps:
       PUBLISH_SRC: apps/server/gbnt.service apps/admin-web/dist
       PUBLISH_DEST: apps/server/gbnt.service apps/admin-web/dist
       REMOTE_AFTER: chmod +x /opt/www/gbnt/apps/server/gbnt.service && sudo -n systemctl restart gbnt
-      DEPLOY_HEALTH_URL: https://www.weilone.com/api/health
+      DEPLOY_HEALTH_URL: https://nt.kfqzhsq.cn:8443/api/health
     commands:
       - bash /opt/www/mini-cicd/deploy-remote.sh
