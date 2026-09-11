@@ -51,6 +51,7 @@ const emit = defineEmits<{
   busy: [value: boolean];
   retryRegions: [];
   permissionDenied: [];
+  locationPicker: [visible: boolean];
 }>();
 const step = shallowRef(props.draft.step);
 const form = reactive<ReportFormState>(JSON.parse(JSON.stringify(props.draft.form)));
@@ -81,7 +82,9 @@ const {
   busy: locationBusy,
   choose,
   refresh,
-} = useLocation();
+} = useLocation({
+  onPickerVisibilityChange: (visible) => emit("locationPicker", visible),
+});
 const regionTree = computed(() => props.regionTree);
 const regionsLoading = computed(() => props.regionsLoading);
 const regionsError = computed(() => props.regionsError);

@@ -20,38 +20,59 @@ export interface LocationCenter {
   longitude: number;
 }
 
+export interface LocationOptions {
+  onPickerVisibilityChange?: (visible: boolean) => void;
+}
+
 type LocationAction = "map" | "refresh" | null;
 
-function openLocationPicker(center?: LocationCenter): Promise<SelectedLocation | null> {
+function openLocationPicker(
+  center?: LocationCenter,
+  onPickerVisibilityChange?: (visible: boolean) => void,
+): Promise<SelectedLocation | null> {
   return new Promise((resolve, reject) => {
-    uni.chooseLocation({
-      ...(center ? { latitude: center.latitude, longitude: center.longitude } : {}),
-      success: (result: ChooseLocationResult) => {
-        const latitude = Number(result.latitude);
-        const longitude = Number(result.longitude);
-        if (!hasValidCoordinates(latitude, longitude)) {
-          reject(new Error("选中的坐标无效，请重新选择现场位置"));
-          return;
-        }
-        const address = [result.address, result.name]
-          .map((item) => item?.trim())
-          .filter(Boolean)
-          .join(" ");
-        resolve({ address, latitude, longitude });
-      },
-      fail: (error) => {
-        if (error.errMsg?.includes("cancel")) {
+    let pickerVisible = true;
+    const closePicker = (): void => {
+      if (!pickerVisible) return;
+      pickerVisible = false;
+      onPickerVisibilityChange?.(false);
+    };
+    onPickerVisibilityChange?.(true);
+    try {
+      uni.chooseLocation({
+        ...(center ? { latitude: center.latitude, longitude: center.longitude } : {}),
+        success: (result: ChooseLocationResult) => {
+          closePicker();
+          const latitude = Number(result.latitude);
+          const longitude = Number(result.longitude);
+          if (!hasValidCoordinates(latitude, longitude)) {
+            reject(new Error("选中的坐标无效，请重新选择现场位置"));
+            return;
+          }
+          const address = [result.address, result.name]
+            .map((item) => item?.trim())
+            .filter(Boolean)
+            .join(" ");
+          resolve({ address, latitude, longitude });
+        },
+        fail: (error) => {
+          closePicker();
+          if (error.errMsg?.includes("cancel")) {
+            resolve(null);
+            return;
+          }
+          showDeviceFailure(error, "选择现场位置");
           resolve(null);
-          return;
-        }
-        showDeviceFailure(error, "选择现场位置");
-        resolve(null);
-      },
-    });
+        },
+      });
+    } catch (error) {
+      closePicker();
+      reject(error);
+    }
   });
 }
 
-export function useLocation() {
+export function useLocation(options: LocationOptions = {}) {
   const action = shallowRef<LocationAction>(null);
   const choosing = computed(() => action.value === "map");
   const refreshing = computed(() => action.value === "refresh");
@@ -61,7 +82,7 @@ export function useLocation() {
     if (busy.value) return null;
     action.value = "map";
     try {
-      return await openLocationPicker(center);
+      return await openLocationPicker(center, options.onPickerVisibilityChange);
     } finally {
       action.value = null;
     }
@@ -81,7 +102,7 @@ export function useLocation() {
       if (!hasValidCoordinates(center.latitude, center.longitude)) {
         throw new Error("未获取到有效定位，请开启手机定位后重试");
       }
-      return await openLocationPicker(center);
+      return await openLocationPicker(center, options.onPickerVisibilityChange);
     } catch (cause) {
       const error = cause as { message?: string; errMsg?: string };
       if (error.message && !error.errMsg) {

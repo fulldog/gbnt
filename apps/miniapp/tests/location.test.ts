@@ -67,4 +67,18 @@ describe("巡查位置选择", () => {
     expect(uni.showToast).not.toHaveBeenCalled();
     expect(uni.showModal).not.toHaveBeenCalled();
   });
+
+  it("打开和关闭微信原生地图时同步通知页面保留当前表单会话", async () => {
+    let succeed!: (result: object) => void;
+    chooseLocation.mockImplementation(({ success }: { success(result: object): void }) => { succeed = success; });
+    const visibility = vi.fn();
+    const location = useLocation({ onPickerVisibilityChange: visibility });
+
+    const pending = location.choose();
+    expect(visibility).toHaveBeenCalledWith(true);
+
+    succeed({ address: "山东省聊城市", name: "现场", latitude: 36.4, longitude: 116.1 });
+    await expect(pending).resolves.toMatchObject({ address: "山东省聊城市 现场" });
+    expect(visibility.mock.calls).toEqual([[true], [false]]);
+  });
 });

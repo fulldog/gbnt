@@ -25,6 +25,7 @@ const workspace = ref(createReportWorkspace());
 const revisions = ref<Partial<Record<IssueType, number>>>({});
 const sessionRevision = shallowRef(0);
 const busyTypes = ref<Partial<Record<IssueType, boolean>>>({});
+const locationPickerActive = shallowRef(false);
 const busy = computed(() => Object.values(busyTypes.value).some(Boolean));
 const drafts = computed(() => ISSUE_TYPE_OPTIONS.filter(({ value }) => workspace.value.drafts[value]).map(({ value }) =>
   ({ type: value, draft: workspace.value.drafts[value]!, key: `${sessionRevision.value}:${value}:${revisions.value[value] || 0}` })));
@@ -50,6 +51,7 @@ function submitted(type: IssueType, code: string): void {
 }
 
 function clearFormSession(): void {
+  locationPickerActive.value = false;
   workspace.value = createReportWorkspace();
   revisions.value = {};
   busyTypes.value = {};
@@ -72,6 +74,8 @@ onShow(() => {
   if (draftReady.value) void access.request();
 });
 onHide(() => {
+  // 微信原生地图会遮住页面并触发 onHide；此时仍属于当前填写会话。
+  if (locationPickerActive.value) return;
   shown.value = false;
   clearFormSession();
 });
@@ -113,7 +117,8 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
           <ReportTypeForm :draft="entry.draft" :visible="shown && access.ready.value && workspace.activeType === entry.type"
             :initial-position="access.position.value" :region-tree="tree" :regions-loading="regionsLoading" :regions-error="regionsError"
             @save="saveType(entry.type, $event)" @submitted="submitted(entry.type, $event)"
-            @busy="busyTypes[entry.type] = $event" @retry-regions="loadRegions" @permission-denied="access.denyMedia" />
+            @busy="busyTypes[entry.type] = $event" @location-picker="locationPickerActive = $event"
+            @retry-regions="loadRegions" @permission-denied="access.denyMedia" />
         </view>
       </view>
     </template>
