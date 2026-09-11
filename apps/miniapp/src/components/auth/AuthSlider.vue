@@ -74,7 +74,7 @@ defineExpose({ reset });
           role="button" aria-label="拖动滑块完成人机验证"
           @touchstart.stop="onTouchStart" @change="onNativeChange"
           @touchend.stop="onTouchEnd" @touchcancel.stop="onTouchCancel">
-          <view v-if="state === 'dragging' || state === 'verifying'" class="auth-slider__trail" :style="{ width: `${trackWidth}px` }" />
+          <view class="auth-slider__trail" :style="{ width: `${trackWidth}px` }" />
           <view class="auth-slider__face">
             <image class="auth-slider__handle-icon"
               :src="state === 'verified' ? '/static/icons/check-success.svg' : '/static/icons/chevron-right.svg'"
@@ -113,6 +113,18 @@ defineExpose({ reset });
   box-sizing: border-box;
 }
 
+.auth-slider__track::after {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: inherit;
+  content: "";
+  pointer-events: none;
+}
+
 .auth-slider__progress {
   position: absolute;
   top: 0;
@@ -145,7 +157,7 @@ defineExpose({ reset });
 }
 .auth-slider__trail {
   position: absolute;
-  right: 24px;
+  right: 48px;
   top: -3px;
   height: 44px;
   background: #56d288;
@@ -176,6 +188,10 @@ defineExpose({ reset });
 
 .auth-slider__track--verified {
   color: #fff;
+}
+
+.auth-slider__track--verified::after {
+  background: #56d288;
 }
 
 .auth-slider__track--verified .auth-slider__progress {
