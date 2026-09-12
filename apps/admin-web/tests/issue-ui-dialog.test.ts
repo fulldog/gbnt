@@ -14,6 +14,16 @@ const issue = (id: number) => ({ id, org_id: id, assignee_user: 11, type: "well"
 const showSlots = { template: "<div><slot /><slot name='footer' /></div>" };
 
 describe("专项整改弹窗提交保护", () => {
+  it("新增专项整改默认填充当前登录用户组织", async () => {
+    const wrapper = shallowMount(IssueFormDialog, {
+      props: { modelValue: true, orgs: [], orgsReady: true, defaultOrgId: 12 },
+      global: { provide: { [adminApiKey as symbol]: { issues: {} } }, renderStubDefaultSlot: true, stubs: { ElDialog: showSlots, ElForm: defineComponent({ setup(_, { expose }) { expose({ clearValidate: vi.fn() }); }, template: "<div><slot/></div>" }) } },
+    });
+    await flushPromises();
+    expect((wrapper.vm as unknown as { form: { org_id?: number } }).form.org_id).toBe(12);
+    wrapper.unmount();
+  });
+
   it("指派候选未成功/失败/切换问题时禁止提交，仅当前有效候选能提交", async () => {
     const api = { issues: { reassign: vi.fn().mockResolvedValue(issue(2)), listAssigneeOptions: vi.fn() } };
     const wrapper = shallowMount(ReassignDialog, {

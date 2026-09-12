@@ -14,6 +14,7 @@ import TableToolbar from "@/components/TableToolbar.vue";
 import { ISSUE_STATUS_META, ISSUE_TYPE_LABELS } from "@/constants/issue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { useBusinessToday } from "@/composables/useBusinessToday";
+import { useAuthStore } from "@/stores/auth";
 import { usePermissionStore } from "@/stores/permission";
 import { errorMessage } from "@/utils/error";
 import { formatDateTime } from "@/utils/format";
@@ -42,6 +43,7 @@ const columns = [
 ];
 const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
+const auth = useAuthStore();
 const permission = usePermissionStore();
 const page = shallowRef(1);
 const size = shallowRef(20);
@@ -50,7 +52,7 @@ const formVisible = shallowRef(false);
 const detailVisible = shallowRef(false);
 const importVisible = shallowRef(false);
 const editingIssue = shallowRef<AdminIssue | null>(null);
-const filters = reactive<IssueFilters>({ type: "all", status: "all", keyword: "" });
+const filters = reactive<IssueFilters>({ type: "all", status: "all", org_id: auth.user?.org_id || undefined, keyword: "" });
 let refreshSequence = 0;
 onScopeDispose(() => { refreshSequence += 1; });
 const today = useBusinessToday();
@@ -122,7 +124,7 @@ function search(): void {
 function reset(): void {
   filters.type = "all";
   filters.status = "all";
-  filters.org_id = undefined;
+  filters.org_id = auth.user?.org_id || undefined;
   filters.project_year = undefined;
   filters.keyword = "";
   page.value = 1;
@@ -284,7 +286,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <IssueFormDialog v-model="formVisible" :issue="editingIssue" :orgs="orgs" :orgs-ready="orgsReady" @saved="handleSaved" />
+    <IssueFormDialog v-model="formVisible" :issue="editingIssue" :orgs="orgs" :orgs-ready="orgsReady" :default-org-id="auth.user?.org_id || undefined" @saved="handleSaved" />
     <IssueDetailDrawer v-model="detailVisible" :issue="detail" :loading="detailLoading" :load-error="detailError" @retry="loadDetail" />
     <ImportIssuesDialog v-model="importVisible" @imported="handleSaved" />
   </div>

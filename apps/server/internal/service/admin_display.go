@@ -230,9 +230,9 @@ func enrichAdminIssuePhones(db *gorm.DB, list []AdminIssueVO) error {
 	return nil
 }
 
-// ListAdmin 按管理端筛选分页后批量补全名称与整改责任人电话，不扩大小程序读取契约。
+// ListAdmin 按当前用户可见组织范围筛选分页后，批量补全名称与整改责任人电话。
 func (s *IssueService) ListAdmin(ctx context.Context, q IssueQuery) ([]AdminIssueVO, int64, error) {
-	list, total, err := s.List(ctx, q)
+	list, total, err := s.listVisible(ctx, q)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -252,10 +252,17 @@ func (s *IssueService) ListAdmin(ctx context.Context, q IssueQuery) ([]AdminIssu
 	return out, total, err
 }
 
-// GetAdmin 管理端详情读取；写入及小程序仍使用原基础 Get。
+// GetAdmin 管理端详情读取；仅当前用户组织及下级可见，用户 org_id=0 时全部可见。
 func (s *IssueService) GetAdmin(ctx context.Context, id uint64) (*AdminIssueVO, error) {
 	item, err := s.Get(id)
 	if err != nil {
+		return nil, err
+	}
+	visibleScope, err := resolveVisibleOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if err := visibleScope.Require(item.OrgID); err != nil {
 		return nil, err
 	}
 	out, err := enrichAdminIssues(s.db(ctx), []IssueVO{*item})
@@ -275,7 +282,7 @@ func (s *IssueService) GetAdmin(ctx context.Context, id uint64) (*AdminIssueVO, 
 
 // ListAdminUsers 批量补全本页工作人员的组织与角色名称，不要求调用组织/角色管理列表。
 func (s *SysService) ListAdminUsers(ctx context.Context, orgID uint64, keyword string, page, size int) ([]AdminUserVO, int64, error) {
-	list, total, err := s.ListUsers(orgID, keyword, page, size)
+	list, total, err := s.ListVisibleUsers(ctx, orgID, keyword, page, size)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -236,10 +236,37 @@ func (s *SysService) userListQuery(orgID uint64, keyword string) *gorm.DB {
 	return q
 }
 
+// visibleUserListQuery 将工作人员组织筛选与当前登录用户的可见组织子树取交集。
+func (s *SysService) visibleUserListQuery(ctx context.Context, orgID uint64, keyword string) (*gorm.DB, error) {
+	q := s.db(ctx).Model(&model.SysUser{})
+	q, err := applyVisibleOrgFilter(ctx, q, s.db(ctx), "org_id", orgID)
+	if err != nil {
+		return nil, err
+	}
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("username LIKE ? OR name LIKE ? OR phone LIKE ?", like, like, like)
+	}
+	return q, nil
+}
+
 // ExportUsers 导出人员xlsx（不分页），排序与列表一致；包含排序值及英文角色ID。
 func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
+	return s.exportUsers(s.userListQuery(orgID, keyword))
+}
+
+// ExportVisibleUsers 按当前登录用户可见组织范围导出工作人员，显式组织筛选包含其下级。
+func (s *SysService) ExportVisibleUsers(ctx context.Context, orgID uint64, keyword string) ([]byte, error) {
+	q, err := s.visibleUserListQuery(ctx, orgID, keyword)
+	if err != nil {
+		return nil, err
+	}
+	return s.exportUsers(q)
+}
+
+func (s *SysService) exportUsers(q *gorm.DB) ([]byte, error) {
 	var users []model.SysUser
-	if err := s.userListQuery(orgID, keyword).Order(userListOrder).Find(&users).Error; err != nil {
+	if err := q.Order(userListOrder).Find(&users).Error; err != nil {
 		return nil, err
 	}
 	orgs, err := s.ListOrgs()

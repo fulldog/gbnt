@@ -54,6 +54,82 @@ func ResolveOrgScope(ctx context.Context, db *gorm.DB) (*OrgScope, error) {
 	return scope, nil
 }
 
+// resolveVisibleOrgScope 解析后台读取范围：org_id=0 表示全部可见，否则仅当前组织及其下级。
+// 该范围不改变 ResolveOrgScope 的写权限语义。
+func resolveVisibleOrgScope(ctx context.Context, db *gorm.DB) (*OrgScope, error) {
+	user, err := database.UserFromContext(ctx)
+	if errors.Is(err, database.ErrUnauth) {
+		// 保留内部维护和旧单元测试无登录上下文时的全量读取语义；正式 HTTP 路由均有 JWT。
+		return &OrgScope{All: true, allowed: map[uint64]struct{}{}}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	scope := &OrgScope{RootID: user.OrgID, All: user.OrgID == 0, allowed: map[uint64]struct{}{}}
+	if scope.All {
+		return scope, nil
+	}
+	var orgs []model.SysOrg
+	if err := db.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
+		return nil, err
+	}
+	found := false
+	for _, org := range orgs {
+		if org.ID == user.OrgID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return scope, nil
+	}
+	for _, id := range orgSubtreeIDs(orgs, user.OrgID) {
+		scope.allowed[id] = struct{}{}
+	}
+	return scope, nil
+}
+
+// applyVisibleOrgFilter 将显式组织筛选与当前用户可见子树取交集；scopeDB 用于读取组织树。
+func applyVisibleOrgFilter(ctx context.Context, db, scopeDB *gorm.DB, orgColumn string, selectedOrgID uint64) (*gorm.DB, error) {
+	scope, err := resolveVisibleOrgScope(ctx, scopeDB)
+	if err != nil {
+		return nil, err
+	}
+	if scope.All && selectedOrgID == 0 {
+		return db, nil
+	}
+	visible := scope.allowed
+	if selectedOrgID != 0 && !(selectedOrgID == scope.RootID && !scope.All) {
+		var orgs []model.SysOrg
+		if err := scopeDB.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
+			return nil, err
+		}
+		selected := make(map[uint64]struct{})
+		for _, id := range orgSubtreeIDs(orgs, selectedOrgID) {
+			selected[id] = struct{}{}
+		}
+		if scope.All {
+			visible = selected
+		} else {
+			intersection := make(map[uint64]struct{})
+			for id := range selected {
+				if _, ok := scope.allowed[id]; ok {
+					intersection[id] = struct{}{}
+				}
+			}
+			visible = intersection
+		}
+	}
+	ids := make([]uint64, 0, len(visible))
+	for id := range visible {
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return db.Where("1 = 0"), nil
+	}
+	return db.Where(orgColumn+" IN ?", ids), nil
+}
+
 // Allows 判断目标组织是否在范围内。0 永远不是可操作组织。
 func (s *OrgScope) Allows(orgID uint64) bool {
 	if s == nil || orgID == 0 {

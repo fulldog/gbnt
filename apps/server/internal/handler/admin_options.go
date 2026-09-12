@@ -12,7 +12,12 @@ import (
 
 // IssueOrgOptions GET /api/issues/options/orgs — 专项整改组织候选，受 web.rectify/view 保护。
 func (d *Deps) IssueOrgOptions(c *gin.Context) {
-	d.businessOrgOptions(c, false)
+	list, err := d.Sys.ListVisibleBusinessOrgOptions(c.Request.Context(), false)
+	if err != nil {
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, list)
 }
 
 // LedgerStreetOrgOptions GET /api/ledger/street/options/orgs — 街道台账专用街道候选。

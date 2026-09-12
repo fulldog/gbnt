@@ -127,9 +127,13 @@ func (s *SysService) ListOrgTree() ([]OrgTreeNode, error) {
 	return BuildOrgTree(list), nil
 }
 
-// ListAdminOrgs 返回完整组织列表并标注当前账号可操作范围；读取范围保持现状。
+// ListAdminOrgs 返回当前账号可见组织列表并标注可操作范围；账号 org_id=0 时全部可见。
 func (s *SysService) ListAdminOrgs(ctx context.Context) ([]AdminOrgVO, error) {
 	list, err := s.ListOrgs()
+	if err != nil {
+		return nil, err
+	}
+	visibleScope, err := resolveVisibleOrgScope(ctx, s.db(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +143,9 @@ func (s *SysService) ListAdminOrgs(ctx context.Context) ([]AdminOrgVO, error) {
 	}
 	out := make([]AdminOrgVO, 0, len(list))
 	for _, org := range list {
+		if !visibleScope.Allows(org.ID) {
+			continue
+		}
 		out = append(out, AdminOrgVO{SysOrg: org, WithinOrgScope: scope.Allows(org.ID)})
 	}
 	return out, nil
@@ -363,6 +370,22 @@ func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]
 	return list, total, err
 }
 
+// ListVisibleUsers 查询当前登录用户可见组织范围内的工作人员；显式组织筛选包含其下级。
+func (s *SysService) ListVisibleUsers(ctx context.Context, orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
+	page, size = NormalizePagination(page, size, 0)
+	q, err := s.visibleUserListQuery(ctx, orgID, keyword)
+	if err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	list := make([]model.SysUser, 0)
+	err = q.Order(userListOrder).Offset((page - 1) * size).Limit(size).Find(&list).Error
+	return list, total, err
+}
+
 // ListUsersByOrgID 按行政区划 org_id 返回用户列表（不分页）。
 func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
 	if orgID == 0 {
@@ -370,6 +393,20 @@ func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
 	}
 	var list []model.SysUser
 	err := s.DB.Model(&model.SysUser{}).Where("org_id = ?", orgID).Order(userListOrder).Find(&list).Error
+	return list, err
+}
+
+// ListVisibleUsersByOrgID 返回当前账号可见范围与指定组织子树交集内的工作人员。
+func (s *SysService) ListVisibleUsersByOrgID(ctx context.Context, orgID uint64) ([]model.SysUser, error) {
+	if orgID == 0 {
+		return nil, errors.New("org_id 必填")
+	}
+	q, err := s.visibleUserListQuery(ctx, orgID, "")
+	if err != nil {
+		return nil, err
+	}
+	var list []model.SysUser
+	err = q.Order(userListOrder).Find(&list).Error
 	return list, err
 }
 

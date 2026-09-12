@@ -38,6 +38,7 @@ export function createIssuesApi(client: ApiClient) {
   return {
     /**
      * 关键字检索问题编号、设施编号与地址。
+     * 服务端仅返回当前账号组织及下级；账号 org_id=0 时全部可见，org_id 筛选包含下级。
      * 保留服务端分页前的排序：已逾期 > 即将逾期 > 待整改 > 已整改/已排查；同组 created_at、id 倒序。
      * 即将逾期含北京自然日今天至 3 天后，小程序查询契约不受影响。
      */
@@ -54,7 +55,7 @@ export function createIssuesApi(client: ApiClient) {
       };
     },
 
-    /** 专项整改 view 权限下的最小组织候选，不依赖组织管理权限。 */
+    /** 专项整改 view 权限下的可见组织候选；范围为当前组织及下级，账号 org_id=0 时全部可见。 */
     async listOrgOptions(): Promise<OrgOption[]> {
       return normalizeOrgOptions(await client.request<unknown>("/api/issues/options/orgs"));
     },

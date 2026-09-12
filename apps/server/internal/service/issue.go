@@ -181,10 +181,23 @@ func (v IssueVO) MarshalJSON() ([]byte, error) {
 // List 管理端基础列表；按已逾期、即将逾期、待整改、已整改/已排查分组，同组按创建时间倒序。
 // 即将逾期含北京自然日今天至 3 天后；小程序查询保持原语义。
 func (s *IssueService) List(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
+	return s.list(ctx, q, false)
+}
+
+// listVisible 管理端 HTTP 列表，将请求组织筛选与当前登录用户可见组织范围取交集。
+func (s *IssueService) listVisible(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
+	return s.list(ctx, q, true)
+}
+
+func (s *IssueService) list(ctx context.Context, q IssueQuery, visibleOnly bool) ([]IssueVO, int64, error) {
 	q.Page, q.Size = NormalizePagination(q.Page, q.Size, 0)
 	db := s.applyAdminIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
 	var err error
-	db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
+	if visibleOnly {
+		db, err = applyVisibleOrgFilter(ctx, db, s.db(ctx), "org_id", q.OrgID)
+	} else {
+		db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
+	}
 	if err != nil {
 		return nil, 0, err
 	}

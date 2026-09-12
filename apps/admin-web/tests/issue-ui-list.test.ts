@@ -8,6 +8,7 @@ import IssueFormDialog from "@/views/issues/IssueFormDialog.vue";
 import IssuesView from "@/views/issues/IssuesView.vue";
 
 vi.mock("@/stores/permission", () => ({ usePermissionStore: () => ({ can: () => true }) }));
+vi.mock("@/stores/auth", () => ({ useAuthStore: () => ({ user: { id: 7, org_id: 3 } }) }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -48,6 +49,14 @@ function mountView(overrides = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("专项整改读取状态", () => {
+  it("列表筛选和新增表单默认使用当前登录用户组织", async () => {
+    const { wrapper, api } = mountView();
+    await flushPromises();
+    expect(api.issues.list).toHaveBeenCalledWith(expect.objectContaining({ org_id: 3 }));
+    expect(wrapper.getComponent(IssueFormDialog).props("defaultOrgId")).toBe(3);
+    wrapper.unmount();
+  });
+
   it("无系统字典请求，快速搜索只接收最后一次结果且首尾去空白", async () => {
     const old = deferred<AdminIssueListResult>();
     const latest = deferred<AdminIssueListResult>();

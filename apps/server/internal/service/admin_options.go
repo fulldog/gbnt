@@ -47,8 +47,17 @@ type BusinessUserOptionResult struct {
 	Selected *BusinessUserOption  `json:"selected"` // 合法已选人员；未传、已删除、停用或不在业务组织范围内为 null
 }
 
-// ListBusinessOrgOptions 提供完整轻量组织选项并标记当前账号可写范围；列表筛选仍可查看全局组织。
+// ListBusinessOrgOptions 提供完整轻量组织选项并标记当前账号可写范围。
 func (s *SysService) ListBusinessOrgOptions(ctx context.Context, streetsOnly bool) ([]BusinessOrgOption, error) {
+	return s.listBusinessOrgOptions(ctx, streetsOnly, false)
+}
+
+// ListVisibleBusinessOrgOptions 提供当前账号可见范围内的轻量组织选项，并标记可写范围。
+func (s *SysService) ListVisibleBusinessOrgOptions(ctx context.Context, streetsOnly bool) ([]BusinessOrgOption, error) {
+	return s.listBusinessOrgOptions(ctx, streetsOnly, true)
+}
+
+func (s *SysService) listBusinessOrgOptions(ctx context.Context, streetsOnly, visibleOnly bool) ([]BusinessOrgOption, error) {
 	q := s.db(ctx).Model(&model.SysOrg{})
 	if streetsOnly {
 		q = q.Where("type = ?", model.OrgTypeStreet)
@@ -61,10 +70,22 @@ func (s *SysService) ListBusinessOrgOptions(ctx context.Context, streetsOnly boo
 	if err != nil {
 		return nil, err
 	}
-	for i := range list {
-		list[i].WithinOrgScope = scope.Allows(list[i].ID)
+	var visibleScope *OrgScope
+	if visibleOnly {
+		visibleScope, err = resolveVisibleOrgScope(ctx, s.db(ctx))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return list, nil
+	out := make([]BusinessOrgOption, 0, len(list))
+	for i := range list {
+		if visibleOnly && !visibleScope.Allows(list[i].ID) {
+			continue
+		}
+		list[i].WithinOrgScope = scope.Allows(list[i].ID)
+		out = append(out, list[i])
+	}
+	return out, nil
 }
 
 func requireOptionOrg(db *gorm.DB, orgID uint64) error {

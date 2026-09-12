@@ -67,6 +67,36 @@ func TestResolveOrgScopeKeepsSuperAdminGlobalButRejectsZeroTarget(t *testing.T) 
 	}
 }
 
+func TestResolveVisibleOrgScopeUsesOrganizationSubtree(t *testing.T) {
+	db := testutil.NewQueryDB(t, scopeOrgRows())
+	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 7, OrgID: 3})
+	scope, err := resolveVisibleOrgScope(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uint64{3, 4, 5} {
+		if !scope.Allows(id) {
+			t.Errorf("组织 %d 应在可见范围内", id)
+		}
+	}
+	for _, id := range []uint64{1, 2, 6} {
+		if scope.Allows(id) {
+			t.Errorf("组织 %d 不应在可见范围内", id)
+		}
+	}
+}
+
+func TestResolveVisibleOrgScopeTreatsZeroOrganizationAsGlobal(t *testing.T) {
+	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 7, OrgID: 0})
+	scope, err := resolveVisibleOrgScope(ctx, testutil.NewQueryDB(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !scope.All || !scope.Allows(999) {
+		t.Fatalf("org_id=0 应全部可见: %+v", scope)
+	}
+}
+
 func TestUserOrganizationScopeRejectsSiblingOrganization(t *testing.T) {
 	db := testutil.NewQueryDB(t,
 		scopeOrgRows(),

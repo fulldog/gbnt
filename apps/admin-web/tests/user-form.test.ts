@@ -30,10 +30,11 @@ const user: SysUser = {
 };
 const wrappers: VueWrapper[] = [];
 
-async function form(editing: SysUser | null = null) {
+async function form(editing: SysUser | null = null, defaultOrgId?: number) {
   const wrapper = mount(UserFormDialog, {
     props: {
       modelValue: false, user: editing, orgs, roles: [sysRole(2)],
+			defaultOrgId,
       sortSupported: true, optionsReady: true, optionsLoading: false, optionsError: "",
       "onUpdate:modelValue": (value) => wrapper.setProps({ modelValue: value }),
     },
@@ -86,6 +87,11 @@ describe("工作人员弹窗字段与默认状态", () => {
     expect(users.update).not.toHaveBeenCalled();
     expect(wrapper.props("modelValue")).toBe(false);
     expect(wrapper.emitted("saved")).toEqual([[]]);
+  });
+
+  it("新增人员默认填充当前登录用户组织", async () => {
+    const wrapper = await form(null, 3);
+    expect(wrapper.getComponent(OrgTreeSelect).props("modelValue")).toBe(3);
   });
 
   it.each([0, 1])("编辑状态为 %s 的人员不提交状态，防止资料保存覆盖启停状态", async (status) => {

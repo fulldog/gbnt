@@ -47,6 +47,7 @@ function downloadFilename(headers: Readonly<Record<string, string>>): string | n
 
 export function createUsersApi(client: ApiClient) {
   return {
+    /** 仅返回当前账号组织及下级；账号 org_id=0 时全部可见，org_id 筛选包含下级。 */
     async list(query: UserListQuery = {}): Promise<AdminUserListResult> {
       const value = await client.request<unknown>("/api/sys/users", {
         query: { ...query, keyword: query.keyword?.trim() || undefined },
@@ -75,7 +76,7 @@ export function createUsersApi(client: ApiClient) {
       return client.request<SysRole[]>("/api/sys/users/options/roles");
     },
 
-    /** 后端已提供该路由，当前 OpenAPI 尚未收录。 */
+    /** 返回可见范围与指定组织子树交集内的工作人员。 */
     listByOrg(orgId: number): Promise<UserListResult> {
       return client.request<UserListResult>("/api/sys/users/by-org", {
         query: { org_id: orgId },
@@ -116,7 +117,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
-    /** 导出包含排序、英文角色ID和角色名称；顺序与人员列表一致，关联仍使用内部数字role_id。 */
+    /** 按列表相同组织范围导出，包含排序、英文角色ID和角色名称。 */
     async exportFile(query: ExportUsersQuery = {}): Promise<DownloadResult<Blob>> {
       const response = await client.raw<Blob>("/api/sys/users/export", {
         query: { ...query },

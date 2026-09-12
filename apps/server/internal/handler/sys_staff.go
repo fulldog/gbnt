@@ -37,7 +37,8 @@ func (d *Deps) ListAssignableRoles(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size；按 sort 升序、id 倒序分页，sort_supported 表示支持人员排序。
+// ListUsers GET /api/sys/users — 工作人员列表；仅当前组织及下级可见，账号 org_id=0 时全部可见。
+// query: org_id/keyword/page/size；按 sort 升序、id 倒序分页，sort_supported 表示支持人员排序。
 func (d *Deps) ListUsers(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
 	page, size := service.NormalizePagination(atoiDefault(c.Query("page"), 1), atoiDefault(c.Query("size"), 20), 0)
@@ -49,22 +50,28 @@ func (d *Deps) ListUsers(c *gin.Context) {
 	response.OK(c, gin.H{"list": list, "total": total, "page": page, "size": size, "sort_supported": true})
 }
 
-// ListUsersByOrgID GET /api/sys/users/by-org — 按行政区划 ID 获取用户列表；按 sort 升序、id 倒序。
+// ListUsersByOrgID GET /api/sys/users/by-org — 在当前账号可见范围内按行政区划及下级获取用户列表。
 func (d *Deps) ListUsersByOrgID(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
-	list, err := d.Sys.ListUsersByOrgID(orgID)
+	list, err := d.Sys.ListVisibleUsersByOrgID(c.Request.Context(), orgID)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	response.OK(c, gin.H{"list": list, "total": len(list)})
 }
 
-// ExportUsers GET /api/sys/users/export — 导出人员 xlsx；query 同列表、不分页，包含排序列并沿用列表排序。
+// ExportUsers GET /api/sys/users/export — 按当前账号可见组织范围导出人员；query 同列表、不分页。
 func (d *Deps) ExportUsers(c *gin.Context) {
 	orgID := parseUint64Query(c.Query("org_id"))
-	data, err := d.Sys.ExportUsers(orgID, c.Query("keyword"))
+	data, err := d.Sys.ExportVisibleUsers(c.Request.Context(), orgID, c.Query("keyword"))
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}

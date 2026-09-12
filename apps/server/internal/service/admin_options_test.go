@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/testutil"
 	"gorm.io/gorm"
 )
@@ -172,5 +173,29 @@ func TestBusinessOrgOptionsMinimalAndStreetFilter(t *testing.T) {
 	_ = json.Unmarshal(encoded, &fields)
 	if len(fields) != 6 || !reflect.DeepEqual(fields["sort"], float64(8)) || fields["within_org_scope"] != false {
 		t.Fatalf("组织字段错误：%s", encoded)
+	}
+}
+
+func TestVisibleBusinessOrgOptionsDropsSiblingOrganizations(t *testing.T) {
+	db := testutil.NewQueryDB(t,
+		testutil.QueryStep{
+			Contains: "FROM `sys_orgs`",
+			Columns:  []string{"id", "name", "type", "parent_id", "sort"},
+			Rows: [][]driver.Value{
+				{int64(3), "当前街道", "street", int64(2), int64(1)},
+				{int64(4), "当前村", "village", int64(3), int64(1)},
+				{int64(6), "兄弟街道", "street", int64(2), int64(2)},
+			},
+		},
+		scopeOrgRows(),
+		scopeOrgRows(),
+	)
+	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 7, OrgID: 3})
+	list, err := (&SysService{DB: db}).ListVisibleBusinessOrgOptions(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[0].ID != 3 || list[1].ID != 4 {
+		t.Fatalf("专项整改组织候选越界：%+v", list)
 	}
 }

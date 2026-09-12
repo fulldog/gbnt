@@ -21,7 +21,12 @@ import type { IssueFormDraft, IssueTypeDraft, WellDraft } from "./issue-form";
 import { useIssueCodeDrafts } from "./useIssueCodeDrafts";
 
 interface SignaturePadExpose { changed?: boolean; revision?: number; toBlob: () => Promise<Blob> }
-const { issue = null, orgs, orgsReady = true } = defineProps<{ issue?: AdminIssue | null; orgs: readonly OrgOption[]; orgsReady?: boolean }>();
+const { issue = null, orgs, orgsReady = true, defaultOrgId } = defineProps<{
+  issue?: AdminIssue | null;
+  orgs: readonly OrgOption[];
+  orgsReady?: boolean;
+  defaultOrgId?: number;
+}>();
 const emit = defineEmits<{ saved: [issueId: number] }>();
 const visible = defineModel<boolean>({ required: true });
 const api = useAdminApi();
@@ -82,6 +87,7 @@ async function initialize(): Promise<void> {
   if (!issue) {
     const next = createIssueDraft(auth.user?.id);
     next.codeMode = "auto";
+    next.org_id = defaultOrgId;
     next.reporter_name = auth.user?.name ?? ""; next.reporter_phone = auth.user?.phone ?? "";
     Object.assign(form, next); formRef.value?.clearValidate(); formReady.value = true; return;
   }

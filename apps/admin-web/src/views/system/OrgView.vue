@@ -43,10 +43,15 @@ const formRef = shallowRef<FormInstance>();
 const form = reactive({ name: "", parent_id: 0, sort: 0 as number | undefined });
 const tree = computed(() => buildOrgTree(orgs.value));
 const byId = computed(() => new Map(orgs.value.map((org) => [org.id, org])));
+const currentOrg = computed(() => orgs.value.find((org) => org.id === auth.user?.org_id));
 const rules: FormRules<typeof form> = {
   name: [{ required: true, message: "请输入组织名称", trigger: "blur" }],
 };
 const canCreateRoot = computed(() => permission.can("web.sys-org", "create") && auth.user?.is_super_admin === true);
+const canCreateCurrentChild = computed(() =>
+  permission.can("web.sys-org", "create") &&
+  Boolean(currentOrg.value?.within_org_scope === true && currentOrg.value.type !== "village"),
+);
 
 function withinScope(node: Pick<OrgTreeNode, "within_org_scope">): boolean {
   return node.within_org_scope === true;
@@ -71,6 +76,16 @@ function createRoot(): void {
   editing.value = null;
   form.name = "";
   form.parent_id = 0;
+  form.sort = 0;
+  dialogVisible.value = true;
+}
+
+function createCurrentChild(): void {
+  const parent = currentOrg.value;
+  if (!parent || !canCreateCurrentChild.value) return;
+  editing.value = null;
+  form.name = "";
+  form.parent_id = parent.id;
   form.sort = 0;
   dialogVisible.value = true;
 }
@@ -150,6 +165,7 @@ onMounted(() => {
     <section class="data-card">
       <TableToolbar title="单位列表" :filterable="false" :loading="loading" :target="() => tablePage" @refresh="load">
         <ElButtonGroup><ElButton @click="expandAll(true)">展开全部</ElButton><ElButton @click="expandAll(false)">折叠全部</ElButton></ElButtonGroup>
+        <ElButton type="primary" :icon="Plus" :disabled="!canCreateCurrentChild" v-bind="{ title: '在当前账号所属组织下新增单位' }" @click="createCurrentChild">新增下级组织</ElButton>
         <ElButton type="primary" :icon="Plus" :disabled="!canCreateRoot" v-bind="{ title: canCreateRoot ? '新增根组织' : !permission.can('web.sys-org', 'create') ? '无新增权限' : '只有超级管理员可以新增根组织' }" @click="createRoot">新增根组织</ElButton>
       </TableToolbar>
       <div class="data-table">

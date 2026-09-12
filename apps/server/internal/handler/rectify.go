@@ -29,7 +29,8 @@ func (d *Deps) registerRectify(api *gin.RouterGroup) {
 	}
 }
 
-// ListIssues GET /api/issues — 专项整改列表；query: type/status/org_id/project_year/keyword/page/size。
+// ListIssues GET /api/issues — 专项整改列表；仅当前组织及下级可见，账号 org_id=0 时全部可见。
+// query: type/status/org_id/project_year/keyword/page/size。
 // 分页前按已逾期、即将逾期（北京自然日今天至 3 天后）、待整改、已整改/已排查排序；同组创建时间倒序。
 func (d *Deps) ListIssues(c *gin.Context) {
 	q := service.IssueQuery{
@@ -44,13 +45,16 @@ func (d *Deps) ListIssues(c *gin.Context) {
 	q.Page, q.Size = service.NormalizePagination(q.Page, q.Size, 0)
 	list, total, err := d.Issue.ListAdmin(c.Request.Context(), q)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
 	response.OK(c, gin.H{"list": list, "total": total, "page": q.Page, "size": q.Size})
 }
 
-// GetIssue GET /api/issues/:id — 问题详情（type_ext.photos、整改 records.photos）。
+// GetIssue GET /api/issues/:id — 可见组织范围内的问题详情（type_ext.photos、整改 records.photos）。
 func (d *Deps) GetIssue(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -58,6 +62,9 @@ func (d *Deps) GetIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.GetAdmin(c.Request.Context(), id)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
 			return

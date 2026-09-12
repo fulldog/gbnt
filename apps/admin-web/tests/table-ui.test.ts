@@ -433,6 +433,14 @@ describe("汇总表真实状态", () => {
 });
 
 describe("工作人员展示与表单候选", () => {
+  it("工作人员筛选和新增表单默认使用当前登录用户组织", async () => {
+    session.auth.user = { role_id: 2, org_id: 3, is_super_admin: false } as typeof session.auth.user;
+    const wrapper = render(UserView);
+    await flushPromises();
+    expect(api.users.list).toHaveBeenCalledWith(expect.objectContaining({ org_id: 3 }));
+    expect(wrapper.getComponent(UserFormDialog).props("defaultOrgId")).toBe(3);
+  });
+
   it("列表展示后端排序值且传递排序能力，0值不显示为空", async () => {
     api.users.list.mockResolvedValue({ list: [{ ...user, sort: 0 }], total: 1, page: 1, size: 20, sort_supported: true });
     const wrapper = render(UserView);
@@ -496,6 +504,18 @@ describe("工作人员展示与表单候选", () => {
 });
 
 describe("组织和人员操作栏对齐原型", () => {
+  it("组织架构新增入口默认挂到当前登录用户组织", async () => {
+    session.auth.user = { role_id: 2, org_id: 3, is_super_admin: false } as typeof session.auth.user;
+    api.orgs.list.mockResolvedValue([
+      { id: 3, parent_id: 2, type: "street", name: "当前街道", sort: 1, within_org_scope: true },
+      { id: 4, parent_id: 3, type: "village", name: "当前村", sort: 1, within_org_scope: true },
+    ]);
+    const wrapper = render(OrgView);
+    await flushPromises();
+    await click(wrapper, "新增下级组织");
+    expect((wrapper.vm as unknown as { form: { parent_id: number } }).form.parent_id).toBe(3);
+  });
+
   it("组织行依次为新增单位、修改、删除，根删除与末级新增禁用，父单位删除给出提示", async () => {
     api.orgs.list.mockResolvedValue([
       { id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1, within_org_scope: true },

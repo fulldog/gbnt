@@ -287,6 +287,7 @@ export interface PageQuery {
 export interface IssueListQuery extends PageQuery {
   type?: IssueType | "all";
   status?: IssueStatus | "all";
+  /** 选填组织及其下级；服务端始终与当前账号可见组织范围取交集。 */
   org_id?: number;
   project_year?: ProjectYear;
   keyword?: string;
@@ -408,6 +409,7 @@ export interface SysUser extends BaseRecord {
 }
 
 export interface UserListQuery extends PageQuery {
+  /** 选填组织及其下级；服务端始终与当前账号可见组织范围取交集。 */
   org_id?: number;
   keyword?: string;
 }

@@ -11,6 +11,7 @@ import OrgFilterTree from "@/components/OrgFilterTree.vue";
 import QueryPanel from "@/components/QueryPanel.vue";
 import TableToolbar from "@/components/TableToolbar.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
+import { useAuthStore } from "@/stores/auth";
 import { usePermissionStore } from "@/stores/permission";
 import { downloadBlob } from "@/utils/download";
 import { errorMessage } from "@/utils/error";
@@ -23,13 +24,14 @@ const filtersVisible = shallowRef(true);
 const columns = [{ key: "username", label: "登录账号" }, { key: "phone", label: "手机号" }, { key: "org", label: "所属组织" }, { key: "role", label: "角色" }, { key: "sort", label: "排序" }, { key: "status", label: "状态" }, { key: "created", label: "创建时间" }];
 const visibleColumns = shallowRef(columns.map((column) => column.key));
 const api = useAdminApi();
+const auth = useAuthStore();
 const permission = usePermissionStore();
 const page = shallowRef(1);
 const size = shallowRef(20);
 const formVisible = shallowRef(false);
 const editingUser = shallowRef<AdminUser | null>(null);
 const busyUsers = reactive(new Set<number>());
-const filters = reactive({ org_id: undefined as number | undefined, keyword: "" });
+const filters = reactive({ org_id: (auth.user?.org_id || undefined) as number | undefined, keyword: "" });
 const { data: orgs, loading: orgsLoading, loadError: orgsError, hasLoaded: orgsReady, run: loadOrgs } = useLatestQuery<SysOrg[]>({
   initial: () => [],
   load: () => api.orgs.list(),
@@ -87,7 +89,7 @@ function search(): void {
 }
 
 function reset(): void {
-  filters.org_id = undefined;
+  filters.org_id = auth.user?.org_id || undefined;
   filters.keyword = "";
   search();
 }
@@ -274,7 +276,7 @@ onMounted(() => {
     </section>
 
     </div>
-    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :sort-supported="result.sort_supported === true" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
+    <UserFormDialog v-model="formVisible" :user="editingUser" :orgs="orgs" :roles="roles" :default-org-id="auth.user?.org_id || undefined" :sort-supported="result.sort_supported === true" :options-ready="optionsReady" :options-loading="optionsLoading" :options-error="optionsError" @retry-options="loadDictionaries" @saved="load" />
   </div>
 </template>
 

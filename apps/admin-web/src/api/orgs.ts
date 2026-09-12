@@ -7,6 +7,7 @@ import type {
 
 export function createOrgsApi(client: ApiClient) {
   return {
+    /** 当前账号 org_id>0 时仅返回本组织及下级，org_id=0 时返回全部。 */
     list(): Promise<SysOrg[]> {
       return client.request<SysOrg[]>("/api/sys/orgs");
     },

@@ -108,9 +108,10 @@ func TestAdminIssueListAndDetailHTTPIncludeAssigneePhone(t *testing.T) {
 				steps = append(steps, testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(1)}}})
 			}
 			steps = append(steps,
-				testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"id", "type", "type_ext", "assignee_user"}, Rows: [][]driver.Value{{int64(1), "well", `{"checklist":[]}`, int64(8)}}},
+				testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"id", "type", "type_ext", "org_id", "assignee_user"}, Rows: [][]driver.Value{{int64(1), "well", `{"checklist":[]}`, int64(3), int64(8)}}},
 				testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id"}},
 				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}, Rows: [][]driver.Value{{int64(8), "整改责任人", "assignee"}}},
+				testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id"}, Rows: [][]driver.Value{{int64(3), "北城街道", int64(0)}}},
 				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "phone"}, Rows: [][]driver.Value{{int64(8), "13800000008"}}},
 			)
 			d := &Deps{Issue: &service.IssueService{DB: testutil.NewQueryDB(t, steps...)}}

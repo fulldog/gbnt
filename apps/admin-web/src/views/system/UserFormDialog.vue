@@ -8,10 +8,11 @@ import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
 import AsyncError from "@/components/AsyncError.vue";
 import { errorMessage } from "@/utils/error";
 
-const { user = null, orgs, roles, sortSupported = false, optionsReady, optionsLoading, optionsError } = defineProps<{
+const { user = null, orgs, roles, defaultOrgId, sortSupported = false, optionsReady, optionsLoading, optionsError } = defineProps<{
   user?: SysUser | null;
   orgs: readonly SysOrg[];
   roles: readonly SysRole[];
+  defaultOrgId?: number;
   sortSupported?: boolean;
   optionsReady: boolean;
   optionsLoading: boolean;
@@ -47,7 +48,7 @@ watch(visible, (open) => {
   form.password = "";
   form.name = user?.name ?? "";
   form.phone = user?.phone ?? "";
-  form.org_id = user?.org_id || undefined;
+  form.org_id = user?.org_id || defaultOrgId || undefined;
   form.role_id = user?.role_id || undefined;
   form.sort = user?.sort ?? 100;
   formRef.value?.clearValidate();
