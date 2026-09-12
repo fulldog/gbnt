@@ -196,9 +196,9 @@ func TestLedgerEmptyRowsAndQueryFailures(t *testing.T) {
 				var result any
 				var err error
 				if street {
-					result, err = s.LedgerStreet(0, "2026-01-01", "2026-09-01")
+					result, err = s.LedgerStreet(context.Background(), 0, "2026-01-01", "2026-09-01")
 				} else {
-					result, err = s.LedgerSurvey(0, "", "")
+					result, err = s.LedgerSurvey(context.Background(), 0, "", "")
 				}
 				if fail {
 					if err == nil || result != nil {

@@ -49,8 +49,8 @@ type IssueInput struct {
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
 	ReportUserID            uint64          `json:"report_user_id"`             // 上报人账号：App 由登录用户注入；后台旧版必填，新版手工填报可不关联账号
-	AssigneeUser            uint64          `json:"assignee_user"`              // 管理端需整改时必填；App 上报固定为 0 不自动填充；非 0 须启用且用户组织与表单 org_id 同枝
-	AllowUnassignedAssignee bool            `json:"-"`                          // 仅 App 上报置 true：需整改也可不指定整改人
+	AssigneeUser            uint64          `json:"assignee_user"`              // 管理端新增默认 0 未指派；导入需整改时仍必填；App 上报固定为 0；非 0 须启用且用户组织与表单 org_id 同枝
+	AllowUnassignedAssignee bool            `json:"-"`                          // 管理端新增与 App 上报置 true：需整改也可不指定整改人
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 兼容历史请求；创建忽略该值，状态由排查清单推导
 }
@@ -859,25 +859,31 @@ func (s *IssueService) Import(ctx context.Context, rows []IssueInput) (int, erro
 	return n, nil
 }
 
-// Stats 返回工作台全局计数；遵循软删除及原状态口径，任何计数失败均不返回部分统计。
-func (s *IssueService) Stats() (map[string]interface{}, error) {
+// Stats 返回当前账号可见组织范围内的工作台计数；org_id=0 时统计全部。
+// 遵循软删除及原状态口径，任何计数失败均不返回部分统计。
+func (s *IssueService) Stats(ctx context.Context) (map[string]interface{}, error) {
+	base, err := applyVisibleOrgFilter(ctx, s.db(ctx).Model(&model.Issue{}), s.db(ctx), "org_id", 0)
+	if err != nil {
+		return nil, err
+	}
+	fresh := func() *gorm.DB { return base.Session(&gorm.Session{}) }
 	var total, statusNew, statusPending, done int64
-	if err := s.DB.Model(&model.Issue{}).Count(&total).Error; err != nil {
+	if err := fresh().Count(&total).Error; err != nil {
 		return nil, err
 	}
-	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusNew).Count(&statusNew).Error; err != nil {
+	if err := fresh().Where("status = ?", model.IssueStatusNew).Count(&statusNew).Error; err != nil {
 		return nil, err
 	}
-	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusPending).Count(&statusPending).Error; err != nil {
+	if err := fresh().Where("status = ?", model.IssueStatusPending).Count(&statusPending).Error; err != nil {
 		return nil, err
 	}
-	if err := s.DB.Model(&model.Issue{}).Where("status = ?", model.IssueStatusDone).Count(&done).Error; err != nil {
+	if err := fresh().Where("status = ?", model.IssueStatusDone).Count(&done).Error; err != nil {
 		return nil, err
 	}
 	byType := map[string]int64{}
 	for _, t := range []string{"well", "road", "bridge", "forest", "transformer"} {
 		var c int64
-		if err := s.DB.Model(&model.Issue{}).Where("type = ?", t).Count(&c).Error; err != nil {
+		if err := fresh().Where("type = ?", t).Count(&c).Error; err != nil {
 			return nil, err
 		}
 		byType[t] = c
@@ -902,13 +908,13 @@ func (s *IssueService) applyLedgerDate(q *gorm.DB, from, to string) *gorm.DB {
 	return q
 }
 
-func (s *IssueService) filterLedgerOrg(q *gorm.DB, orgID uint64) (*gorm.DB, error) {
-	return s.applyOrgSubtreeFilter(context.Background(), q, orgID)
+func (s *IssueService) filterLedgerOrg(ctx context.Context, q *gorm.DB, orgID uint64) (*gorm.DB, error) {
+	return applyVisibleOrgFilter(ctx, q, s.db(ctx), "org_id", orgID)
 }
 
-// LedgerStreet 按落点组织与问题类型聚合；无记录仍返回 rows: []，批量补齐组织名称。
-func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interface{}, error) {
-	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+// LedgerStreet 按当前可见范围、落点组织与问题类型聚合；无记录仍返回 rows: []。
+func (s *IssueService) LedgerStreet(ctx context.Context, streetOrgID uint64, from, to string) (interface{}, error) {
+	q, err := s.filterLedgerOrg(ctx, s.applyLedgerDate(s.db(ctx).Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {
 		return nil, err
 	}
@@ -931,7 +937,7 @@ func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interf
 	for _, item := range list {
 		orgIDs = append(orgIDs, item.OrgID)
 	}
-	names, err := loadAdminDisplayNames(s.DB, nil, orgIDs, nil)
+	names, err := loadAdminDisplayNames(s.db(ctx), nil, orgIDs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -941,9 +947,9 @@ func (s *IssueService) LedgerStreet(streetOrgID uint64, from, to string) (interf
 	return ginH{"rows": list, "street_org_id": streetOrgID}, nil
 }
 
-// LedgerSurvey 按问题类型聚合；无记录返回空数组，查询失败不包装为成功。
-func (s *IssueService) LedgerSurvey(streetOrgID uint64, from, to string) (interface{}, error) {
-	q, err := s.filterLedgerOrg(s.applyLedgerDate(s.DB.Model(&model.Issue{}), from, to), streetOrgID)
+// LedgerSurvey 按当前可见范围及问题类型聚合；无记录返回空数组，查询失败不包装为成功。
+func (s *IssueService) LedgerSurvey(ctx context.Context, streetOrgID uint64, from, to string) (interface{}, error) {
+	q, err := s.filterLedgerOrg(ctx, s.applyLedgerDate(s.db(ctx).Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {
 		return nil, err
 	}

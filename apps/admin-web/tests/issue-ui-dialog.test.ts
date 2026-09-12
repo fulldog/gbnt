@@ -21,6 +21,7 @@ describe("专项整改弹窗提交保护", () => {
     });
     await flushPromises();
     expect((wrapper.vm as unknown as { form: { org_id?: number } }).form.org_id).toBe(12);
+    expect(wrapper.findComponent(BusinessUserSelect).exists()).toBe(false);
     wrapper.unmount();
   });
 

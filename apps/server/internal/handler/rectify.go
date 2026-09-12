@@ -75,7 +75,7 @@ func (d *Deps) GetIssue(c *gin.Context) {
 	response.OK(c, item)
 }
 
-// CreateIssue POST /api/issues — 新增排查；org_id + QuizBool 推导 needs_rectify/status。
+// CreateIssue POST /api/issues — 新增排查；org_id + QuizBool 推导 needs_rectify/status；整改人固定允许为 0。
 func (d *Deps) CreateIssue(c *gin.Context) {
 	d.OpLog.Mark(c, "上报问题", "")
 	var req service.IssueInput
@@ -84,6 +84,8 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 		return
 	}
 	d.OpLog.Mark(c, "上报问题", req.Type)
+	// [PRD] 管理端新增不选整改人，允许 assignee_user=0；导入仍走 Create 且不置此标记。
+	req.AllowUnassignedAssignee = true
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
 		if orgScopeFailure(c, err) {

@@ -170,12 +170,11 @@ function buildTypeInput(form: IssueFormDraft, issue: AdminIssue | null = null): 
 
 export function buildCreateInput(form: IssueFormDraft, signatureId: string): AdminCreateIssueInput {
   if (!form.org_id) throw new Error("请选择行政区划");
-  if (draftNeedsRectify(form) && !form.assignee_user) throw new Error("请指定整改人");
   return {
     type: form.type, project_year: form.project_year, org_id: form.org_id,
     code_mode: resolveFacilityCodeMode(form), code: resolveFacilityCodeMode(form) === "manual" ? form.code.trim() : undefined, address: form.address.trim(),
     lat: form.lat, lng: form.lng, report_user_id: form.report_user_id,
-    assignee_user: form.assignee_user || undefined,
+    assignee_user: 0,
     reporter_name: form.reporter_name.trim(), reporter_phone: form.reporter_phone.trim(),
     reporter_signature_file_id: signatureId, plan_date: draftNeedsRectify(form) ? form.types[form.type].plan_date : "",
     type_ext: buildTypeInput(form),

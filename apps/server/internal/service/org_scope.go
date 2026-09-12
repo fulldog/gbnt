@@ -65,28 +65,35 @@ func resolveVisibleOrgScope(ctx context.Context, db *gorm.DB) (*OrgScope, error)
 	if err != nil {
 		return nil, err
 	}
-	scope := &OrgScope{RootID: user.OrgID, All: user.OrgID == 0, allowed: map[uint64]struct{}{}}
-	if scope.All {
-		return scope, nil
-	}
 	var orgs []model.SysOrg
+	if user.OrgID == 0 {
+		return visibleOrgScope(nil, 0), nil
+	}
 	if err := db.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
 		return nil, err
 	}
+	return visibleOrgScope(orgs, user.OrgID), nil
+}
+
+func visibleOrgScope(orgs []model.SysOrg, rootID uint64) *OrgScope {
+	scope := &OrgScope{RootID: rootID, All: rootID == 0, allowed: map[uint64]struct{}{}}
+	if scope.All {
+		return scope
+	}
 	found := false
 	for _, org := range orgs {
-		if org.ID == user.OrgID {
+		if org.ID == rootID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return scope, nil
+		return scope
 	}
-	for _, id := range orgSubtreeIDs(orgs, user.OrgID) {
+	for _, id := range orgSubtreeIDs(orgs, rootID) {
 		scope.allowed[id] = struct{}{}
 	}
-	return scope, nil
+	return scope
 }
 
 // applyVisibleOrgFilter 将显式组织筛选与当前用户可见子树取交集；scopeDB 用于读取组织树。
@@ -120,14 +127,53 @@ func applyVisibleOrgFilter(ctx context.Context, db, scopeDB *gorm.DB, orgColumn 
 			visible = intersection
 		}
 	}
+	return applyVisibleOrgIDs(db, orgColumn, visible), nil
+}
+
+// applyVisibleOrgFilterWithOrgs 使用调用方已加载的组织树应用读取范围，避免报表重复查询组织。
+func applyVisibleOrgFilterWithOrgs(ctx context.Context, db *gorm.DB, orgColumn string, selectedOrgID uint64, orgs []model.SysOrg) (*gorm.DB, error) {
+	user, err := database.UserFromContext(ctx)
+	if err != nil && !errors.Is(err, database.ErrUnauth) {
+		return nil, err
+	}
+	rootID := uint64(0)
+	if err == nil {
+		rootID = user.OrgID
+	}
+	scope := visibleOrgScope(orgs, rootID)
+	if scope.All && selectedOrgID == 0 {
+		return db, nil
+	}
+	visible := scope.allowed
+	if selectedOrgID != 0 && !(selectedOrgID == scope.RootID && !scope.All) {
+		selected := make(map[uint64]struct{})
+		for _, id := range orgSubtreeIDs(orgs, selectedOrgID) {
+			selected[id] = struct{}{}
+		}
+		if scope.All {
+			visible = selected
+		} else {
+			intersection := make(map[uint64]struct{})
+			for id := range selected {
+				if _, ok := scope.allowed[id]; ok {
+					intersection[id] = struct{}{}
+				}
+			}
+			visible = intersection
+		}
+	}
+	return applyVisibleOrgIDs(db, orgColumn, visible), nil
+}
+
+func applyVisibleOrgIDs(db *gorm.DB, orgColumn string, visible map[uint64]struct{}) *gorm.DB {
 	ids := make([]uint64, 0, len(visible))
 	for id := range visible {
 		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
-		return db.Where("1 = 0"), nil
+		return db.Where("1 = 0")
 	}
-	return db.Where(orgColumn+" IN ?", ids), nil
+	return db.Where(orgColumn+" IN ?", ids)
 }
 
 // Allows 判断目标组织是否在范围内。0 永远不是可操作组织。

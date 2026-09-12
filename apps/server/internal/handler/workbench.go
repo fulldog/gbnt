@@ -45,9 +45,9 @@ func (d *Deps) WorkbenchTodos(c *gin.Context) {
 	response.OK(c, result)
 }
 
-// WorkbenchStats GET /api/workbench/stats — 上报/待整改/已整改/完成率/分类型。
+// WorkbenchStats GET /api/workbench/stats — 当前可见组织范围内的上报/待整改/已整改/完成率/分类型。
 func (d *Deps) WorkbenchStats(c *gin.Context) {
-	stats, err := d.Issue.Stats()
+	stats, err := d.Issue.Stats(c.Request.Context())
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return

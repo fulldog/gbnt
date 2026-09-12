@@ -74,7 +74,7 @@ export function createIssuesApi(client: ApiClient) {
       }));
     },
 
-    /** 需整改时 assignee_user 必填；auto 提交时分配编号，manual 重复返回 40901，重试复用 request_id。 */
+    /** 新增 assignee_user 固定为 0；auto 提交时分配编号，manual 重复返回 40901，重试复用 request_id。 */
     create(input: AdminCreateIssueInput): Promise<Issue> {
       return client.request<Issue, AdminCreateIssueInput>("/api/issues", {
         method: "POST",

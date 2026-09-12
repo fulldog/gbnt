@@ -108,7 +108,7 @@ func validateLedgerReportQuery(q LedgerReportQuery) error {
 	return nil
 }
 
-// ledgerReportSource 为每次请求创建独立查询，基础行、统计和旧报表共用筛选及软删除规则。
+// ledgerReportSource 为每次请求创建独立查询，基础行、统计和旧报表共用筛选、可见组织范围及软删除规则。
 func (s *IssueService) ledgerReportSource(ctx context.Context, q LedgerReportQuery) (*gorm.DB, map[uint64]model.SysOrg, error) {
 	if err := validateLedgerReportQuery(q); err != nil {
 		return nil, nil, err
@@ -126,7 +126,10 @@ func (s *IssueService) ledgerReportSource(ctx context.Context, q LedgerReportQue
 		if org, exists := byID[q.StreetOrgID]; !exists || org.Type != model.OrgTypeStreet {
 			return nil, nil, fmt.Errorf("%w：请选择有效街道", ErrLedgerReportArgument)
 		}
-		db = db.Where("org_id IN ?", orgSubtreeIDs(orgs, q.StreetOrgID))
+	}
+	db, err := applyVisibleOrgFilterWithOrgs(ctx, db, "org_id", q.StreetOrgID, orgs)
+	if err != nil {
+		return nil, nil, err
 	}
 	// 报表按北京时间自然日过滤；绑定 time.Time 由 MySQL 驱动按配置 loc 转换，不用裸字符串误当存储时区。
 	// 保留软删除默认作用域；不因缺失关联而丢掉已有记录。

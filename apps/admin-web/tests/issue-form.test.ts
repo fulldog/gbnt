@@ -112,14 +112,16 @@ describe("五类独立表单与编辑回填", () => {
     expect(buildUpdateInput(form, issue, issue.reporter_signature_file_id)).toEqual({ expected_updated_at: issue.updated_at, plan_date: "2026-09-20" });
   });
 
-  it("需整改的新记录必须指定人员，正常记录不强制指派", () => {
+  it("新增巡查固定不指派整改人", () => {
     const form = hydrateIssueDraft(editorIssue("road"));
     form.assignee_user = undefined;
-    expect(buildCreateInput(form, "signature").assignee_user).toBeUndefined();
+    expect(buildCreateInput(form, "signature").assignee_user).toBe(0);
     form.types.road.checklist.find((q) => q.type === "has_road_damage")!.value = true;
-    expect(() => buildCreateInput(form, "signature")).toThrow("请指定整改人");
+    form.types.road.checklist.find((q) => q.type === "has_road_damage")!.desc = "损坏";
+    form.types.road.checklist.find((q) => q.type === "has_road_damage")!.files = ["photo"];
+    form.types.road.plan_date = "2026-10-01";
     form.assignee_user = 22;
-    expect(buildCreateInput(form, "signature").assignee_user).toBe(22);
+    expect(buildCreateInput(form, "signature").assignee_user).toBe(0);
   });
 
   it("待整改记录禁止清空责任人，已完成记录允许显式解除指派", () => {

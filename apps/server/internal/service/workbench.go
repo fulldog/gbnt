@@ -63,7 +63,7 @@ func workbenchTrendWindow(value string, now time.Time) (*WorkbenchTrendResult, t
 }
 
 // WorkbenchTrend 按创建时间统计上报，按当前轮次最后整改记录统计当前已完成问题。
-// 不以 updated_at 代替完成时间，也不计已软删的主记录、整改记录或以前轮次；任何查询/扫描错误均不返回部分统计。
+// 仅统计当前账号可见组织范围；不以 updated_at 代替完成时间，也不计已软删记录或以前轮次。
 func (s *IssueService) WorkbenchTrend(ctx context.Context, value string, now time.Time) (*WorkbenchTrendResult, error) {
 	out, start, err := workbenchTrendWindow(value, now)
 	if err != nil {
@@ -72,6 +72,10 @@ func (s *IssueService) WorkbenchTrend(ctx context.Context, value string, now tim
 	query := s.db(ctx).Model(&model.Issue{}).Select(`issues.created_at, issues.status,
 		(SELECT MAX(r.created_at) FROM issue_rectify_records r
 		 WHERE r.issue_id = issues.id AND r.round = issues.rectify_round AND r.is_delete = 0) AS completed_at`)
+	query, err = applyVisibleOrgFilter(ctx, query, s.db(ctx), "org_id", 0)
+	if err != nil {
+		return nil, err
+	}
 	if !start.IsZero() {
 		query = query.Where("(issues.created_at >= ? OR issues.status = ?)", start, model.IssueStatusDone)
 	}
@@ -155,14 +159,18 @@ type WorkbenchTodoResult struct {
 	Today string          `json:"today"` // 北京日期 YYYY-MM-DD，倒计时的统一计算基准
 }
 
-// WorkbenchTodos 查询全部尚未完成问题，按已设计划日期升序、同日 ID 降序、未设日期置后。
-// 工作台延续原全局统计的可见范围，不调用小程序组织范围逻辑或扩大其它模块授权。
+// WorkbenchTodos 查询当前账号可见组织范围内尚未完成的问题；org_id=0 时查询全部。
+// 按已设计划日期升序、同日 ID 降序、未设日期置后。
 func (s *IssueService) WorkbenchTodos(ctx context.Context, page, size int, now time.Time) (*WorkbenchTodoResult, error) {
 	page, size = NormalizePagination(page, size, 100)
 	todayText := now.In(workbenchLocation).Format("2006-01-02")
 	today, _ := time.ParseInLocation("2006-01-02", todayText, workbenchLocation)
 	out := &WorkbenchTodoResult{List: []WorkbenchTodo{}, Page: page, Size: size, Today: todayText}
 	query := s.db(ctx).Model(&model.Issue{}).Where("status IN ?", []model.IssueStatus{model.IssueStatusNew, model.IssueStatusPending})
+	query, err := applyVisibleOrgFilter(ctx, query, s.db(ctx), "org_id", 0)
+	if err != nil {
+		return nil, err
+	}
 	if err := query.Count(&out.Total).Error; err != nil {
 		return nil, err
 	}

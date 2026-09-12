@@ -253,7 +253,7 @@ export type AdminCreateIssueInput = IssueCreateCommon & IssueCreateByType & {
   report_user_id?: number;
   reporter_name?: string;
   reporter_phone?: string;
-  /** 需整改时必填；须启用且所属组织与 org_id 互为上下级或同一节点。 */
+  /** 新增页面固定为 0（未指派）；非 0 须启用且所属组织与 org_id 互为上下级或同一节点。 */
   assignee_user?: number;
 };
 
@@ -334,6 +334,7 @@ export interface WorkbenchStats {
 }
 
 export interface LedgerQuery {
+  /** 街道及其下级；省略表示当前账号可见范围内全部，不能越过登录组织范围。 */
   street_org_id?: number;
   date_from?: string;
   date_to?: string;

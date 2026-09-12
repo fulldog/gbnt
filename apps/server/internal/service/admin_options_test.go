@@ -199,3 +199,42 @@ func TestVisibleBusinessOrgOptionsDropsSiblingOrganizations(t *testing.T) {
 		t.Fatalf("专项整改组织候选越界：%+v", list)
 	}
 }
+
+func TestVisibleStreetOptionsFollowOrganizationContainment(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		orgID     uint64
+		wantIDs   []uint64
+		scopeRows testutil.QueryStep
+	}{
+		{name: "street sees itself", orgID: 3, wantIDs: []uint64{3}, scopeRows: scopeOrgRows()},
+		{name: "district sees child streets", orgID: 2, wantIDs: []uint64{3, 6}, scopeRows: scopeOrgRows()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testutil.NewQueryDB(t,
+				testutil.QueryStep{
+					Contains: "FROM `sys_orgs`",
+					Columns:  []string{"id", "name", "type", "parent_id", "sort"},
+					Rows: [][]driver.Value{
+						{int64(3), "当前街道", "street", int64(2), int64(1)},
+						{int64(6), "兄弟街道", "street", int64(2), int64(2)},
+					},
+				},
+				tc.scopeRows,
+				scopeOrgRows(),
+			)
+			ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 7, OrgID: tc.orgID})
+			list, err := (&SysService{DB: db}).ListVisibleBusinessOrgOptions(ctx, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ids := make([]uint64, len(list))
+			for i := range list {
+				ids[i] = list[i].ID
+			}
+			if !reflect.DeepEqual(ids, tc.wantIDs) {
+				t.Fatalf("街道候选范围错误：got=%v want=%v", ids, tc.wantIDs)
+			}
+		})
+	}
+}

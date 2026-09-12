@@ -20,18 +20,18 @@ func (d *Deps) IssueOrgOptions(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// LedgerStreetOrgOptions GET /api/ledger/street/options/orgs — 街道台账专用街道候选。
+// LedgerStreetOrgOptions GET /api/ledger/street/options/orgs — 当前账号可见范围内的街道台账候选。
 func (d *Deps) LedgerStreetOrgOptions(c *gin.Context) {
 	d.businessOrgOptions(c, true)
 }
 
-// LedgerSurveyOrgOptions GET /api/ledger/survey/options/orgs — 排查汇总专用街道候选。
+// LedgerSurveyOrgOptions GET /api/ledger/survey/options/orgs — 当前账号可见范围内的排查汇总街道候选。
 func (d *Deps) LedgerSurveyOrgOptions(c *gin.Context) {
 	d.businessOrgOptions(c, true)
 }
 
 func (d *Deps) businessOrgOptions(c *gin.Context, streetsOnly bool) {
-	list, err := d.Sys.ListBusinessOrgOptions(c.Request.Context(), streetsOnly)
+	list, err := d.Sys.ListVisibleBusinessOrgOptions(c.Request.Context(), streetsOnly)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return

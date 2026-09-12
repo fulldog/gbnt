@@ -55,13 +55,12 @@ watch(() => [form.code, form.codeMode, form.org_id, form.type], () => { codeErro
 const activeDraft = computed({ get: () => form.types[form.type], set: (draft: IssueTypeDraft) => { Object.assign(form.types, { [draft.type]: draft }); } });
 const renderContext = computed(() => ({ draft: activeDraft.value, token: photoSession.value }));
 const needsRectify = computed(() => draftNeedsRectify(form, original.value));
-const needsAssignee = computed(() => original.value ? original.value.status !== "done" : needsRectify.value);
+const needsAssignee = computed(() => Boolean(original.value && original.value.status !== "done"));
 const assigneeReady = shallowRef(false);
 function loadAssignees(query: UserOptionQuery) {
   if (!form.org_id) return Promise.reject(new Error("请先选择行政区划"));
-  return original.value
-    ? api.issues.listAssigneeOptions(original.value.id, { ...query, org_id: form.org_id })
-    : api.issues.listReporterOptions({ ...query, org_id: form.org_id });
+  if (!original.value) return Promise.reject(new Error("新增巡查不指定整改人"));
+  return api.issues.listAssigneeOptions(original.value.id, { ...query, org_id: form.org_id });
 }
 const schemaVersion = computed(() => draftSchemaVersion(form, original.value));
 const existingSignature = computed(() => original.value?.reporter_signature ?? (original.value?.reporter_signature_file_id ? { file_id: original.value.reporter_signature_file_id, url: "" } : undefined));
@@ -72,7 +71,7 @@ const rules: FormRules<IssueFormDraft> = {
   code: [{ validator: (_rule, _value, callback) => callback(manualCode.value && !form.code.trim() ? new Error("请填写设施编号") : undefined), trigger: "blur" }],
   address: [{ required: true, whitespace: true, message: "请填写地址", trigger: "blur" }],
   reporter_phone: [{ pattern: /^(?:1[3-9]\d{9})?$/, message: "请输入有效的手机号码", trigger: "blur" }],
-  assignee_user: [{ validator: (_rule, _value, callback) => callback(needsAssignee.value && !form.assignee_user ? new Error("请指定整改人") : undefined), trigger: "change" }],
+  assignee_user: [{ validator: (_rule, _value, callback) => callback(editing.value && needsAssignee.value && !form.assignee_user ? new Error("请指定整改人") : undefined), trigger: "change" }],
 };
 
 async function initialize(): Promise<void> {
@@ -147,7 +146,7 @@ async function submit(): Promise<void> {
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (current !== session || photosUploading.value || submitting.value) return;
   if (!orgsReady) { ElMessage.error("行政区划加载失败，请重试"); return; }
-  if ((needsAssignee.value || form.assignee_user) && !assigneeReady.value) { ElMessage.error("请选择有效的整改人，或等待人员候选加载完成"); return; }
+  if (editing.value && (needsAssignee.value || form.assignee_user) && !assigneeReady.value) { ElMessage.error("请选择有效的整改人，或等待人员候选加载完成"); return; }
   if (original.value && original.value.type !== form.type && original.value.rectify_records.length) {
     ElMessage.error("该记录已有整改历史，请保留原类型编辑"); return;
   }
@@ -196,7 +195,7 @@ async function submit(): Promise<void> {
               </ElRadioGroup>
             </ElFormItem>
             <ElFormItem label="行政区划" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" :disabled="!orgsReady" :clearable="false" restrict-scope /></ElFormItem>
-            <ElFormItem label="整改人" prop="assignee_user" :required="needsAssignee">
+            <ElFormItem v-if="editing" label="整改人" prop="assignee_user" :required="needsAssignee">
               <BusinessUserSelect :key="session" v-model="form.assignee_user" :active="visible && !!form.org_id && !loading" :scope-key="form.org_id || 0" :load-options="loadAssignees" placeholder="请选择整改人" @ready="assigneeReady = $event" />
             </ElFormItem>
             <ElFormItem label="项目年度" prop="project_year"><ElRadioGroup :model-value="form.project_year" class="issue-year-picker" @update:model-value="updateYear"><ElRadioButton v-for="year in PROJECT_YEARS" :key="year" :value="year">{{ year }}</ElRadioButton></ElRadioGroup></ElFormItem>

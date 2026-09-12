@@ -23,7 +23,7 @@ function normalizeRow(value: unknown): SurveyLedgerResult["rows"][number] {
 
 export function createLedgerApi(client: ApiClient) {
   return {
-    /** 按建设年份和落点组织提供基础行，不包含统计数量。 */
+    /** 按当前账号可见组织范围、建设年份和落点组织提供基础行，不包含统计数量。 */
     async getStreetRows(query: LedgerSplitQuery = {}): Promise<LedgerPart<StreetBaseRow>> {
       return normalizeStreetRowsPart(await client.request<unknown>("/api/ledger/street/rows", { query: { ...normalizeLedgerQuery(query) } }));
     },
@@ -84,12 +84,12 @@ export function createLedgerApi(client: ApiClient) {
       };
     },
 
-    /** 街道台账 view 权限，返回最小街道选项。 */
+    /** 街道台账 view 权限，仅返回当前组织范围内具有包含关系的街道选项。 */
     async listStreetOrgOptions(): Promise<OrgOption[]> {
       return normalizeOrgOptions(await client.request<unknown>("/api/ledger/street/options/orgs"));
     },
 
-    /** 排查汇总 view 权限，不借用组织管理接口。 */
+    /** 排查汇总 view 权限，仅返回当前组织范围内具有包含关系的街道选项。 */
     async listSurveyOrgOptions(): Promise<OrgOption[]> {
       return normalizeOrgOptions(await client.request<unknown>("/api/ledger/survey/options/orgs"));
     },

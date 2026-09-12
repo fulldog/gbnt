@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -52,7 +53,7 @@ func TestStatsPreservesCountsRateAndEmptyResult(t *testing.T) {
 				wantRate = 0
 			}
 			db := testutil.NewQueryDB(t, statsQuerySteps(t, values)...)
-			stats, err := (&IssueService{DB: db}).Stats()
+			stats, err := (&IssueService{DB: db}).Stats(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -76,7 +77,7 @@ func TestStatsEveryCountFailureStopsWithoutPartialData(t *testing.T) {
 			steps := statsQuerySteps(t, values[:index+1])
 			steps[index].Err = wantErr
 			db := testutil.NewQueryDB(t, steps...)
-			stats, err := (&IssueService{DB: db}).Stats()
+			stats, err := (&IssueService{DB: db}).Stats(context.Background())
 			if !errors.Is(err, wantErr) || stats != nil {
 				t.Fatalf("不能吞错或返回部分统计：stats=%+v err=%v", stats, err)
 			}

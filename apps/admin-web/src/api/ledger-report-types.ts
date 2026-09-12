@@ -63,6 +63,7 @@ export interface SurveyLedgerReportResult {
 
 /** 四个拆分报表接口共用查询；undefined 表示未指定，不能传 null。 */
 export interface LedgerSplitQuery {
+  /** 街道及其下级；省略表示当前账号可见范围内全部。 */
   street_org_id?: number;
   date_from?: string;
   date_to?: string;

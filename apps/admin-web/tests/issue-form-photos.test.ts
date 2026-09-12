@@ -79,7 +79,7 @@ describe("排查表单照片与签名", () => {
     expect(uploadImages).toHaveBeenCalledExactlyOnceWith({ files: [expect.any(File)], watermark: false });
     expect(create).toHaveBeenCalledOnce();
     const input = create.mock.calls[0]![0];
-    expect(input).toMatchObject({ reporter_signature_file_id: "signature-id", lat: undefined, lng: undefined });
+    expect(input).toMatchObject({ reporter_signature_file_id: "signature-id", assignee_user: 0, lat: undefined, lng: undefined });
     expect(input.type_ext.checklist).toContainEqual(expect.objectContaining({ type: optional.type, files: ["optional-photo"] }));
     expect(wrapper.emitted("saved")).toEqual([[9]]);
   });
