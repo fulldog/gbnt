@@ -4,6 +4,7 @@ import type {
   CreateUserInput,
   DownloadResult,
   ImportResult,
+  SysRole,
   SysUser,
   UpdateUserInput,
   UpdateUserStatusInput,
@@ -11,7 +12,7 @@ import type {
   UserListResult,
 } from "@gbnt/api-client";
 import type { AdminUser, AdminUserListResult } from "./types";
-import { checkDisplayFields, responseArray, responseInteger, responseRecord } from "./response";
+import { checkDisplayFields, checkOptionalBoolean, responseArray, responseInteger, responseRecord } from "./response";
 
 export type ExportUsersQuery = Pick<UserListQuery, "org_id" | "keyword">;
 
@@ -57,6 +58,8 @@ export function createUsersApi(client: ApiClient) {
           responseInteger(row.id, "人员 ID", 1);
           if (result.sort_supported === true) responseInteger(row.sort, "人员排序", -2147483648);
           checkDisplayFields(row, ["org_name", "org_path", "role_name"]);
+          checkOptionalBoolean(row, "within_org_scope", "人员组织权限范围");
+          checkOptionalBoolean(row, "within_role_scope", "人员角色权限范围");
           return row as unknown as AdminUser;
         }),
         total: responseInteger(result.total, "人员总数"),
@@ -65,6 +68,11 @@ export function createUsersApi(client: ApiClient) {
         page: responseInteger(result.page === undefined ? (query.page && query.page > 0 ? query.page : 1) : result.page, "页码", 1),
         size: responseInteger(result.size === undefined ? (query.size && query.size > 0 ? query.size : 20) : result.size, "每页数量", 1),
       };
+    },
+
+    /** 工作人员页面可分配角色，不依赖角色权限管理模块。 */
+    listAssignableRoles(): Promise<SysRole[]> {
+      return client.request<SysRole[]>("/api/sys/users/options/roles");
     },
 
     /** 后端已提供该路由，当前 OpenAPI 尚未收录。 */

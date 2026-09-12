@@ -63,8 +63,10 @@ const canRectify = computed(
     Boolean(issue.value) &&
     (issue.value?.status === "new" || issue.value?.status === "pending") &&
     editableQuizzes.value.length > 0 &&
+    issue.value?.within_org_scope === true &&
     Boolean(auth.user?.id && (issue.value?.assignee_user === 0 || issue.value?.assignee_user === auth.user.id)),
 );
+const isHistoricalReadOnly = computed(() => issue.value?.within_org_scope !== true);
 const hasUnsupportedRectification = computed(
   () =>
     Boolean(issue.value) &&
@@ -356,6 +358,13 @@ onUnload(() => {
           :submitting="submitting || loading"
           @submit="submitRectification"
         />
+      </view>
+
+      <view v-else-if="isHistoricalReadOnly" class="detail-page__warning">
+        <text class="detail-page__warning-title">该记录仅可查看</text>
+        <text class="detail-page__warning-text">
+          该整改已不在当前账号所属组织范围内，不能再提交、整改或删除。
+        </text>
       </view>
 
       <view v-else-if="hasUnsupportedRectification" class="detail-page__warning">

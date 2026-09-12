@@ -7,9 +7,26 @@ import * as mapper from "@/domain/issues/mapper";
 import * as validation from "@/domain/issues/validation";
 import * as events from "@/utils/events";
 import * as display from "@/utils/issue-display";
-import { ApiError, FACILITY_CODE_CONFLICT } from "@gbnt/api-client";
+import * as reportRegions from "@/composables/report/useRegions";
+import * as regions from "@/utils/regions";
+import { ApiError, FACILITY_CODE_CONFLICT, type OrgTreeNode } from "@gbnt/api-client";
 
 const api = { issues: { create: vi.fn() }, attachments: { uploadImages: vi.fn() } };
+const defaultRegionTree: OrgTreeNode[] = [{
+  id: 1,
+  parent_id: 0,
+  name: "根",
+  type: "root",
+  sort: 1,
+  children: [{
+    id: 2,
+    parent_id: 1,
+    name: "街道",
+    type: "street",
+    sort: 1,
+    children: [{ id: 3, parent_id: 2, name: "村", type: "village", sort: 1, children: [] }],
+  }],
+}];
 function validTransformer() {
   const form = forms.createReportForm("transformer");
   Object.assign(form, { projectYear: 2022, orgId: 3, orgLabel: "街道 / 村", code: "保持原设施编号", address: "现场地址", lat: 36, lng: 116, signatureFileId: "signed", signaturePreviewUrl: "/signature.png", planDate: "2026-09-20" });
@@ -21,8 +38,15 @@ function validTransformer() {
 function setup(form = validTransformer(), visible = true, locationApi: {
   choose?: ReturnType<typeof vi.fn>;
   refresh?: ReturnType<typeof vi.fn>;
-} = {}) {
-  const props = reactive({ draft: { form, step: definitions.QUIZ_DEFINITIONS[form.type].length + 2 }, visible, regionTree: [], regionsLoading: false, regionsError: "" });
+} = {}, scopeOptions: { regionTree?: OrgTreeNode[]; userOrgId?: number } = {}) {
+  const props = reactive({
+    draft: { form, step: definitions.QUIZ_DEFINITIONS[form.type].length + 2 },
+    visible,
+    regionTree: scopeOptions.regionTree ?? defaultRegionTree,
+    regionsLoading: false,
+    regionsError: "",
+    userOrgId: scopeOptions.userOrgId ?? 3,
+  });
   const emit = vi.fn();
   const choose = locationApi.choose ?? vi.fn().mockResolvedValue(null);
   const refresh = locationApi.refresh ?? vi.fn().mockResolvedValue(null);
@@ -42,7 +66,8 @@ function setup(form = validTransformer(), visible = true, locationApi: {
     } },
     "@/domain/issues/definitions": definitions, "@/domain/issues/form": forms, "@/domain/issues/mapper": mapper,
     "@/domain/issues/validation": validation, "@/utils/events": events, "@/utils/issue-display": display,
-  }, emit) as unknown as { form: forms.ReportFormState; step: Ref<number>; codeError: Ref<string>; hasPendingPhotos: Ref<boolean>; submitting: Ref<boolean>; uploadingSignature: Ref<boolean>; setPhotosPending(change: {type: forms.QuizFormItem['type']; value: boolean}): void; updateQuizPhotos(change: {type: forms.QuizFormItem['type']; value: forms.UploadedPhoto[]}): void; updateText(key: "code" | "address", event: { detail: { value: string } }): void; setCodeMode(mode: "auto" | "manual"): void; selectLocationOnMap(): Promise<void>; refreshCurrentLocation(): Promise<void>; submit(): Promise<void>; updateSignatureStrokes(strokes: forms.ReportFormState["signatureStrokes"]): void; signatureRef: Ref<unknown> };
+    "@/composables/report/useRegions": reportRegions, "@/utils/regions": regions,
+  }, emit) as unknown as { form: forms.ReportFormState; step: Ref<number>; codeError: Ref<string>; hasPendingPhotos: Ref<boolean>; submitting: Ref<boolean>; uploadingSignature: Ref<boolean>; regionLocked: Ref<boolean>; setPhotosPending(change: {type: forms.QuizFormItem['type']; value: boolean}): void; updateQuizPhotos(change: {type: forms.QuizFormItem['type']; value: forms.UploadedPhoto[]}): void; updateText(key: "code" | "address", event: { detail: { value: string } }): void; setCodeMode(mode: "auto" | "manual"): void; selectRegion(option: { id: number | null; label: string }): void; selectLocationOnMap(): Promise<void>; refreshCurrentLocation(): Promise<void>; submit(): Promise<void>; updateSignatureStrokes(strokes: forms.ReportFormState["signatureStrokes"]): void; signatureRef: Ref<unknown> };
   return { state, props, emit, choose, refresh, notifyLocationOverlay: (visible: boolean) => notifyLocationOverlay?.(visible) };
 }
 beforeEach(() => {
@@ -51,6 +76,35 @@ beforeEach(() => {
   api.issues.create.mockResolvedValue({ issue_key: "created", code: "03" });
 });
 describe("当前类型提交与签名", () => {
+  it("村账号自动锁定本村，街道账号只能在自身下级村切换", () => {
+    const villageForm = validTransformer();
+    villageForm.orgId = 99;
+    villageForm.orgLabel = "旧组织";
+    const village = setup(villageForm);
+    expect(village.state.regionLocked.value).toBe(true);
+    expect(village.state.form).toMatchObject({ orgId: 3, orgLabel: "根 / 街道 / 村" });
+    village.state.selectRegion({ id: 99, label: "范围外组织" });
+    expect(village.state.form.orgId).toBe(3);
+
+    const streetTree: OrgTreeNode[] = [{
+      id: 2,
+      parent_id: 1,
+      name: "街道",
+      type: "street",
+      sort: 1,
+      children: [
+        { id: 3, parent_id: 2, name: "甲村", type: "village", sort: 1, children: [] },
+        { id: 4, parent_id: 2, name: "乙村", type: "village", sort: 2, children: [] },
+      ],
+    }];
+    const street = setup(validTransformer(), true, {}, { regionTree: streetTree, userOrgId: 2 });
+    expect(street.state.regionLocked.value).toBe(false);
+    street.state.selectRegion({ id: 4, label: "伪造名称" });
+    expect(street.state.form).toMatchObject({ orgId: 4, orgLabel: "街道 / 乙村" });
+    street.state.selectRegion({ id: 99, label: "范围外组织" });
+    expect(street.state.form.orgId).toBe(4);
+  });
+
   it("地图原生窗口状态统一上报给提交页", () => {
     const { emit, notifyLocationOverlay } = setup();
     notifyLocationOverlay(true);

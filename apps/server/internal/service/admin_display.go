@@ -18,6 +18,7 @@ type AdminIssueVO struct {
 	AssigneeUserPhone *string `json:"assignee_user_phone"` // 当前整改责任人账号的联系电话；未指派、人员缺失或电话为空时为 null，仅管理端返回
 	OrgName           *string `json:"org_name"`            // 当前组织名称；缺失为 null
 	OrgPath           *string `json:"org_path"`            // 可解析祖先及本组织，以「 / 」分隔；缺失为 null
+	WithinOrgScope    bool    `json:"within_org_scope"`    // 当前账号是否可修改该整改记录
 }
 
 // MarshalJSON 显式合并基础视图，避免匿名嵌入 IssueVO 后其序列化方法吞掉管理端名称字段。
@@ -49,15 +50,18 @@ func (v AdminIssueVO) marshalJSON(includeAssigneePhone bool) ([]byte, error) {
 		}
 		fields[name] = encoded
 	}
+	fields["within_org_scope"], _ = json.Marshal(v.WithinOrgScope)
 	return json.Marshal(fields)
 }
 
 // AdminUserVO 管理端工作人员列表；不改变写入接口及完整用户模型。
 type AdminUserVO struct {
 	model.SysUser
-	OrgName  *string `json:"org_name"`  // 当前组织名称；未设置或缺失为 null
-	OrgPath  *string `json:"org_path"`  // 可解析组织路径；未设置或缺失为 null
-	RoleName *string `json:"role_name"` // 当前角色名称；未设置或缺失为 null，超管身份另看 is_super_admin
+	OrgName         *string `json:"org_name"`          // 当前组织名称；未设置或缺失为 null
+	OrgPath         *string `json:"org_path"`          // 可解析组织路径；未设置或缺失为 null
+	RoleName        *string `json:"role_name"`         // 当前角色名称；未设置或缺失为 null，超管身份另看 is_super_admin
+	WithinOrgScope  bool    `json:"within_org_scope"`  // 当前账号是否可操作该人员
+	WithinRoleScope bool    `json:"within_role_scope"` // 当前账号是否可管理该人员角色
 }
 
 type adminDisplayNames struct {
@@ -236,6 +240,15 @@ func (s *IssueService) ListAdmin(ctx context.Context, q IssueQuery) ([]AdminIssu
 	if err == nil {
 		err = enrichAdminIssuePhones(s.db(ctx), out)
 	}
+	if err == nil {
+		var scope *OrgScope
+		scope, err = displayOrgScope(ctx, s.db(ctx))
+		if err == nil {
+			for i := range out {
+				out[i].WithinOrgScope = scope.Allows(out[i].OrgID)
+			}
+		}
+	}
 	return out, total, err
 }
 
@@ -252,6 +265,11 @@ func (s *IssueService) GetAdmin(ctx context.Context, id uint64) (*AdminIssueVO, 
 	if err := enrichAdminIssuePhones(s.db(ctx), out); err != nil {
 		return nil, err
 	}
+	scope, err := displayOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	out[0].WithinOrgScope = scope.Allows(out[0].OrgID)
 	return &out[0], nil
 }
 
@@ -270,10 +288,22 @@ func (s *SysService) ListAdminUsers(ctx context.Context, orgID uint64, keyword s
 	if err != nil {
 		return nil, 0, err
 	}
+	scope, err := displayOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, 0, err
+	}
 	out := make([]AdminUserVO, 0, len(list))
 	for _, user := range list {
 		orgName, orgPath := names.orgDisplay(user.OrgID)
-		out = append(out, AdminUserVO{SysUser: user, OrgName: orgName, OrgPath: orgPath, RoleName: nullableName(names.roles, user.RoleID)})
+		roleAllowed := false
+		if _, roleExists := names.roles[user.RoleID]; roleExists {
+			var roleErr error
+			roleAllowed, roleErr = s.roleWithinAssignmentScope(ctx, user.RoleID)
+			if roleErr != nil {
+				return nil, 0, roleErr
+			}
+		}
+		out = append(out, AdminUserVO{SysUser: user, OrgName: orgName, OrgPath: orgPath, RoleName: nullableName(names.roles, user.RoleID), WithinOrgScope: scope.Allows(user.OrgID), WithinRoleScope: roleAllowed})
 	}
 	return out, total, nil
 }

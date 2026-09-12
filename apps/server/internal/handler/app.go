@@ -35,9 +35,9 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 
 		// GET /api/app/todos — 待办列表（status 空=全部，按 new>pending>done 排序）
 		app.GET("/todos", d.AppListTodos)
-		// GET /api/app/regions — 组织树（parent_id 嵌套 children）
+		// GET /api/app/regions — 当前账号组织范围树（parent_id 嵌套 children）
 		app.GET("/regions", d.AppRegions)
-		// GET /api/app/regions/:id — 组织存在则返回完整树（含上级与全部下级）
+		// GET /api/app/regions/:id — 目标在权限范围内则返回账号组织范围树
 		app.GET("/regions/:id", d.AppRegionSubtree)
 
 		issues := app.Group("/issues")
@@ -76,7 +76,7 @@ func (d *Deps) AppDeleteIssue(c *gin.Context) {
 	if err := d.Issue.DeleteReported(c.Request.Context(), id); err != nil {
 		if errors.Is(err, database.ErrUnauth) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
-		} else if errors.Is(err, service.ErrIssueReporterOnly) {
+		} else if errors.Is(err, service.ErrIssueReporterOnly) || errors.Is(err, service.ErrOrgScopeForbidden) {
 			response.Fail(c, 403, response.CodeForbid, err.Error())
 		} else {
 			response.Fail(c, 400, response.CodeBadReq, err.Error())
@@ -102,7 +102,7 @@ func (d *Deps) AppSubmitFeedback(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, database.ErrUnauth) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
-		} else {
+		} else if !orgScopeFailure(c, err) {
 			response.Fail(c, 400, response.CodeBadReq, err.Error())
 		}
 		return
@@ -259,6 +259,9 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
 			return
 		}
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
@@ -272,17 +275,20 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 	response.OK(c, gin.H{"list": items, "total": total, "page": q.Page, "size": q.Size, "server_time": q.AsOf.UTC().Format(time.RFC3339Nano)})
 }
 
-// AppRegions 小程序组织树：按 sys_orgs.parent_id 返回嵌套 children。
+// AppRegions 小程序组织树：只返回当前账号所属组织的祖先路径及下级。
 func (d *Deps) AppRegions(c *gin.Context) {
-	tree, err := d.Sys.ListOrgTree()
+	tree, err := d.Sys.ListScopedOrgTree(c.Request.Context())
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
 	response.OK(c, gin.H{"list": tree})
 }
 
-// AppRegionSubtree 校验组织存在后返回完整组织树（含该节点上级与全部下级）。
+// AppRegionSubtree 校验目标组织在当前账号范围内，返回权限根的祖先路径与子树。
 func (d *Deps) AppRegionSubtree(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -292,8 +298,22 @@ func (d *Deps) AppRegionSubtree(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, "无效的 id")
 		return
 	}
-	tree, err := d.Sys.ListOrgSubtree(id)
+	_, err := d.Sys.ListOrgSubtree(id)
+	var scope *service.OrgScope
+	if err == nil {
+		scope, err = service.ResolveOrgScope(c.Request.Context(), d.Sys.DB)
+	}
+	if err == nil {
+		err = scope.Require(id)
+	}
+	var tree []service.OrgTreeNode
+	if err == nil {
+		tree, err = d.Sys.ListScopedOrgTree(c.Request.Context())
+	}
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if errors.Is(err, service.ErrOrgNotFound) {
 			response.Fail(c, 404, response.CodeNotFound, err.Error())
 			return
@@ -314,6 +334,8 @@ func (d *Deps) AppGetIssue(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
+		} else if orgScopeFailure(c, err) {
+			return
 		} else {
 			response.Fail(c, 500, response.CodeServer, "问题资料加载失败")
 		}
@@ -342,6 +364,9 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 	req.AllowUnassignedAssignee = true
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if issueWriteConflict(c, err) {
 			return
 		}
@@ -370,7 +395,9 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
 			return
 		}
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		if !orgScopeFailure(c, err) {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+		}
 		return
 	}
 	d.OpLog.Mark(c, "小程序整改", item.Type+" · "+item.Code)
@@ -390,7 +417,9 @@ func (d *Deps) AppReRectifyIssue(c *gin.Context) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
 			return
 		}
-		response.Fail(c, 400, response.CodeBadReq, err.Error())
+		if !orgScopeFailure(c, err) {
+			response.Fail(c, 400, response.CodeBadReq, err.Error())
+		}
 		return
 	}
 	d.OpLog.Mark(c, "小程序重新整改", item.Type+" · "+item.Code)

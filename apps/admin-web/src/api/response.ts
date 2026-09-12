@@ -29,6 +29,12 @@ export function checkDisplayFields(record: Record<string, unknown>, fields: read
   }
 }
 
+export function checkOptionalBoolean(record: Record<string, unknown>, field: string, label: string): void {
+  if (record[field] !== undefined && typeof record[field] !== "boolean") {
+    throw new Error(`${label}格式异常，请刷新重试`);
+  }
+}
+
 export function normalizeOrgOptions(value: unknown): OrgOption[] {
   return responseArray(value, "组织候选").map((item) => {
     const row = responseRecord(item, "组织候选");
@@ -38,6 +44,7 @@ export function normalizeOrgOptions(value: unknown): OrgOption[] {
       || typeof row.sort !== "number" || !Number.isSafeInteger(row.sort)) {
       throw new Error("组织候选格式异常，请刷新重试");
     }
+    checkOptionalBoolean(row, "within_org_scope", "组织权限范围");
     return row as unknown as OrgOption;
   });
 }

@@ -22,6 +22,7 @@ const DialogStub = defineComponent({
 });
 const orgs: SysOrg[] = [{
   id: 3, name: "北城街道", type: "street", parent_id: 2, sort: 1, created_at: "", updated_at: "", created_id: 0, updated_id: 0, is_delete: 0,
+  within_org_scope: true,
 }];
 const user: SysUser = {
   id: 2, username: "worker", name: "张三", phone: "", org_id: 3, role_id: 2,

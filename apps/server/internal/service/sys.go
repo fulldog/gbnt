@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"gbnt/apps/server/internal/cachex"
+	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
 	"gbnt/apps/server/internal/perm"
 )
@@ -72,12 +73,19 @@ func cloneSysOrgs(list []model.SysOrg) []model.SysOrg {
 
 // OrgTreeNode 组织树节点。
 type OrgTreeNode struct {
-	ID       uint64        `json:"id"`        // 组织主键
-	Name     string        `json:"name"`      // 组织名称
-	Type     model.OrgType `json:"type"`      // root/district/street/village
-	ParentID uint64        `json:"parent_id"` // 上级组织 ID，根为 0
-	Sort     int           `json:"sort"`      // 排序号
-	Children []OrgTreeNode `json:"children"`  // 子组织
+	ID             uint64        `json:"id"`               // 组织主键
+	Name           string        `json:"name"`             // 组织名称
+	Type           model.OrgType `json:"type"`             // root/district/street/village
+	ParentID       uint64        `json:"parent_id"`        // 上级组织 ID，根为 0
+	Sort           int           `json:"sort"`             // 排序号
+	WithinOrgScope bool          `json:"within_org_scope"` // 是否属于当前账号组织及下级；小程序返回的祖先路径节点可为 false
+	Children       []OrgTreeNode `json:"children"`         // 子组织
+}
+
+// AdminOrgVO 管理端组织列表项；完整树继续可见，写操作范围由 WithinOrgScope 提示。
+type AdminOrgVO struct {
+	model.SysOrg
+	WithinOrgScope bool `json:"within_org_scope"` // 是否可操作该组织
 }
 
 // UserInput 创建/更新用户入参。
@@ -117,6 +125,39 @@ func (s *SysService) ListOrgTree() ([]OrgTreeNode, error) {
 		return nil, err
 	}
 	return BuildOrgTree(list), nil
+}
+
+// ListAdminOrgs 返回完整组织列表并标注当前账号可操作范围；读取范围保持现状。
+func (s *SysService) ListAdminOrgs(ctx context.Context) ([]AdminOrgVO, error) {
+	list, err := s.ListOrgs()
+	if err != nil {
+		return nil, err
+	}
+	scope, err := displayOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AdminOrgVO, 0, len(list))
+	for _, org := range list {
+		out = append(out, AdminOrgVO{SysOrg: org, WithinOrgScope: scope.Allows(org.ID)})
+	}
+	return out, nil
+}
+
+// ListScopedOrgTree 返回当前账号权限根节点的祖先路径及完整下级，供小程序上报和筛选使用。
+func (s *SysService) ListScopedOrgTree(ctx context.Context) ([]OrgTreeNode, error) {
+	tree, err := s.ListOrgTree()
+	if err != nil {
+		return nil, err
+	}
+	scope, err := ResolveOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !scope.All && !scope.Allows(scope.RootID) {
+		return nil, ErrOrgScopeForbidden
+	}
+	return scopeOrgTree(tree, scope), nil
 }
 
 // BuildOrgTree 将扁平组织列表组装为树。
@@ -187,10 +228,20 @@ func (s *SysService) CreateOrg(ctx context.Context, in OrgCreateInput) (*model.S
 		childType model.OrgType
 	)
 	if in.ParentID == 0 {
+		scope, err := ResolveOrgScope(ctx, s.db(ctx))
+		if err != nil && !errors.Is(err, database.ErrUnauth) {
+			return nil, err
+		}
+		if err == nil && !scope.All {
+			return nil, ErrOrgScopeForbidden
+		}
 		// 允许新增根节点
 		parentID = 0
 		childType = model.OrgTypeRoot
 	} else {
+		if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), in.ParentID); err != nil {
+			return nil, err
+		}
 		// 非根：只能挂在已有上级下，按 root→district→street→village 逐级推导
 		var parent model.SysOrg
 		if err := s.db(ctx).First(&parent, in.ParentID).Error; err != nil {
@@ -236,6 +287,9 @@ func (s *SysService) UpdateOrg(ctx context.Context, id uint64, in OrgUpdateInput
 	if name == "" {
 		return nil, errors.New("组织名称必填")
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), id); err != nil {
+		return nil, err
+	}
 	var o model.SysOrg
 	if err := s.db(ctx).First(&o, id).Error; err != nil {
 		return nil, err
@@ -249,6 +303,18 @@ func (s *SysService) UpdateOrg(ctx context.Context, id uint64, in OrgUpdateInput
 }
 
 func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
+	scope, err := ResolveOrgScope(ctx, s.db(ctx))
+	if err != nil && !errors.Is(err, database.ErrUnauth) {
+		return err
+	}
+	if err == nil {
+		if err := scope.Require(id); err != nil {
+			return err
+		}
+		if !scope.All && scope.RootID == id {
+			return errors.New("不能删除当前账号所属组织")
+		}
+	}
 	var o model.SysOrg
 	if err := s.db(ctx).First(&o, id).Error; err != nil {
 		return err
@@ -262,6 +328,20 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 	}
 	if childCount > 0 {
 		return errors.New("请先删除下级组织")
+	}
+	var userCount int64
+	if err := s.db(ctx).Model(&model.SysUser{}).Where("org_id = ?", id).Count(&userCount).Error; err != nil {
+		return err
+	}
+	if userCount > 0 {
+		return errors.New("该组织仍有关联工作人员，无法删除")
+	}
+	var issueCount int64
+	if err := s.db(ctx).Model(&model.Issue{}).Where("org_id = ?", id).Count(&issueCount).Error; err != nil {
+		return err
+	}
+	if issueCount > 0 {
+		return errors.New("该组织仍有关联整改记录，无法删除")
 	}
 	if err := s.db(ctx).Delete(&model.SysOrg{}, id).Error; err != nil {
 		return err
@@ -294,6 +374,12 @@ func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
 }
 
 func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUser, error) {
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), in.OrgID); err != nil {
+		return nil, err
+	}
+	if err := s.requireAssignableRoleIfAuthenticated(ctx, in.RoleID); err != nil {
+		return nil, err
+	}
 	if in.Username == "" {
 		return nil, errors.New("username 必填")
 	}
@@ -338,6 +424,15 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 	if u.IsSuperAdmin {
 		return nil, errors.New("超级管理员不可编辑")
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), u.OrgID, in.OrgID); err != nil {
+		return nil, err
+	}
+	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
+		return nil, err
+	}
+	if err := s.requireAssignableRoleIfAuthenticated(ctx, in.RoleID); err != nil {
+		return nil, err
+	}
 	if err := ValidateOptionalCNPhone(in.Phone); err != nil {
 		return nil, err
 	}
@@ -378,6 +473,12 @@ func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
 	if u.IsSuperAdmin {
 		return errors.New("超级管理员不可删除")
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), u.OrgID); err != nil {
+		return err
+	}
+	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
+		return err
+	}
 	return s.db(ctx).Delete(&model.SysUser{}, id).Error
 }
 
@@ -389,6 +490,15 @@ func (s *SysService) ResetPassword(ctx context.Context, id uint64) error {
 	}
 	if u.Username == "" {
 		return errors.New("账户名为空，无法重置")
+	}
+	if u.IsSuperAdmin {
+		return errors.New("超级管理员密码不可由工作人员页面重置")
+	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), u.OrgID); err != nil {
+		return err
+	}
+	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
+		return err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(u.Username), bcrypt.DefaultCost)
 	if err != nil {
@@ -407,6 +517,25 @@ func (s *SysService) ListRoles() ([]model.SysRole, error) {
 
 	return list, err
 
+}
+
+// ListAssignableRoles 返回工作人员管理页面可分配的角色，不要求开放角色权限管理模块。
+func (s *SysService) ListAssignableRoles(ctx context.Context) ([]model.SysRole, error) {
+	roles, err := s.ListRoles()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.SysRole, 0, len(roles))
+	for _, role := range roles {
+		allowed, err := s.roleWithinAssignmentScope(ctx, role.ID)
+		if err != nil {
+			return nil, err
+		}
+		if allowed {
+			out = append(out, role)
+		}
+	}
+	return out, nil
 }
 
 func (s *SysService) DeleteRole(ctx context.Context, id uint64) error {

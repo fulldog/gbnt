@@ -69,7 +69,7 @@ func TestAppCommittedOperationReturnsExplicitDisplayWarning(t *testing.T) {
 
 func TestAppRegionSubtreeReturnsFullTreeWithAncestorsAndDescendants(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := testutil.NewQueryDB(t, testutil.QueryStep{
+	orgQuery := testutil.QueryStep{
 		Contains: "FROM `sys_orgs`",
 		Columns:  []string{"id", "parent_id", "name", "type", "sort"},
 		Rows: [][]driver.Value{
@@ -78,11 +78,14 @@ func TestAppRegionSubtreeReturnsFullTreeWithAncestorsAndDescendants(t *testing.T
 			{int64(3), int64(2), "街道", "street", int64(3)},
 			{int64(4), int64(1), "区B", "district", int64(4)},
 		},
-	})
+	}
+	db := testutil.NewQueryDB(t, orgQuery, orgQuery)
 	r := gin.New()
 	RegisterApp(r, &Deps{Sys: &service.SysService{DB: db}})
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("GET", "/api/app/regions/2", nil))
+	request := httptest.NewRequest("GET", "/api/app/regions/2", nil)
+	request = request.WithContext(database.WithUser(context.Background(), &database.UserInfo{ID: 1, IsSuperAdmin: true}))
+	r.ServeHTTP(w, request)
 	body := w.Body.String()
 	if w.Code != 200 || !strings.Contains(body, `"name":"根"`) || !strings.Contains(body, `"name":"区"`) || !strings.Contains(body, `"name":"街道"`) || !strings.Contains(body, `"name":"区B"`) {
 		t.Fatalf("应返回含上级与全部下级的整棵树: %d %s", w.Code, body)

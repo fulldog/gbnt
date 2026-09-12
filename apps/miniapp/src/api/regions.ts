@@ -6,7 +6,7 @@ export function createRegionsApi(client: ApiClient) {
     async list(): Promise<MiniappRegionsResult> {
       return parseRegions(await client.request<unknown>("/api/app/regions"));
     },
-    /** 组织存在时返回完整组织树（含该节点上级与全部下级），结构与 list() 相同。 */
+    /** 目标在当前账号组织范围内时，返回权限根的祖先路径与子树。 */
     async getSubtree(orgId: number): Promise<MiniappRegionsResult> {
       return parseRegions(await client.request<unknown>(`/api/app/regions/${orgId}`));
     },

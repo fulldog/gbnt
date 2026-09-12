@@ -45,6 +45,12 @@ function displayText(value: unknown, field: string): string | null {
   return text(value, field, true).trim() || null;
 }
 
+function optionalBoolean(value: unknown, field: string): boolean {
+  if (value == null) return false;
+  if (typeof value !== "boolean") return invalid(field);
+  return value;
+}
+
 function list(value: unknown, field: string, optional = false): unknown[] {
   if (optional && value == null) return [];
   if (!Array.isArray(value)) return invalid(field);
@@ -143,6 +149,7 @@ export function parseIssue(value: unknown): MiniappIssue {
     assignee_user_name: displayText(issue.assignee_user_name, "整改人名称"),
     org_name: displayText(issue.org_name, "组织名称"),
     org_path: displayText(issue.org_path, "组织路径"),
+    within_org_scope: optionalBoolean(issue.within_org_scope, "整改组织权限范围"),
   };
   const displayFields = [
     "code", "address", "issue_key", "plan_date", "created_at", "updated_at",
@@ -249,6 +256,7 @@ export function parseRegions(value: unknown): MiniappRegionsResult {
       ...node,
       id,
       name,
+      within_org_scope: optionalBoolean(node.within_org_scope, "组织权限范围"),
       children: list(node.children, "子组织", true).map((child) => parseNode(child, depth + 1)),
     } as OrgTreeNode;
   }

@@ -1,14 +1,25 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"gbnt/apps/server/internal/database"
+	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
 )
+
+// orgScopeFailure 将服务层组织越权统一映射为 403；返回 true 表示响应已经写出。
+func orgScopeFailure(c *gin.Context, err error) bool {
+	if !errors.Is(err, service.ErrOrgScopeForbidden) && !errors.Is(err, service.ErrRoleAssignmentForbidden) {
+		return false
+	}
+	response.Fail(c, 403, response.CodeForbid, err.Error())
+	return true
+}
 
 func parseID(c *gin.Context) (uint64, bool) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)

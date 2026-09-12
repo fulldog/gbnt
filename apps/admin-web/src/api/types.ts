@@ -9,7 +9,12 @@ export interface OrgDisplayFields {
   org_path?: string | null;
 }
 
-export type AdminIssue = Issue & OrgDisplayFields & {
+export interface OrgScopeFields {
+  /** 只有明确为 true 才允许界面写操作；缺省兼容旧服务并按无权处理。 */
+  within_org_scope?: boolean;
+}
+
+export type AdminIssue = Issue & OrgDisplayFields & OrgScopeFields & {
   report_user_name?: string | null;
   assignee_user_name?: string | null;
   /** 整改责任人账号登记的联系电话；未指派、人员缺失或电话未填写时为 null，旧服务可缺省。 */
@@ -18,7 +23,11 @@ export type AdminIssue = Issue & OrgDisplayFields & {
 export type AdminIssueListResult = Omit<IssueListResult, "list"> & { list: AdminIssue[] };
 export type AdminStreetLedgerRow = StreetLedgerRow & OrgDisplayFields;
 export type AdminStreetLedgerResult = Omit<StreetLedgerResult, "rows"> & { rows: AdminStreetLedgerRow[] };
-export type AdminUser = SysUser & OrgDisplayFields & { role_name?: string | null };
+export type AdminUser = SysUser & OrgDisplayFields & OrgScopeFields & {
+  role_name?: string | null;
+  /** 当前账号是否覆盖目标人员角色权限。 */
+  within_role_scope?: boolean;
+};
 export type AdminUserListResult = Omit<UserListResult, "list"> & {
   list: AdminUser[];
   page: number;
@@ -34,6 +43,7 @@ export interface OrgOption {
   type: OrgType;
   parent_id: number;
   sort: number;
+  within_org_scope?: boolean;
 }
 
 /** 业务人员候选只提供选择和回显所需字段。 */

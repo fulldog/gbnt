@@ -154,7 +154,7 @@ onMounted(() => { void load(); });
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
     <section class="data-card">
       <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="角色管理" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
-        <ElTooltip v-if="permission.can('web.sys-roles', 'create')" content="新增并授权角色需要角色修改权限" :disabled="canCreate">
+        <ElTooltip :content="!permission.can('web.sys-roles', 'create') ? '无新增权限' : '新增并授权角色需要角色修改权限'" :disabled="canCreate">
           <span><ElButton type="primary" :icon="Plus" :disabled="!canCreate || loading" @click="createRole">新增角色</ElButton></span>
         </ElTooltip>
       </TableToolbar>
@@ -172,8 +172,8 @@ onMounted(() => { void load(); });
           <ElTableColumn label="操作" width="140" align="center" fixed="right">
             <template #default="scope">
               <div class="table-actions">
-                <ElButton v-if="canEdit" link type="primary" :disabled="busyIds.includes(scope.row.id)" @click="editRole(asRole(scope.row))">修改</ElButton>
-                <ElButton v-if="permission.can('web.sys-roles', 'delete')" link type="danger" :disabled="busyIds.includes(scope.row.id)" @click="removeRole(asRole(scope.row))">删除</ElButton>
+                <ElButton link type="primary" :disabled="!canEdit || busyIds.includes(scope.row.id)" v-bind="{ title: !canEdit ? '无修改权限' : undefined }" @click="editRole(asRole(scope.row))">修改</ElButton>
+                <ElButton link type="danger" :disabled="!permission.can('web.sys-roles', 'delete') || busyIds.includes(scope.row.id)" v-bind="{ title: !permission.can('web.sys-roles', 'delete') ? '无删除权限' : undefined }" @click="removeRole(asRole(scope.row))">删除</ElButton>
               </div>
             </template>
           </ElTableColumn>

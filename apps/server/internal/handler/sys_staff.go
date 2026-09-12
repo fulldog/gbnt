@@ -13,6 +13,7 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 	{
 		users.GET("", d.ListUsers)
 		users.GET("/by-org", d.ListUsersByOrgID)
+		users.GET("/options/roles", d.ListAssignableRoles)
 		users.GET("/export", d.ExportUsers)
 		users.POST("/import", d.ImportUsers)
 		users.POST("", d.CreateUser)
@@ -21,6 +22,19 @@ func (d *Deps) registerSysStaff(api *gin.RouterGroup) {
 		users.POST("/:id/reset-password", d.ResetUserPassword)
 		users.DELETE("/:id", d.DeleteUser)
 	}
+}
+
+// ListAssignableRoles GET /api/sys/users/options/roles — 工作人员页面可分配角色；不能借人员管理提升权限。
+func (d *Deps) ListAssignableRoles(c *gin.Context) {
+	list, err := d.Sys.ListAssignableRoles(c.Request.Context())
+	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
+		response.Fail(c, 500, response.CodeServer, err.Error())
+		return
+	}
+	response.OK(c, list)
 }
 
 // ListUsers GET /api/sys/users — 工作人员列表；query: org_id/keyword/page/size；按 sort 升序、id 倒序分页，sort_supported 表示支持人员排序。
@@ -73,6 +87,9 @@ func (d *Deps) ImportUsers(c *gin.Context) {
 	defer f.Close()
 	n, err := d.Sys.ImportUsers(c.Request.Context(), f)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -91,6 +108,9 @@ func (d *Deps) CreateUser(c *gin.Context) {
 	d.OpLog.Mark(c, "新增用户", req.Username)
 	u, err := d.Sys.CreateUser(c.Request.Context(), req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -111,6 +131,9 @@ func (d *Deps) UpdateUser(c *gin.Context) {
 	}
 	u, err := d.Sys.UpdateUser(c.Request.Context(), id, req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -130,6 +153,9 @@ func (d *Deps) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 	if err := d.Sys.UpdateUserStatus(c.Request.Context(), id, req); err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -144,6 +170,9 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 		return
 	}
 	if err := d.Sys.DeleteUser(c.Request.Context(), id); err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -158,6 +187,9 @@ func (d *Deps) ResetUserPassword(c *gin.Context) {
 		return
 	}
 	if err := d.Sys.ResetPassword(c.Request.Context(), id); err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

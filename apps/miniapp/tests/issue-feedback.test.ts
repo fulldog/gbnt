@@ -10,6 +10,7 @@ import { setupSfc } from "./helpers/setup-sfc";
 
 function issue(): MiniappIssue {
   return { id: 9, type: "road", status: "pending", project_year: 2023, org_id: 12, code: "01", issue_key: "I-9", report_user_id: 7, assignee_user: 7,
+    within_org_scope: true,
     rectify_round: 1, rectify_records: [], address: "甲村", lat: 36.4, lng: 115.9, plan_date: "2026-10-01", created_at: "2026-09-01T00:00:00Z",
     type_ext: { checklist: [{ type: "has_shoulder", value: false, mustImg: false, files: [], desc: "路肩缺失", photos: [] }, { type: "has_ash", value: true, mustImg: false, files: [], desc: "", photos: [] }] },
   } as unknown as MiniappIssue;
@@ -79,6 +80,15 @@ describe("整单整改反馈", () => {
     await state.loadDetail();
     state.issue.value = { ...state.issue.value, assignee_user: 0 };
     expect(state.canRectify.value).toBe(true);
+  });
+  it("调岗后本人历史记录只读，不再提交整改", async () => {
+    const { state, api } = detail();
+    await state.loadDetail();
+    state.issue.value = { ...state.issue.value, within_org_scope: false };
+    expect(state.canRectify.value).toBe(false);
+    await state.submitRectification({ note: "修复", photoPaths: ["/p"] });
+    expect(api.attachments.uploadImages).not.toHaveBeenCalled();
+    expect(api.issues.submitFeedback).not.toHaveBeenCalled();
   });
   it("离开页面后迟到的照片上传结果不能再提交反馈", async () => {
     const { state, api, unload } = detail();

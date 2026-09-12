@@ -10,6 +10,7 @@ export function buildOrgTree(orgs: readonly OrgOption[]): OrgTreeNode[] {
       type: org.type,
       parent_id: org.parent_id,
       sort: org.sort,
+      within_org_scope: org.within_org_scope,
       children: [],
     });
   }
@@ -53,14 +54,16 @@ export function buildOrgPathMap(orgs: readonly OrgOption[]): Map<number, string>
 export interface OrgSelectOption {
   value: number;
   label: string;
+  disabled?: boolean;
   children?: OrgSelectOption[];
 }
 
-export function orgTreeSelectData(orgs: readonly OrgOption[]): OrgSelectOption[] {
+export function orgTreeSelectData(orgs: readonly OrgOption[], restrictScope = false): OrgSelectOption[] {
   const transform = (nodes: readonly OrgTreeNode[]): OrgSelectOption[] =>
     nodes.map((node) => ({
       value: node.id,
       label: node.name,
+      disabled: restrictScope && node.within_org_scope !== true,
       children: node.children.length ? transform(node.children) : undefined,
     }));
   return transform(buildOrgTree(orgs));

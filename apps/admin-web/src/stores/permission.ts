@@ -18,7 +18,7 @@ export const usePermissionStore = defineStore("permission", () => {
       catalog.value = await adminApi.roles.listApis();
       catalogAvailable.value = true;
     } catch {
-      // 普通角色可能没有 API 目录权限。此时不在前端误判拒绝，最终以后端 RBAC 为准。
+      // 旧服务未返回结构化权限时才依赖目录；目录也不可读则按未授权处理。
       catalog.value = [];
       catalogAvailable.value = false;
     } finally {
@@ -28,10 +28,17 @@ export const usePermissionStore = defineStore("permission", () => {
 
   function can(module: string, action = "view"): boolean {
     const auth = useAuthStore();
+    const modulePermissions = auth.user?.permissions;
+    if (modulePermissions === "*") return true;
+    if (modulePermissions) {
+      const actions = modulePermissions[module] ?? [];
+      if (actions.includes(action)) return true;
+      return action === "view" && ["create", "edit", "delete", "import", "export"].some((candidate) => actions.includes(candidate));
+    }
     const permissions = auth.user?.apis;
     if (!auth.user || !permissions) return false;
     if (permissions === "*") return true;
-    if (!catalogAvailable.value) return true;
+    if (!catalogAvailable.value) return false;
 
     const matchingIds = catalog.value
       // 与后端 actionSatisfies 一致：操作权限隐含同模块查看，但不隐含其他写权限。

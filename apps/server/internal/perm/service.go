@@ -2,6 +2,7 @@ package perm
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"gorm.io/gorm"
@@ -189,6 +190,50 @@ func (s *Service) ListAPIIDsForRole(roleID uint64) ([]uint64, error) {
 		return nil, err
 	}
 	return grants.APIIDs, nil
+}
+
+// ModuleActionsForRole 返回角色按模块聚合的操作授权副本，供登录态前端直接做展示控制。
+func (s *Service) ModuleActionsForRole(roleID uint64) (map[string][]string, error) {
+	grants, err := s.loadRoleGrants(roleID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(grants.ModuleActions))
+	for module, actions := range grants.ModuleActions {
+		for action, enabled := range actions {
+			if enabled {
+				out[module] = append(out[module], action)
+			}
+		}
+		sort.Strings(out[module])
+	}
+	return out, nil
+}
+
+// CanAssignRole 判断当前角色是否覆盖目标角色的全部模块操作，防止工作人员管理产生权限提升。
+func (s *Service) CanAssignRole(actorRoleID uint64, isSuperAdmin bool, targetRoleID uint64) (bool, error) {
+	if targetRoleID == 0 {
+		return false, nil
+	}
+	if isSuperAdmin {
+		return true, nil
+	}
+	actor, err := s.loadRoleGrants(actorRoleID)
+	if err != nil {
+		return false, err
+	}
+	target, err := s.loadRoleGrants(targetRoleID)
+	if err != nil {
+		return false, err
+	}
+	for module, actions := range target.ModuleActions {
+		for action, enabled := range actions {
+			if enabled && !actionSatisfies(actor.ModuleActions, module, action) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 // ListAllAPIs 返回启用中的 API 目录；先走 sys_apis 缓存。

@@ -170,7 +170,7 @@ func TestBusinessOrgOptionsMinimalAndStreetFilter(t *testing.T) {
 	encoded, _ := json.Marshal(list[0])
 	var fields map[string]any
 	_ = json.Unmarshal(encoded, &fields)
-	if len(fields) != 5 || !reflect.DeepEqual(fields["sort"], float64(8)) {
+	if len(fields) != 6 || !reflect.DeepEqual(fields["sort"], float64(8)) || fields["within_org_scope"] != false {
 		t.Fatalf("组织字段错误：%s", encoded)
 	}
 }

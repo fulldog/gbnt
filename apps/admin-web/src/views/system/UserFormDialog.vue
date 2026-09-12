@@ -57,7 +57,7 @@ async function submit(): Promise<void> {
   if (!optionsReady || optionsLoading || submitting.value) return;
   if (!(await formRef.value?.validate().catch(() => false))) return;
   if (!form.org_id || !form.role_id) return;
-  if (!orgs.some((org) => org.id === form.org_id) || !roles.some((role) => role.id === form.role_id)) {
+  if (!orgs.some((org) => org.id === form.org_id && org.within_org_scope === true) || !roles.some((role) => role.id === form.role_id && role.status === 1)) {
     ElMessage.error("所选单位或角色信息不可用，请重新选择后保存");
     return;
   }
@@ -106,7 +106,7 @@ async function submit(): Promise<void> {
         <ElFormItem label="登录账号" prop="username">
           <ElInput v-model="form.username" :disabled="Boolean(user)" maxlength="64" autocomplete="off" />
         </ElFormItem>
-        <ElFormItem label="所属单位" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" placeholder="请选择所属单位" :clearable="false" /></ElFormItem>
+        <ElFormItem label="所属单位" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" placeholder="请选择所属单位" :clearable="false" restrict-scope /></ElFormItem>
         <ElFormItem :label="user ? '新密码' : '初始密码'">
           <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '留空时初始密码与账号一致'" type="password" show-password autocomplete="new-password" maxlength="14" />
         </ElFormItem>

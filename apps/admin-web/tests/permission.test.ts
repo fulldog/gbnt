@@ -89,7 +89,7 @@ describe("前端权限收敛", () => {
     expect(usePermissionStore().can("web.sys-roles", "delete")).toBe(true);
   });
 
-  it("目录接口不可用时不在前端误判拒绝", async () => {
+  it("旧服务的目录接口不可用时按未授权处理", async () => {
     const auth = useAuthStore();
     auth.applyUser(user);
     vi.spyOn(adminApi.roles, "listApis").mockRejectedValue(new Error("forbidden"));
@@ -98,6 +98,19 @@ describe("前端权限收敛", () => {
     await permission.loadCatalog();
 
     expect(permission.catalogAvailable).toBe(false);
-    expect(permission.can("web.rectify", "create")).toBe(true);
+    expect(permission.can("web.rectify", "create")).toBe(false);
+  });
+
+  it("优先使用登录响应的结构化权限，不依赖 API 目录", () => {
+    useAuthStore().applyUser({
+      ...user,
+      apis: [],
+      permissions: { "web.rectify": ["edit"] },
+    });
+    const permission = usePermissionStore();
+    expect(permission.can("web.rectify", "view")).toBe(true);
+    expect(permission.can("web.rectify", "edit")).toBe(true);
+    expect(permission.can("web.rectify", "delete")).toBe(false);
+    expect(permission.can("web.sys-org", "view")).toBe(false);
   });
 });

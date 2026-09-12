@@ -54,18 +54,34 @@ func (s *IssueService) MiniappIssueViews(ctx context.Context, list []IssueVO) ([
 	if err != nil {
 		return nil, err
 	}
+	scope, err := displayOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
 	out := make([]MiniappIssueVO, 0, len(items))
 	for _, item := range items {
+		item.WithinOrgScope = scope.Allows(item.OrgID)
 		out = append(out, MiniappIssueVO{AdminIssueVO: item})
 	}
 	return out, nil
 }
 
-// GetMiniapp 保持原详情读取规则，基础读取成功后补充小程序展示字段。
+// GetMiniapp 允许读取当前组织范围内的问题；调岗后本人历史上报/指派仍可只读查看。
 func (s *IssueService) GetMiniapp(ctx context.Context, id uint64) (*MiniappIssueVO, error) {
 	item, err := s.Get(id)
 	if err != nil {
 		return nil, err
+	}
+	user, err := database.UserFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := ResolveOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !scope.Allows(item.OrgID) && item.ReportUserID != user.ID && item.AssigneeUser != user.ID {
+		return nil, ErrOrgScopeForbidden
 	}
 	out, err := s.MiniappIssueViews(ctx, []IssueVO{*item})
 	if err != nil {

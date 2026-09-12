@@ -33,22 +33,14 @@ const refreshVersion = shallowRef(0);
 const { fullscreen, toggle: toggleFullscreen } = useFullscreen(() => document.documentElement);
 const year = new Date().getFullYear();
 
-const visibleNavigation = computed(() => {
-  const filterItem = (item: NavigationItem): NavigationItem | null => {
-    if (item.children) {
-      const children = item.children.map(filterItem).filter((child): child is NavigationItem => child !== null);
-      return children.length ? { ...item, children } : null;
-    }
-    return item.module && !permission.can(item.module) ? null : item;
-  };
-  return navigation.map(filterItem).filter((item): item is NavigationItem => item !== null);
-});
+// 所有后台入口保持可见；没有查看权限的菜单由 Element Plus 置灰且不可点击。
+const visibleNavigation = computed<readonly NavigationItem[]>(() => navigation);
 
 const breadcrumbs = computed(() =>
   route.matched.filter((item) => item.meta.title !== "管理后台").map((item) => item.meta.title),
 );
 const pages = computed(() => visibleNavigation.value.flatMap((item) => item.children ?? [item])
-  .flatMap((item) => item.path ? [{ title: item.title, path: item.path }] : []));
+  .flatMap((item) => item.path && (!item.module || permission.can(item.module)) ? [{ title: item.title, path: item.path }] : []));
 
 function toggleCollapsed(): void {
   collapsed.value = !collapsed.value;
@@ -120,12 +112,17 @@ onMounted(() => {
               <ElIcon><component :is="item.icon" /></ElIcon>
               <span>{{ item.title }}</span>
             </template>
-            <ElMenuItem v-for="child in item.children" :key="child.path" :index="child.path ?? child.title">
+            <ElMenuItem
+              v-for="child in item.children"
+              :key="child.path"
+              :index="child.path ?? child.title"
+              :disabled="Boolean(child.module && !permission.can(child.module))"
+            >
               <ElIcon><component :is="child.icon" /></ElIcon>
               <span>{{ child.title }}</span>
             </ElMenuItem>
           </ElSubMenu>
-          <ElMenuItem v-else :index="item.path ?? item.title">
+          <ElMenuItem v-else :index="item.path ?? item.title" :disabled="Boolean(item.module && !permission.can(item.module))">
             <ElIcon><component :is="item.icon" /></ElIcon>
             <template #title>{{ item.title }}</template>
           </ElMenuItem>
@@ -195,6 +192,8 @@ onMounted(() => {
 .admin-menu :deep(.el-menu-item.is-active:hover) { background: var(--gbnt-primary-soft); }
 .admin-menu :deep(.el-icon) { font-size: 19px; color: #646a73; }
 .admin-menu :deep(.is-active > .el-icon) { color: var(--gbnt-primary); }
+.admin-menu :deep(.el-menu-item.is-disabled) { color: #a8b0bc; cursor: not-allowed; opacity: 0.7; }
+.admin-menu :deep(.el-menu-item.is-disabled .el-icon) { color: #b7bec8; }
 .admin-menu.el-menu--collapse :deep(.el-menu-item), .admin-menu.el-menu--collapse :deep(.el-sub-menu__title) { margin-right: 6px; margin-left: 6px; padding-left: 14px !important; }
 @media (max-width: 767px) { .admin-main { padding: 12px; } .admin-footer { display: none; } }
 </style>

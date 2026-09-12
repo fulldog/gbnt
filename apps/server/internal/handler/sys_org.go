@@ -19,7 +19,7 @@ func (d *Deps) registerSysOrg(api *gin.RouterGroup) {
 
 // ListOrgs GET /api/sys/orgs — 组织扁平列表（含 type/parent_id/sort）。
 func (d *Deps) ListOrgs(c *gin.Context) {
-	list, err := d.Sys.ListOrgs()
+	list, err := d.Sys.ListAdminOrgs(c.Request.Context())
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -37,6 +37,9 @@ func (d *Deps) CreateOrg(c *gin.Context) {
 	}
 	o, err := d.Sys.CreateOrg(c.Request.Context(), req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -57,6 +60,9 @@ func (d *Deps) UpdateOrg(c *gin.Context) {
 	}
 	o, err := d.Sys.UpdateOrg(c.Request.Context(), id, req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -71,6 +77,9 @@ func (d *Deps) DeleteOrg(c *gin.Context) {
 		return
 	}
 	if err := d.Sys.DeleteOrg(c.Request.Context(), id); err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}

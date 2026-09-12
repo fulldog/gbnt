@@ -384,6 +384,12 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 		if rerr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, rerr)
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), orgID); err != nil {
+			return 0, fmt.Errorf("第 %d 行: %w", line, err)
+		}
+		if err := s.requireAssignableRoleIfAuthenticated(ctx, roleID); err != nil {
+			return 0, fmt.Errorf("第 %d 行: %w", line, err)
+		}
 		st, serr := parseImportStatus(statusRaw)
 		if serr != nil {
 			return 0, fmt.Errorf("第 %d 行: %w", line, serr)

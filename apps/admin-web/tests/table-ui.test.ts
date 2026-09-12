@@ -28,7 +28,7 @@ const api = vi.hoisted(() => ({
   auth: { getMe: vi.fn() },
   ledger: { getStreetReport: vi.fn(), getSurveyReport: vi.fn(), getStreetRows: vi.fn(), getStreetStatistics: vi.fn(),
     getSurveyRows: vi.fn(), getSurveyStatistics: vi.fn(), listStreetOrgOptions: vi.fn(), listSurveyOrgOptions: vi.fn() },
-  users: { list: vi.fn(), remove: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), resetPassword: vi.fn() },
+  users: { list: vi.fn(), listAssignableRoles: vi.fn(), remove: vi.fn(), create: vi.fn(), update: vi.fn(), updateStatus: vi.fn(), resetPassword: vi.fn() },
   orgs: { list: vi.fn(), remove: vi.fn() },
   roles: { list: vi.fn(), listApis: vi.fn(), getPermissions: vi.fn(), updatePermissions: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
   opLogs: { list: vi.fn() },
@@ -144,6 +144,7 @@ function readBlobBuffer(blob: Blob): Promise<ArrayBuffer> {
 const user = {
   id: 2, username: "worker", name: "张三", phone: "", org_id: 3, role_id: 2,
   is_super_admin: false, status: 1, created_at: "2026-09-05T00:00:00Z", updated_at: "2026-09-05T00:00:00Z",
+  within_org_scope: true, within_role_scope: true,
   org_name: "北城街道", org_path: "区 / 北城街道", role_name: "街道管理员",
 };
 const role = { id: 2, code: "street-admin", name: "街道管理员", desc: "", status: 1, created_at: "", updated_at: "" };
@@ -164,6 +165,7 @@ beforeEach(() => {
     request.mockImplementation(async (query: LedgerAppliedQuery) => ({ query, rows: [], notes: [] }));
   }
   api.users.list.mockResolvedValue({ list: [], total: 0, page: 1, size: 20 });
+  api.users.listAssignableRoles.mockResolvedValue([]);
   api.users.remove.mockResolvedValue(null);
   api.orgs.list.mockResolvedValue([]);
   api.roles.list.mockResolvedValue([]);
@@ -457,7 +459,7 @@ describe("工作人员展示与表单候选", () => {
   it("字典无权限不影响名称展示，超管不显示组织 #0 或角色 #0", async () => {
     api.users.list.mockResolvedValue({ list: [user, { ...user, id: 1, username: "admin", org_id: 0, role_id: 0, org_path: null, org_name: null, role_name: null, is_super_admin: true }], total: 2 });
     api.orgs.list.mockRejectedValue(new Error("组织读取未授权"));
-    api.roles.list.mockRejectedValue(new Error("角色读取未授权"));
+    api.users.listAssignableRoles.mockRejectedValue(new Error("角色读取未授权"));
     const wrapper = render(UserView);
     await flushPromises();
     expect(wrapper.get('[data-column="所属组织"]').text()).toContain("区 / 北城街道");
@@ -465,11 +467,10 @@ describe("工作人员展示与表单候选", () => {
     expect(wrapper.get('[data-column="角色"]').text()).toContain("超级管理员");
     expect(wrapper.text()).not.toMatch(/组织 #0|角色 #0/);
     expect(wrapper.text()).toContain("组织读取未授权");
-    await click(wrapper, "新增人员");
-    const form = wrapper.getComponent(UserFormDialog);
-    expect(form.props("optionsReady")).toBe(false);
-    const save = wrapper.findAll("button").find((button) => button.text() === "保存")!;
-    expect(save.attributes("disabled")).toBeDefined();
+    const create = wrapper.findAll("button").find((button) => button.text() === "新增人员")!;
+    expect(create.attributes("disabled")).toBeDefined();
+    await create.trigger("click");
+    expect(wrapper.getComponent(UserFormDialog).props("modelValue")).toBe(false);
     expect(api.users.create).not.toHaveBeenCalled();
   });
 
@@ -497,10 +498,10 @@ describe("工作人员展示与表单候选", () => {
 describe("组织和人员操作栏对齐原型", () => {
   it("组织行依次为新增单位、修改、删除，根删除与末级新增禁用，父单位删除给出提示", async () => {
     api.orgs.list.mockResolvedValue([
-      { id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1 },
-      { id: 2, parent_id: 1, type: "district", name: "区", sort: 1 },
-      { id: 3, parent_id: 2, type: "street", name: "街道", sort: 1 },
-      { id: 4, parent_id: 3, type: "village", name: "村", sort: 1 },
+      { id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1, within_org_scope: true },
+      { id: 2, parent_id: 1, type: "district", name: "区", sort: 1, within_org_scope: true },
+      { id: 3, parent_id: 2, type: "street", name: "街道", sort: 1, within_org_scope: true },
+      { id: 4, parent_id: 3, type: "village", name: "村", sort: 1, within_org_scope: true },
     ]);
     const wrapper = render(OrgView);
     await flushPromises();
@@ -513,8 +514,9 @@ describe("组织和人员操作栏对齐原型", () => {
     }
     expect(rows[0]!.findAll("button")[2]!.attributes("disabled")).toBeDefined();
     expect(rows[3]!.findAll("button")[0]!.attributes("disabled")).toBeDefined();
+    expect(rows[1]!.findAll("button")[2]!.attributes("disabled")).toBeDefined();
     await rows[1]!.findAll("button")[2]!.trigger("click");
-    expect(ElMessage.warning).toHaveBeenCalledWith("请先删除下级单位");
+    expect(ElMessage.warning).not.toHaveBeenCalled();
     expect(ElMessageBox.confirm).not.toHaveBeenCalled();
     expect(api.orgs.remove).not.toHaveBeenCalled();
     await rows[3]!.findAll("button")[2]!.trigger("click");
@@ -524,10 +526,37 @@ describe("组织和人员操作栏对齐原型", () => {
 
   it("组织按钮继续按新增、修改、删除权限分别控制", async () => {
     session.permission.can.mockImplementation((...args: unknown[]) => args[1] === "edit");
-    api.orgs.list.mockResolvedValue([{ id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1 }]);
+    api.orgs.list.mockResolvedValue([{ id: 1, parent_id: 0, type: "root", name: "根组织", sort: 1, within_org_scope: true }]);
     const wrapper = render(OrgView);
     await flushPromises();
-    expect(wrapper.get(".table-actions").findAll("button").map((button) => button.text())).toEqual(["修改"]);
+    const buttons = wrapper.get(".table-actions").findAll("button");
+    expect(buttons.map((button) => button.text())).toEqual(["新增单位", "修改", "删除"]);
+    expect(buttons[0]!.attributes("disabled")).toBeDefined();
+    expect(buttons[1]!.attributes("disabled")).toBeUndefined();
+    expect(buttons[2]!.attributes("disabled")).toBeDefined();
+  });
+
+  it("范围外组织和人员仍可查看，但所有写操作置灰且不能触发接口", async () => {
+    session.auth.user = { role_id: 2, org_id: 3, is_super_admin: false } as typeof session.auth.user;
+    api.orgs.list.mockResolvedValue([{ id: 6, parent_id: 2, type: "street", name: "其他街道", sort: 1, within_org_scope: false }]);
+    const orgWrapper = render(OrgView);
+    await flushPromises();
+    const orgButtons = orgWrapper.get(".table-actions").findAll("button");
+    expect(orgButtons.every((button) => button.attributes("disabled") !== undefined)).toBe(true);
+    for (const button of orgButtons) await button.trigger("click");
+    expect(api.orgs.remove).not.toHaveBeenCalled();
+
+    api.users.list.mockResolvedValue({ list: [{ ...user, id: 8, org_id: 6, within_org_scope: false }], total: 1, page: 1, size: 20 });
+    const userWrapper = render(UserView);
+    await flushPromises();
+    const switchControl = userWrapper.getComponent(ElSwitch);
+    expect(switchControl.props("disabled")).toBe(true);
+    const userButtons = userWrapper.get('[data-column="操作"]').findAll("button");
+    expect(userButtons.every((button) => button.attributes("disabled") !== undefined)).toBe(true);
+    for (const button of userButtons) await button.trigger("click");
+    expect(api.users.update).not.toHaveBeenCalled();
+    expect(api.users.remove).not.toHaveBeenCalled();
+    expect(api.users.resetPassword).not.toHaveBeenCalled();
   });
 
   it("人员操作只有重置密码、编辑、删除，重置使用主色并保留二次确认", async () => {
@@ -596,8 +625,13 @@ describe("组织和人员操作栏对齐原型", () => {
       await control.props("beforeChange")?.();
     }
     expect(api.users.updateStatus).not.toHaveBeenCalled();
-    expect(wrapper.get('[data-column="操作"]').text()).toContain("超级管理员");
-    expect(wrapper.get('[data-column="操作"]').findAll("button").map((button) => button.text())).toEqual(["删除"]);
+    const actionButtons = wrapper.get('[data-column="操作"]').findAll("button");
+    expect(actionButtons.map((button) => button.text())).toEqual([
+      "重置密码", "编辑", "删除", "重置密码", "编辑", "删除",
+    ]);
+    expect(actionButtons.slice(0, 5).every((button) => button.attributes("disabled") !== undefined)).toBe(true);
+    expect(actionButtons[5]!.attributes("disabled")).toBeUndefined();
+    expect(actionButtons[0]!.attributes("title")).toBe("无修改权限");
   });
 });
 

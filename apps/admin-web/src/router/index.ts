@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { pinia } from "@/stores";
 import { useAuthStore } from "@/stores/auth";
+import { usePermissionStore } from "@/stores/permission";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -18,6 +19,12 @@ export const router = createRouter({
       meta: { title: "管理后台" },
       children: [
         { path: "", redirect: "/workbench" },
+        {
+          path: "forbidden",
+          name: "forbidden",
+          component: () => import("@/views/ForbiddenView.vue"),
+          meta: { title: "无权限" },
+        },
         {
           path: "workbench",
           name: "workbench",
@@ -91,6 +98,10 @@ router.beforeEach(async (to) => {
 
   if (!auth.isAuthenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+  const module = typeof to.meta.module === "string" ? to.meta.module : "";
+  if (module && !usePermissionStore(pinia).can(module, "view")) {
+    return { name: "forbidden", query: { from: to.fullPath } };
   }
   return true;
 });

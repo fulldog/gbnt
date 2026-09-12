@@ -28,6 +28,12 @@ func (s *SysService) UpdateUserStatus(ctx context.Context, id uint64, in UserSta
 		if user.IsSuperAdmin {
 			return errors.New("超级管理员不可修改状态")
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, user.OrgID); err != nil {
+			return err
+		}
+		if err := s.requireAssignableRoleIfAuthenticated(ctx, user.RoleID); err != nil {
+			return err
+		}
 		return tx.Model(&user).Update("status", *in.Status).Error
 	})
 }

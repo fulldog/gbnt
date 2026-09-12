@@ -23,6 +23,7 @@ export interface CaptchaResult {
 }
 
 export type ApiPermission = "*" | number[];
+export type ModuleActionPermissions = "*" | Record<string, string[]>;
 
 export interface AuthUser {
   id: number;
@@ -33,6 +34,8 @@ export interface AuthUser {
   role_id: number;
   is_super_admin: boolean;
   apis: ApiPermission;
+  /** 后端按模块聚合的界面授权；旧服务可能缺省，前端必须按未授权处理而不是默认放行。 */
+  permissions?: ModuleActionPermissions;
 }
 
 export interface LoginResult {
@@ -367,6 +370,8 @@ export interface SysOrg extends BaseRecord {
   name: string;
   type: OrgType;
   sort: number;
+  /** 当前登录账号是否可操作该组织；旧服务可能缺省。 */
+  within_org_scope?: boolean;
 }
 
 export interface OrgTreeNode {
@@ -375,6 +380,8 @@ export interface OrgTreeNode {
   type: OrgType;
   parent_id: number;
   sort: number;
+  /** 当前登录账号是否可操作该组织；祖先展示节点可能为 false。 */
+  within_org_scope?: boolean;
   children: OrgTreeNode[];
 }
 

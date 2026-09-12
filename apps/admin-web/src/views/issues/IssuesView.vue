@@ -79,6 +79,19 @@ const { data: detail, loading: detailLoading, loadError: detailError, run: loadD
   load: () => detailId.value ? api.issues.get(detailId.value) : Promise.resolve(null),
   errorMessage: "详情加载失败",
 });
+const hasWritableOrg = computed(() => orgs.value.some((org) => org.within_org_scope === true));
+const canCreateIssue = computed(() => permission.can("web.rectify", "create") && hasWritableOrg.value);
+
+function canOperateIssue(action: "edit" | "delete", issue: AdminIssue): boolean {
+  return permission.can("web.rectify", action) && issue.within_org_scope === true;
+}
+
+function actionTitle(action: "create" | "edit" | "delete", issue?: AdminIssue): string {
+  if (!permission.can("web.rectify", action)) return `无${action === "create" ? "新增" : action === "edit" ? "编辑" : "删除"}权限`;
+  if (issue && issue.within_org_scope !== true) return "仅可操作本组织及下级组织的专项整改";
+  if (action === "create" && !hasWritableOrg.value) return "当前账号没有可提交的组织";
+  return "";
+}
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
@@ -117,12 +130,14 @@ function reset(): void {
 }
 
 function createIssue(): void {
+  if (!canCreateIssue.value) return;
   closeIssuePanels();
   editingIssue.value = null;
   formVisible.value = true;
 }
 
 function editIssue(issue: AdminIssue): void {
+  if (!canOperateIssue("edit", issue)) return;
   closeIssuePanels();
   editingIssue.value = issue;
   formVisible.value = true;
@@ -146,7 +161,8 @@ watch(detailVisible, (open) => {
   if (!open) invalidateDetail();
 }, { flush: "sync" });
 
-async function removeIssue(issue: Issue): Promise<void> {
+async function removeIssue(issue: AdminIssue): Promise<void> {
+  if (!canOperateIssue("delete", issue)) return;
   try {
     await ElMessageBox.confirm(`确定删除 ${issue.issue_key} 吗？该操作会软删除记录。`, "删除确认", {
       confirmButtonText: "删除",
@@ -200,7 +216,7 @@ onMounted(() => {
 
     <section class="data-card">
       <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="巡查清单" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
-        <ElButton v-if="permission.can('web.rectify', 'create')" type="primary" :icon="Plus" @click="createIssue">新增排查</ElButton>
+        <ElButton type="primary" :icon="Plus" :disabled="!canCreateIssue" v-bind="{ title: actionTitle('create') }" @click="createIssue">新增排查</ElButton>
       </TableToolbar>
       <div class="data-table">
       <ElTable
@@ -241,11 +257,12 @@ onMounted(() => {
           <template #default="scope">
             <div class="table-actions">
               <ElButton link type="primary" :loading="detailLoading && detailId === scope.row.id" @click="openDetail(asIssue(scope.row))">查看</ElButton>
-              <ElButton v-if="permission.can('web.rectify', 'edit')" link type="primary" @click="editIssue(asIssue(scope.row))">编辑</ElButton>
+              <ElButton link type="primary" :disabled="!canOperateIssue('edit', asIssue(scope.row))" v-bind="{ title: actionTitle('edit', asIssue(scope.row)) }" @click="editIssue(asIssue(scope.row))">编辑</ElButton>
               <ElButton
-                v-if="permission.can('web.rectify', 'delete')"
                 link
                 type="danger"
+                :disabled="!canOperateIssue('delete', asIssue(scope.row))"
+                v-bind="{ title: actionTitle('delete', asIssue(scope.row)) }"
                 @click="removeIssue(asIssue(scope.row))"
               >删除</ElButton>
             </div>

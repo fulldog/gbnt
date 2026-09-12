@@ -63,6 +63,9 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 		if in.OrgID != nil {
 			orgID = *in.OrgID
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, item.OrgID, orgID); err != nil {
+			return err
+		}
 		if in.OrgID != nil {
 			if err := local.requireOrgID(ctx, orgID); err != nil {
 				return err
@@ -183,6 +186,9 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 			return err
 		}
 		if in.ReportUserID != nil {
+			if err := requireUserOrgScopeIfAuthenticated(ctx, tx, *in.ReportUserID); err != nil {
+				return err
+			}
 			updates["report_user_id"] = *in.ReportUserID
 		}
 		assignee := item.AssigneeUser
@@ -203,6 +209,9 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 			}
 		}
 		if in.AssigneeUser != nil {
+			if err := requireUserOrgScopeIfAuthenticated(ctx, tx, assignee); err != nil {
+				return err
+			}
 			updates["assignee_user"] = assignee
 		}
 		if in.ReporterSignatureFileID != nil {

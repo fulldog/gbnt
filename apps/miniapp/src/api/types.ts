@@ -12,6 +12,8 @@ export type MiniappIssue = Issue & {
   assignee_user_name: string | null;
   org_name: string | null;
   org_path: string | null;
+  /** 当前账号仍可修改该整改；调岗后的本人历史记录为 false。 */
+  within_org_scope: boolean;
   /** 写入已成功但关联名称读取失败时提示刷新，不应重复提交。 */
   display_warning?: string;
 };

@@ -19,6 +19,7 @@ function issue(id: number): AdminIssue {
   return {
     id, issue_key: `ISSUE-${id}`, type: "well", org_id: 9, report_user_id: 1, assignee_user: 2,
     report_user_name: "上报姓名", assignee_user_name: "整改姓名", org_path: "区 / 街道 / 村",
+    within_org_scope: true,
     status: "new", plan_date: "2026-09-05", type_ext: { checklist: [] }, rectify_records: [],
   } as unknown as AdminIssue;
 }
@@ -32,6 +33,7 @@ interface ViewState {
   load: () => Promise<void>;
   search: () => void;
   openDetail: (issue: AdminIssue) => Promise<void>;
+  editIssue: (issue: AdminIssue) => void;
   removeIssue: (issue: AdminIssue) => Promise<void>;
 }
 function mountView(overrides = {}) {
@@ -120,6 +122,21 @@ describe("专项整改读取状态", () => {
     await flushPromises();
     expect(api.issues.get).toHaveBeenCalledWith(123);
     expect(api.issues.list).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it("范围外整改仍可查看，但编辑和删除不能触发", async () => {
+    const outside = { ...issue(8), within_org_scope: false };
+    const confirm = vi.spyOn(ElMessageBox, "confirm");
+    const { wrapper, state, api } = mountView({ list: vi.fn().mockResolvedValue(rows(outside)) });
+    await flushPromises();
+    await state.openDetail(outside);
+    expect(wrapper.findComponent(IssueDetailDrawer).props("modelValue")).toBe(true);
+    state.editIssue(outside);
+    await state.removeIssue(outside);
+    expect(wrapper.findComponent(IssueFormDialog).props("modelValue")).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(api.issues.remove).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

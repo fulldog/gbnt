@@ -275,7 +275,7 @@ func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, o
 }
 
 // ListTodos 小程序待办：已逾期、即将逾期、正常依次排列，同组剩余时间倒序。
-// 权限范围为登录用户组织及下属（用户 OrgID=0 不限）；query org_id>0 再与该组织子树取交集。
+// 权限范围为登录用户组织及下属（普通用户 OrgID=0 无范围）；query org_id>0 必须位于该范围内。
 // [PRD] 仅返回 assignee_user IN (0, 当前用户)。
 func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Status == "all" {
@@ -290,6 +290,18 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 	user, err := database.UserFromContext(ctx)
 	if err != nil {
 		return nil, 0, err
+	}
+	scope, err := ResolveOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, 0, err
+	}
+	if !scope.All && !scope.Allows(scope.RootID) {
+		return nil, 0, ErrOrgScopeForbidden
+	}
+	if q.OrgID != 0 {
+		if err := scope.Require(q.OrgID); err != nil {
+			return nil, 0, err
+		}
 	}
 	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
 	db, err = s.applyOrgSubtreeFilter(ctx, db, user.OrgID)
@@ -472,6 +484,15 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 	if err := s.requireOrgID(ctx, in.OrgID); err != nil {
 		return nil, err
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), in.OrgID); err != nil {
+		return nil, err
+	}
+	if err := requireUserOrgScopeIfAuthenticated(ctx, s.db(ctx), in.ReportUserID); err != nil {
+		return nil, err
+	}
+	if err := requireUserOrgScopeIfAuthenticated(ctx, s.db(ctx), in.AssigneeUser); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(in.Address) == "" {
 		return nil, errors.New("请填写定位地址")
 	}
@@ -592,6 +613,9 @@ func (s *IssueService) deleteIssue(ctx context.Context, id, reporterID uint64) e
 		if reporterID != 0 && item.ReportUserID != reporterID {
 			return ErrIssueReporterOnly
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, item.OrgID); err != nil {
+			return err
+		}
 		if err := lockIssueOrgs(tx, item.OrgID); err != nil {
 			return err
 		}
@@ -688,6 +712,9 @@ func (s *IssueService) rectifyPrepared(ctx context.Context, id uint64, expectedR
 				return err
 			}
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, item.OrgID); err != nil {
+			return err
+		}
 		// 即使服务器已完成并重开，旧页面的取证也不能悄悄写入下一轮。
 		if expectedRound != nil && *expectedRound != item.RectifyRound {
 			return errors.New("整改轮次已更新，请刷新问题后重新提交")
@@ -756,6 +783,9 @@ func (s *IssueService) ReRectify(ctx context.Context, id uint64, lockAssignee bo
 				return err
 			}
 		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, item.OrgID); err != nil {
+			return err
+		}
 		if err := reRectifyGate(item.Status, len(neededQuizTypes(item.Type, item.TypeExt)) > 0); err != nil {
 			return err
 		}
@@ -790,6 +820,12 @@ func (s *IssueService) Reassign(ctx context.Context, id uint64, in ReassignInput
 	}
 	var item model.Issue
 	if err := s.db(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), item.OrgID, user.OrgID); err != nil {
+		return nil, err
+	}
+	if err := s.requireAssigneeInFormOrg(ctx, in.AssigneeUser, item.OrgID); err != nil {
 		return nil, err
 	}
 	if err := s.db(ctx).Model(&item).Update("assignee_user", in.AssigneeUser).Error; err != nil {

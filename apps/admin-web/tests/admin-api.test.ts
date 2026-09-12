@@ -124,6 +124,13 @@ describe("管理端独立读取契约", () => {
     expect(request).toHaveBeenLastCalledWith("/api/sys/users/2", { method: "PUT", body: input });
   });
 
+  it("工作人员角色候选使用独立的可分配角色接口", async () => {
+    const roles = [{ id: 2, code: "village-admin", name: "村管理员", status: 1 }];
+    const { users, request } = setup(roles);
+    expect(await users.listAssignableRoles()).toEqual(roles);
+    expect(request).toHaveBeenCalledExactlyOnceWith("/api/sys/users/options/roles");
+  });
+
   it("分页列表结构及计数错误显式失败", async () => {
     await expect(setup({ list: [], total: "0", page: 1, size: 20 }).issues.list()).rejects.toThrow("格式异常");
     await expect(setup({ list: null, total: 0 }).users.list()).rejects.toThrow("列表格式异常");

@@ -10,12 +10,13 @@ import type {
   UpdateIssueInput,
 } from "@gbnt/api-client";
 import type { AdminIssue, AdminIssueListResult, OrgOption, UserOptionQuery, UserOptionResult } from "./types";
-import { checkDisplayFields, normalizeOrgOptions, normalizeUserOptions, responseArray, responseInteger, responseRecord } from "./response";
+import { checkDisplayFields, checkOptionalBoolean, normalizeOrgOptions, normalizeUserOptions, responseArray, responseInteger, responseRecord } from "./response";
 
 function normalizeAdminIssue(value: unknown): AdminIssue {
   const row = responseRecord(value, "排查整改");
   responseInteger(row.id, "问题 ID", 1);
   checkDisplayFields(row, ["report_user_name", "assignee_user_name", "org_name", "org_path"]);
+  checkOptionalBoolean(row, "within_org_scope", "整改组织权限范围");
   if (row.assignee_user_phone !== undefined && row.assignee_user_phone !== null && typeof row.assignee_user_phone !== "string") {
     throw new Error("整改责任人联系电话格式异常，请刷新重试");
   }

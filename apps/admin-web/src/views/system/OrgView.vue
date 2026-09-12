@@ -9,6 +9,7 @@ import AsyncError from "@/components/AsyncError.vue";
 import TableToolbar from "@/components/TableToolbar.vue";
 import { useLatestQuery } from "@/composables/useLatestQuery";
 import { usePermissionStore } from "@/stores/permission";
+import { useAuthStore } from "@/stores/auth";
 import { errorMessage } from "@/utils/error";
 import { buildOrgTree } from "@/utils/org";
 
@@ -29,6 +30,7 @@ function expandAll(value: boolean): void {
 }
 const api = useAdminApi();
 const permission = usePermissionStore();
+const auth = useAuthStore();
 const submitting = shallowRef(false);
 const { data: orgs, loading, loadError, run: load } = useLatestQuery<SysOrg[]>({
   initial: () => [],
@@ -44,12 +46,28 @@ const byId = computed(() => new Map(orgs.value.map((org) => [org.id, org])));
 const rules: FormRules<typeof form> = {
   name: [{ required: true, message: "请输入组织名称", trigger: "blur" }],
 };
+const canCreateRoot = computed(() => permission.can("web.sys-org", "create") && auth.user?.is_super_admin === true);
+
+function withinScope(node: Pick<OrgTreeNode, "within_org_scope">): boolean {
+  return node.within_org_scope === true;
+}
+
+function actionTitle(action: "create" | "edit" | "delete", node?: OrgTreeNode): string {
+  if (!permission.can("web.sys-org", action)) return `无${action === "create" ? "新增" : action === "edit" ? "修改" : "删除"}权限`;
+  if (node && !withinScope(node)) return "仅可操作本组织及下级组织";
+  if (action === "create" && node?.type === "village") return "村/社区为当前末级，不能新增下级单位";
+  if (action === "delete" && node?.id === auth.user?.org_id && !auth.user?.is_super_admin) return "不能删除当前账号所属组织";
+  if (action === "delete" && (node?.type === "root" || node?.parent_id === 0)) return "根组织不可删除";
+  if (action === "delete" && node?.children.length) return "请先删除下级单位";
+  return "";
+}
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
 }
 
 function createRoot(): void {
+  if (!canCreateRoot.value) return;
   editing.value = null;
   form.name = "";
   form.parent_id = 0;
@@ -58,7 +76,7 @@ function createRoot(): void {
 }
 
 function createChild(parent: OrgTreeNode): void {
-  if (parent.type === "village") return;
+  if (!permission.can("web.sys-org", "create") || !withinScope(parent) || parent.type === "village") return;
   editing.value = null;
   form.name = "";
   form.parent_id = parent.id;
@@ -67,6 +85,7 @@ function createChild(parent: OrgTreeNode): void {
 }
 
 function edit(node: OrgTreeNode): void {
+  if (!permission.can("web.sys-org", "edit") || !withinScope(node)) return;
   editing.value = byId.value.get(node.id) ?? null;
   form.name = node.name;
   form.parent_id = node.parent_id;
@@ -99,7 +118,8 @@ async function submit(): Promise<void> {
 }
 
 async function remove(node: OrgTreeNode): Promise<void> {
-  if (node.type === "root") return;
+  if (!permission.can("web.sys-org", "delete") || !withinScope(node) || node.type === "root" || node.parent_id === 0 ||
+    (node.id === auth.user?.org_id && !auth.user?.is_super_admin)) return;
   if (node.children.length) {
     ElMessage.warning("请先删除下级单位");
     return;
@@ -130,7 +150,7 @@ onMounted(() => {
     <section class="data-card">
       <TableToolbar title="单位列表" :filterable="false" :loading="loading" :target="() => tablePage" @refresh="load">
         <ElButtonGroup><ElButton @click="expandAll(true)">展开全部</ElButton><ElButton @click="expandAll(false)">折叠全部</ElButton></ElButtonGroup>
-        <ElButton v-if="permission.can('web.sys-org', 'create')" type="primary" :icon="Plus" @click="createRoot">新增根组织</ElButton>
+        <ElButton type="primary" :icon="Plus" :disabled="!canCreateRoot" v-bind="{ title: canCreateRoot ? '新增根组织' : !permission.can('web.sys-org', 'create') ? '无新增权限' : '只有超级管理员可以新增根组织' }" @click="createRoot">新增根组织</ElButton>
       </TableToolbar>
       <div class="data-table">
       <ElTable ref="orgTable" height="100%"
@@ -149,20 +169,18 @@ onMounted(() => {
           <template #default="scope">
             <div class="table-actions">
               <ElButton
-                v-if="permission.can('web.sys-org', 'create')"
                 link
                 type="primary"
-                :disabled="scope.row.type === 'village'"
-                v-bind="{ title: scope.row.type === 'village' ? '村/社区为当前末级，不能新增下级单位' : undefined }"
+                :disabled="!permission.can('web.sys-org', 'create') || scope.row.within_org_scope !== true || scope.row.type === 'village'"
+                v-bind="{ title: actionTitle('create', asOrgNode(scope.row)) }"
                 @click="createChild(asOrgNode(scope.row))"
               >新增单位</ElButton>
-              <ElButton v-if="permission.can('web.sys-org', 'edit')" link type="primary" @click="edit(asOrgNode(scope.row))">修改</ElButton>
+              <ElButton link type="primary" :disabled="!permission.can('web.sys-org', 'edit') || scope.row.within_org_scope !== true" v-bind="{ title: actionTitle('edit', asOrgNode(scope.row)) }" @click="edit(asOrgNode(scope.row))">修改</ElButton>
               <ElButton
-                v-if="permission.can('web.sys-org', 'delete')"
                 link
                 type="danger"
-                :disabled="scope.row.type === 'root'"
-                v-bind="{ title: scope.row.type === 'root' ? '根组织不可删除' : undefined }"
+                :disabled="!permission.can('web.sys-org', 'delete') || scope.row.within_org_scope !== true || scope.row.type === 'root' || scope.row.parent_id === 0 || (scope.row.id === auth.user?.org_id && !auth.user?.is_super_admin) || scope.row.children.length > 0"
+                v-bind="{ title: actionTitle('delete', asOrgNode(scope.row)) }"
                 @click="remove(asOrgNode(scope.row))"
               >删除</ElButton>
             </div>

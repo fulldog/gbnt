@@ -119,18 +119,28 @@ func (d *Deps) userInfoPayload(info *database.UserInfo) gin.H {
 
 func (d *Deps) fillAPIs(out gin.H, roleID uint64, isSuperAdmin bool) {
 	if d.Perm == nil {
+		out["apis"] = []uint64{}
+		out["permissions"] = map[string][]string{}
 		return
 	}
 	if isSuperAdmin {
 		out["apis"] = "*"
+		out["permissions"] = "*"
 		return
 	}
 	ids, err := d.Perm.ListAPIIDsForRole(roleID)
 	if err != nil {
 		out["apis"] = []uint64{}
+		out["permissions"] = map[string][]string{}
 		return
 	}
 	out["apis"] = ids
+	actions, err := d.Perm.ModuleActionsForRole(roleID)
+	if err != nil {
+		out["permissions"] = map[string][]string{}
+		return
+	}
+	out["permissions"] = actions
 }
 
 // Me GET /api/auth/me — 当前用户（含 role_id、apis；超管 apis="*"）。

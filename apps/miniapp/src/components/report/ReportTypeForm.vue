@@ -12,6 +12,7 @@ import IssueTypeFields from "@/components/report/IssueTypeFields.vue";
 import QuizCard from "@/components/report/QuizCard.vue";
 import RegionPicker from "@/components/region/RegionPicker.vue";
 import { useLocation } from "@/composables/report/useLocation";
+import { flattenLeafRegions } from "@/composables/report/useRegions";
 import {
   PROJECT_YEAR_OPTIONS,
   QUIZ_DEFINITIONS,
@@ -34,6 +35,7 @@ import {
 } from "@/domain/issues/validation";
 import { inputEventValue, type InputEventLike } from "@/utils/events";
 import { hasValidCoordinates } from "@/utils/issue-display";
+import { findRegion } from "@/utils/regions";
 
 type SignaturePadInstance = InstanceType<typeof SignaturePad>;
 
@@ -44,6 +46,7 @@ const props = defineProps<{
   regionTree: OrgTreeNode[];
   regionsLoading: boolean;
   regionsError: string;
+  userOrgId: number;
 }>();
 const emit = defineEmits<{
   save: [draft: ReportTypeDraft];
@@ -88,8 +91,35 @@ const {
 const regionTree = computed(() => props.regionTree);
 const regionsLoading = computed(() => props.regionsLoading);
 const regionsError = computed(() => props.regionsError);
+const regionOptions = computed(() => flattenLeafRegions(regionTree.value));
+const currentUserOrg = computed(() => findRegion(regionTree.value, props.userOrgId));
+const lockedRegion = computed(() => {
+  if (currentUserOrg.value?.type !== "village") return undefined;
+  return regionOptions.value.find((option) => option.id === props.userOrgId);
+});
+const regionLocked = computed(() => Boolean(lockedRegion.value));
 const codeError = shallowRef("");
 watch(() => [form.orgId, form.type, form.code, form.codeMode], () => { codeError.value = ""; });
+
+function reconcileRegionScope(): void {
+  if (props.regionsLoading || props.regionsError || regionTree.value.length === 0) return;
+  const locked = lockedRegion.value;
+  if (locked) {
+    form.orgId = locked.id;
+    form.orgLabel = locked.label;
+    return;
+  }
+  if (form.orgId !== null && !regionOptions.value.some((option) => option.id === form.orgId)) {
+    form.orgId = null;
+    form.orgLabel = "";
+  }
+}
+
+watch(
+  () => [props.regionTree, props.regionsLoading, props.regionsError, props.userOrgId],
+  reconcileRegionScope,
+  { deep: true, immediate: true },
+);
 function load(): void { emit("retryRegions"); }
 function showLoading(title: string): void {
   uni.showLoading({ title, mask: true });
@@ -158,9 +188,11 @@ function blockForPhotos(): boolean {
 }
 
 function selectRegion(option: { id: number | null; label: string }): void {
-  if (option.id === null) return;
-  form.orgId = option.id;
-  form.orgLabel = option.label;
+  if (option.id === null || regionLocked.value) return;
+  const allowed = regionOptions.value.find((item) => item.id === option.id);
+  if (!allowed) return;
+  form.orgId = allowed.id;
+  form.orgLabel = allowed.label;
 }
 
 function updateText(
@@ -344,6 +376,10 @@ async function submit(): Promise<void> {
   if (!props.visible || submitted || submitting.value || uploadingSignature.value || blockForPhotos()) {
     return;
   }
+  if (props.regionsLoading || props.regionsError || !regionOptions.value.some((option) => option.id === form.orgId)) {
+    uni.showToast({ title: props.regionsLoading ? "行政区划加载中，请稍候" : "请选择当前账号可提交的行政区划", icon: "none" });
+    return;
+  }
   const nextErrors = validateSubmitStep(form, false);
   if (nextErrors.length > 0) { showFirstError(nextErrors); return; }
   if (!form.signatureFileId && !(await uploadSignature())) return;
@@ -429,9 +465,10 @@ onBeforeUnmount(() => {
           <view class="form-control">
             <RegionPicker
               start-level="street" :tree="regionTree" :value="form.orgId" :label="form.orgLabel"
-              :loading="regionsLoading" :error="regionsError" :disabled="!props.visible || submitting"
+              :loading="regionsLoading" :error="regionsError" :disabled="!props.visible || submitting || regionLocked"
               @select="selectRegion" @retry="load"
             />
+            <text v-if="regionLocked" class="region-scope-hint">已按账号所属村锁定</text>
           </view>
         </view>
         <view class="form-field">
@@ -589,6 +626,14 @@ onBeforeUnmount(() => {
 .form-control {
   flex: 1;
   min-width: 0;
+}
+.region-scope-hint {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
 }
 .panorama-field {
   padding: 12px 0 8px;

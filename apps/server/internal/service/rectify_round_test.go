@@ -17,8 +17,8 @@ const roundRoadExt = `{"checklist":[{"type":"has_shoulder","value":false},{"type
 
 func roundIssueQuery(status string, round, assignee int64, locked bool) testutil.QueryStep {
 	return testutil.QueryStep{
-		Contains: "FROM `issues`", Columns: []string{"id", "type", "type_ext", "status", "rectify_round", "assignee_user"},
-		Rows: [][]driver.Value{{int64(1), "road", roundRoadExt, status, round, assignee}},
+		Contains: "FROM `issues`", Columns: []string{"id", "type", "type_ext", "status", "rectify_round", "assignee_user", "org_id"},
+		Rows: [][]driver.Value{{int64(1), "road", roundRoadExt, status, round, assignee, int64(2)}},
 		Check: func(query string, _ []driver.NamedValue) {
 			if strings.Contains(query, "FOR UPDATE") != locked {
 				panic("问题行锁状态错误: " + query)
@@ -28,7 +28,7 @@ func roundIssueQuery(status string, round, assignee int64, locked bool) testutil
 }
 
 func roundContext() context.Context {
-	return database.WithUser(context.Background(), &database.UserInfo{ID: 7})
+	return database.WithUser(context.Background(), &database.UserInfo{ID: 7, IsSuperAdmin: true})
 }
 
 func TestRectifyUsesOnlyCurrentRoundAndPreservesHistory(t *testing.T) {
@@ -44,6 +44,15 @@ func TestRectifyUsesOnlyCurrentRoundAndPreservesHistory(t *testing.T) {
 				// 故意混入上一轮记录，同时断言 SQL 过滤和服务端轮次保护。
 				if historyRound >= 0 {
 					history = append(history, []driver.Value{int64(20), "has_ash", historyRound})
+				}
+				displayRows := [][]driver.Value{{int64(30), "has_shoulder", current}}
+				if historyRound >= 0 {
+					displayRows = append(displayRows, []driver.Value{int64(20), "has_ash", historyRound})
+				}
+				expectedDisplayCount := len(displayRows)
+				if historyRound == current {
+					// 同一轮、同一提交时间的分项记录在返回详情时合并展示。
+					expectedDisplayCount = 1
 				}
 				db := testutil.NewTransactionDB(t,
 					testutil.QueryStep{Contains: "FROM `attachments`", Columns: []string{"file_id", "status"}, Rows: [][]driver.Value{{"photo-1", "success"}}},
@@ -64,7 +73,7 @@ func TestRectifyUsesOnlyCurrentRoundAndPreservesHistory(t *testing.T) {
 						}
 					}},
 					testutil.QueryStep{Kind: "commit"}, roundIssueQuery(expectedStatus, current, 7, false),
-					testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id", "quiz_type", "round"}, Rows: [][]driver.Value{{int64(30), "has_shoulder", current}, {int64(20), "has_ash", int64(0)}}, Check: func(query string, _ []driver.NamedValue) {
+					testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id", "quiz_type", "round"}, Rows: displayRows, Check: func(query string, _ []driver.NamedValue) {
 						if strings.Contains(query, "round =") {
 							t.Fatalf("展示不能过滤历史轮次: %s", query)
 						}
@@ -81,7 +90,7 @@ func TestRectifyUsesOnlyCurrentRoundAndPreservesHistory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if out.Status != expectedStatus || out.RectifyRound != uint64(current) || len(out.RectifyRecords) != 2 {
+				if out.Status != expectedStatus || out.RectifyRound != uint64(current) || len(out.RectifyRecords) != expectedDisplayCount {
 					t.Fatalf("响应不符: %+v", out)
 				}
 			})

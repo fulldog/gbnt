@@ -189,7 +189,7 @@ async function submit(): Promise<void> {
                 <ElRadioButton v-for="type in ISSUE_TYPES" :key="type" :value="type">{{ ISSUE_TYPE_LABELS[type] }}</ElRadioButton>
               </ElRadioGroup>
             </ElFormItem>
-            <ElFormItem label="行政区划" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" :disabled="!orgsReady" :clearable="false" /></ElFormItem>
+            <ElFormItem label="行政区划" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" :disabled="!orgsReady" :clearable="false" restrict-scope /></ElFormItem>
             <ElFormItem label="整改人" prop="assignee_user" :required="needsAssignee">
               <BusinessUserSelect :key="session" v-model="form.assignee_user" :active="visible && !!form.org_id && !loading" :scope-key="form.org_id || 0" :load-options="loadAssignees" placeholder="请选择整改人" @ready="assigneeReady = $event" />
             </ElFormItem>

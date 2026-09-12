@@ -37,7 +37,7 @@ const { data: orgs, loading: orgsLoading, loadError: orgsError, hasLoaded: orgsR
 });
 const { data: roles, loading: rolesLoading, loadError: rolesError, hasLoaded: rolesReady, run: loadRoles } = useLatestQuery<SysRole[]>({
   initial: () => [],
-  load: () => api.roles.list(),
+  load: () => api.users.listAssignableRoles(),
   errorMessage: "角色候选加载失败，人员表单暂不可保存",
 });
 const { data: result, loading, loadError, hasLoaded, run: load } = useLatestQuery<AdminUserListResult>({
@@ -55,6 +55,21 @@ const total = computed(() => result.value.total);
 const optionsReady = computed(() => orgsReady.value && rolesReady.value);
 const optionsLoading = computed(() => orgsLoading.value || rolesLoading.value);
 const optionsError = computed(() => [orgsError.value, rolesError.value].filter(Boolean).join("；"));
+const hasWritableOrg = computed(() => orgs.value.some((org) => org.within_org_scope === true));
+const canCreateUser = computed(() => permission.can("web.sys-staff", "create") && hasWritableOrg.value && roles.value.some((role) => role.status === 1));
+
+function canManageUser(user: AdminUser): boolean {
+  return !user.is_super_admin && user.within_org_scope === true && user.within_role_scope === true;
+}
+
+function actionTitle(action: "create" | "edit" | "delete" | "import" | "export", user?: AdminUser): string {
+  if (!permission.can("web.sys-staff", action)) return `无${action === "create" ? "新增" : action === "delete" ? "删除" : action === "import" ? "导入" : action === "export" ? "导出" : "修改"}权限`;
+  if (user?.is_super_admin) return "超级管理员不可在工作人员页面操作";
+  if (user && user.within_org_scope !== true) return "仅可操作本组织及下级组织的工作人员";
+  if (user && user.within_role_scope !== true) return "目标人员角色权限高于当前账号";
+  if ((action === "create" || action === "import") && !hasWritableOrg.value) return "当前账号没有可管理的组织";
+  return "";
+}
 
 function isCancelled(error: unknown): boolean {
   return error === "cancel" || error === "close";
@@ -78,18 +93,19 @@ function reset(): void {
 }
 
 function createUser(): void {
+  if (!canCreateUser.value) return;
   editingUser.value = null;
   formVisible.value = true;
 }
 
 function editUser(user: AdminUser): void {
-  if (user.is_super_admin || busyUsers.has(user.id)) return;
+  if (!permission.can("web.sys-staff", "edit") || !canManageUser(user) || busyUsers.has(user.id)) return;
   editingUser.value = user;
   formVisible.value = true;
 }
 
 async function removeUser(user: AdminUser): Promise<void> {
-  if (user.is_super_admin || busyUsers.has(user.id)) return;
+  if (!permission.can("web.sys-staff", "delete") || !canManageUser(user) || busyUsers.has(user.id)) return;
   busyUsers.add(user.id);
   try {
     await ElMessageBox.confirm(`确定删除账号“${user.username}”吗？`, "删除确认", {
@@ -114,7 +130,7 @@ async function removeUser(user: AdminUser): Promise<void> {
 }
 
 async function resetPassword(user: AdminUser): Promise<void> {
-  if (user.is_super_admin || busyUsers.has(user.id)) return;
+  if (!permission.can("web.sys-staff", "edit") || !canManageUser(user) || busyUsers.has(user.id)) return;
   busyUsers.add(user.id);
   try {
     await ElMessageBox.confirm(`密码将重置为账号“${user.username}”，是否继续？`, "重置密码", {
@@ -132,7 +148,7 @@ async function resetPassword(user: AdminUser): Promise<void> {
 }
 
 async function toggleStatus(user: AdminUser): Promise<boolean> {
-  if (user.is_super_admin || busyUsers.has(user.id) || !permission.can('web.sys-staff', 'edit')) return false;
+  if (!canManageUser(user) || busyUsers.has(user.id) || !permission.can('web.sys-staff', 'edit')) return false;
   busyUsers.add(user.id);
   const status = user.status === 1 ? 0 : 1;
   try {
@@ -150,6 +166,7 @@ async function toggleStatus(user: AdminUser): Promise<boolean> {
 }
 
 async function exportUsers(): Promise<void> {
+  if (!permission.can("web.sys-staff", "export")) return;
   try {
     const result = await api.users.exportFile({
       org_id: filters.org_id,
@@ -162,6 +179,7 @@ async function exportUsers(): Promise<void> {
 }
 
 async function importUsers(options: UploadRequestOptions): Promise<unknown> {
+  if (!permission.can("web.sys-staff", "import") || !hasWritableOrg.value) throw new Error("无工作人员导入权限");
   try {
     const result = await api.users.importFile({ file: options.file });
     ElMessage.success(`成功导入 ${result.imported} 名工作人员`);
@@ -196,19 +214,19 @@ onMounted(() => {
     <section class="data-card">
       <TableToolbar v-model:filters-visible="filtersVisible" v-model:visible-columns="visibleColumns" title="人员列表" :columns="columns" :loading="loading" :target="() => tablePage" @refresh="load">
 
-        <ElButton v-if="permission.can('web.sys-staff', 'export')" :icon="Download" @click="exportUsers">导出 Excel</ElButton>
+        <ElButton :icon="Download" :disabled="!permission.can('web.sys-staff', 'export')" v-bind="{ title: actionTitle('export') }" @click="exportUsers">导出 Excel</ElButton>
         <ElUpload
-          v-if="permission.can('web.sys-staff', 'import')"
           action="#"
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           :show-file-list="false"
+          :disabled="!permission.can('web.sys-staff', 'import') || !hasWritableOrg"
           :http-request="importUsers"
         >
           <ElTooltip content="请填写角色名称；名称不唯一时无法导入，请先在系统中区分角色。">
-            <ElButton :icon="Upload">导入 Excel</ElButton>
+            <ElButton :icon="Upload" :disabled="!permission.can('web.sys-staff', 'import') || !hasWritableOrg" v-bind="{ title: actionTitle('import') }">导入 Excel</ElButton>
           </ElTooltip>
         </ElUpload>
-        <ElButton v-if="permission.can('web.sys-staff', 'create')" type="primary" :icon="Plus" @click="createUser">新增人员</ElButton>
+        <ElButton type="primary" :icon="Plus" :disabled="!canCreateUser" v-bind="{ title: actionTitle('create') }" @click="createUser">新增人员</ElButton>
       </TableToolbar>
       <div class="data-table">
       <ElTable height="100%" v-loading="loading" :data="users" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无工作人员'">
@@ -224,8 +242,8 @@ onMounted(() => {
             <ElSwitch
               :model-value="scope.row.status === 1"
               :loading="busyUsers.has(scope.row.id)"
-              :disabled="scope.row.is_super_admin || !permission.can('web.sys-staff', 'edit')"
-              v-bind="{ 'aria-label': `${scope.row.username}账号状态`, title: scope.row.is_super_admin ? '超级管理员不可停用' : !permission.can('web.sys-staff', 'edit') ? '无修改权限' : scope.row.status === 1 ? '点击停用账号' : '点击启用账号' }"
+              :disabled="!permission.can('web.sys-staff', 'edit') || !canManageUser(asUser(scope.row))"
+              v-bind="{ 'aria-label': `${scope.row.username}账号状态`, title: actionTitle('edit', asUser(scope.row)) || (scope.row.status === 1 ? '点击停用账号' : '点击启用账号') }"
               :before-change="() => toggleStatus(asUser(scope.row))"
             />
           </template>
@@ -233,12 +251,11 @@ onMounted(() => {
         <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="155" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at) }}</template></ElTableColumn>
         <ElTableColumn label="操作" width="220" fixed="right" align="center">
           <template #default="scope">
-            <div v-if="!scope.row.is_super_admin" class="table-actions">
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" :disabled="busyUsers.has(scope.row.id)" @click="resetPassword(asUser(scope.row))">重置密码</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'edit')" link type="primary" :disabled="busyUsers.has(scope.row.id)" @click="editUser(asUser(scope.row))">编辑</ElButton>
-              <ElButton v-if="permission.can('web.sys-staff', 'delete')" link type="danger" :disabled="busyUsers.has(scope.row.id)" @click="removeUser(asUser(scope.row))">删除</ElButton>
+            <div class="table-actions">
+              <ElButton link type="primary" :disabled="busyUsers.has(scope.row.id) || !permission.can('web.sys-staff', 'edit') || !canManageUser(asUser(scope.row))" v-bind="{ title: actionTitle('edit', asUser(scope.row)) }" @click="resetPassword(asUser(scope.row))">重置密码</ElButton>
+              <ElButton link type="primary" :disabled="busyUsers.has(scope.row.id) || !permission.can('web.sys-staff', 'edit') || !canManageUser(asUser(scope.row))" v-bind="{ title: actionTitle('edit', asUser(scope.row)) }" @click="editUser(asUser(scope.row))">编辑</ElButton>
+              <ElButton link type="danger" :disabled="busyUsers.has(scope.row.id) || !permission.can('web.sys-staff', 'delete') || !canManageUser(asUser(scope.row))" v-bind="{ title: actionTitle('delete', asUser(scope.row)) }" @click="removeUser(asUser(scope.row))">删除</ElButton>
             </div>
-            <ElTag v-else type="danger" effect="plain">超级管理员</ElTag>
           </template>
         </ElTableColumn>
       </ElTable>

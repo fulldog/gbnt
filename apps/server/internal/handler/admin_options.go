@@ -50,7 +50,9 @@ func userOptionQuery(c *gin.Context) (service.BusinessUserOptionQuery, bool) {
 }
 
 func optionFailure(c *gin.Context, err error) {
-	if errors.Is(err, service.ErrOptionArgument) {
+	if orgScopeFailure(c, err) {
+		return
+	} else if errors.Is(err, service.ErrOptionArgument) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		response.Fail(c, 404, response.CodeNotFound, "问题或组织不存在")

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/internal/testutil"
@@ -38,7 +40,11 @@ func TestAdminAndAppDetailHTTPIncludeNames(t *testing.T) {
 			d.registerRectify(r.Group("/api"))
 			RegisterApp(r, d)
 			w := httptest.NewRecorder()
-			r.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+			request := httptest.NewRequest("GET", path, nil)
+			if !admin {
+				request = request.WithContext(database.WithUser(context.Background(), &database.UserInfo{ID: 1, IsSuperAdmin: true}))
+			}
+			r.ServeHTTP(w, request)
 			if w.Code != http.StatusOK {
 				t.Fatalf("HTTP %d: %s", w.Code, w.Body.String())
 			}

@@ -1,6 +1,6 @@
 import type { SysOrg } from "@gbnt/api-client";
 import { describe, expect, it } from "vitest";
-import { buildOrgPathMap, buildOrgTree } from "@/utils/org";
+import { buildOrgPathMap, buildOrgTree, orgTreeSelectData } from "@/utils/org";
 
 function org(id: number, parentId: number, name: string, sort: number): SysOrg {
   return {
@@ -39,5 +39,14 @@ describe("组织展示转换", () => {
     const paths = buildOrgPathMap(orgs);
     expect(paths.get(4)).toBe("GBNT / 示范区 / 建设街道 / 东村");
     expect(paths.get(999)).toBeUndefined();
+  });
+
+  it("写入选择器保留完整树展示，但范围外节点置灰", () => {
+    const scoped = orgs.map((item) => ({ ...item, within_org_scope: item.id >= 3 }));
+    const tree = orgTreeSelectData(scoped, true);
+    expect(tree[0]?.disabled).toBe(true);
+    expect(tree[0]?.children?.[0]?.disabled).toBe(true);
+    expect(tree[0]?.children?.[0]?.children?.[0]?.disabled).toBe(false);
+    expect(tree[0]?.children?.[0]?.children?.[0]?.children?.[0]?.disabled).toBe(false);
   });
 });

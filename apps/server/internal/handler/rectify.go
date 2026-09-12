@@ -79,6 +79,9 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 	d.OpLog.Mark(c, "上报问题", req.Type)
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if issueWriteConflict(c, err) {
 			return
 		}
@@ -103,6 +106,9 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Update(c.Request.Context(), id, req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if issueWriteConflict(c, err) {
 			return
 		}
@@ -120,6 +126,9 @@ func (d *Deps) DeleteIssue(c *gin.Context) {
 		return
 	}
 	if err := d.Issue.Delete(c.Request.Context(), id); err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -140,6 +149,9 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Rectify(c.Request.Context(), id, req, false)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if errors.Is(err, database.ErrUnauth) {
 			response.Fail(c, 401, response.CodeUnauth, err.Error())
 			return
@@ -159,6 +171,9 @@ func (d *Deps) ReRectifyIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.ReRectify(c.Request.Context(), id, false)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
@@ -180,6 +195,9 @@ func (d *Deps) ReassignIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Reassign(c.Request.Context(), id, req)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.Fail(c, 404, response.CodeNotFound, "资源不存在")
 			return
@@ -202,6 +220,9 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 
 	n, err := d.Issue.Import(c.Request.Context(), req.Rows)
 	if err != nil {
+		if orgScopeFailure(c, err) {
+			return
+		}
 		if issueWriteConflict(c, err) {
 			return
 		}

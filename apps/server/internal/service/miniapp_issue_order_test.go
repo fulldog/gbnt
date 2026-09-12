@@ -42,14 +42,14 @@ func TestMiniappDeadlineOrderBeforePagination(t *testing.T) {
 					for i, arg := range args {
 						values[i] = arg.Value
 					}
-					want := []any{int64(0), int64(0), int64(1), test.overdueBefore, test.normalFrom, int64(3), int64(3)}
+					want := []any{int64(0), int64(1), int64(0), test.overdueBefore, test.normalFrom, int64(3), int64(3)}
 					if !reflect.DeepEqual(values, want) {
 						t.Fatalf("时间边界/分页参数 %v；期望 %v", values, want)
 					}
 				}},
 			)
 			db.NowFunc = func() time.Time { return now }
-			ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 1})
+			ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 1, IsSuperAdmin: true})
 			if _, _, err := (&IssueService{DB: db}).ListTodos(ctx, IssueQuery{Page: 2, Size: 3}); err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +96,7 @@ func TestMiniappIssueMySQLOrdering(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 1})
+	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 1, IsSuperAdmin: true})
 	service := &IssueService{DB: db}
 	now, _ := time.Parse(time.RFC3339, "2026-09-09T14:00:00Z")
 	for page, want := range [][]uint64{{2, 1, 4}, {3, 6, 5}, {8, 7, 10}, {9}} {

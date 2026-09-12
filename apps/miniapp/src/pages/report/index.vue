@@ -30,7 +30,7 @@ const nativeOverlayCovered = shallowRef(false);
 const busy = computed(() => Object.values(busyTypes.value).some(Boolean));
 const drafts = computed(() => ISSUE_TYPE_OPTIONS.filter(({ value }) => workspace.value.drafts[value]).map(({ value }) =>
   ({ type: value, draft: workspace.value.drafts[value]!, key: `${sessionRevision.value}:${value}:${revisions.value[value] || 0}` })));
-const { tree, loading: regionsLoading, error: regionsError, load: loadRegions } = useRegions();
+const { tree, loading: regionsLoading, error: regionsError, load: loadRegions } = useRegions(() => authStore.user);
 const access = useInspectionAccess({
   onNativeOverlayVisibilityChange: setNativeOverlayVisibility,
 });
@@ -132,6 +132,7 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
         <view v-for="entry in drafts" :key="entry.key" v-show="workspace.activeType === entry.type">
           <ReportTypeForm :draft="entry.draft" :visible="shown && access.ready.value && workspace.activeType === entry.type"
             :initial-position="access.position.value" :region-tree="tree" :regions-loading="regionsLoading" :regions-error="regionsError"
+            :user-org-id="authStore.user?.org_id ?? 0"
             @save="saveType(entry.type, $event)" @submitted="submitted(entry.type, $event)"
             @busy="busyTypes[entry.type] = $event" @native-overlay="setNativeOverlayVisibility"
             @retry-regions="loadRegions" @permission-denied="access.denyMedia" />

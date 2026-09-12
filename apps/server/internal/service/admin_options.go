@@ -14,11 +14,12 @@ var ErrOptionArgument = errors.New("org_id 必填且必须大于 0")
 
 // BusinessOrgOption 业务模块的最小组织候选；不包含系统管理字段。
 type BusinessOrgOption struct {
-	ID       uint64        `json:"id"`        // 组织 ID，必有
-	Name     string        `json:"name"`      // 组织名称，必有
-	Type     model.OrgType `json:"type"`      // root/district/street/village
-	ParentID uint64        `json:"parent_id"` // 父组织 ID，根为 0
-	Sort     int           `json:"sort"`      // 排序号，越小越靠前
+	ID             uint64        `json:"id"`               // 组织 ID，必有
+	Name           string        `json:"name"`             // 组织名称，必有
+	Type           model.OrgType `json:"type"`             // root/district/street/village
+	ParentID       uint64        `json:"parent_id"`        // 父组织 ID，根为 0
+	Sort           int           `json:"sort"`             // 排序号，越小越靠前
+	WithinOrgScope bool          `json:"within_org_scope"` // 当前账号是否可将业务落到该组织
 }
 
 // BusinessUserOption 业务模块人员候选，不泄露电话、密码或角色信息。
@@ -46,15 +47,24 @@ type BusinessUserOptionResult struct {
 	Selected *BusinessUserOption  `json:"selected"` // 合法已选人员；未传、已删除、停用或不在业务组织范围内为 null
 }
 
-// ListBusinessOrgOptions 提供业务授权内的轻量组织选项；本轮保持现有全局业务范围，不引入行级隔离。
+// ListBusinessOrgOptions 提供完整轻量组织选项并标记当前账号可写范围；列表筛选仍可查看全局组织。
 func (s *SysService) ListBusinessOrgOptions(ctx context.Context, streetsOnly bool) ([]BusinessOrgOption, error) {
 	q := s.db(ctx).Model(&model.SysOrg{})
 	if streetsOnly {
 		q = q.Where("type = ?", model.OrgTypeStreet)
 	}
 	list := make([]BusinessOrgOption, 0)
-	err := q.Select("id", "name", "type", "parent_id", "sort").Order("sort ASC, id ASC").Find(&list).Error
-	return list, err
+	if err := q.Select("id", "name", "type", "parent_id", "sort").Order("sort ASC, id ASC").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	scope, err := displayOrgScope(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].WithinOrgScope = scope.Allows(list[i].ID)
+	}
+	return list, nil
 }
 
 func requireOptionOrg(db *gorm.DB, orgID uint64) error {
@@ -110,6 +120,9 @@ func (s *SysService) ListReporterOptions(ctx context.Context, orgID uint64, quer
 	if err := requireOptionOrg(s.db(ctx), orgID); err != nil {
 		return nil, err
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), orgID); err != nil {
+		return nil, err
+	}
 	return listBusinessUserOptions(s.db(ctx), orgID, query)
 }
 
@@ -119,8 +132,14 @@ func (s *IssueService) ListAssigneeOptions(ctx context.Context, issueID uint64, 
 	if err := s.db(ctx).Select("id", "org_id").First(&issue, issueID).Error; err != nil {
 		return nil, err
 	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), issue.OrgID); err != nil {
+		return nil, err
+	}
 	if query.OrgID != 0 {
 		issue.OrgID = query.OrgID
+	}
+	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), issue.OrgID); err != nil {
+		return nil, err
 	}
 	if err := requireOptionOrg(s.db(ctx), issue.OrgID); err != nil {
 		return nil, err
