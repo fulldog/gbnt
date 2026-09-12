@@ -18,8 +18,16 @@ export function setupSfc(path: string, props: object, imports: Record<string, un
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   });
   const module = { exports: {} as { default: { setup: (props: object, context: object) => Record<string, unknown> } } };
+  const vueRuntime = {
+    ...vue,
+    // setupSfc 不创建组件实例，需补出 defineModel 编译后的 useModel 行为。
+    useModel: (modelProps: Record<string, unknown>, name: string) => vue.computed({
+      get: () => modelProps[name],
+      set: (value) => emit(`update:${name}`, value),
+    }),
+  };
   const require = (name: string) => {
-    if (name === "vue") return vue;
+    if (name === "vue") return vueRuntime;
     if (name === "@gbnt/api-client") return apiClient;
     if (name in imports) return imports[name];
     throw new Error(`Unexpected component import: ${name}`);

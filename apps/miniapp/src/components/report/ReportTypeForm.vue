@@ -51,6 +51,7 @@ const emit = defineEmits<{
   busy: [value: boolean];
   retryRegions: [];
   permissionDenied: [];
+  nativeOverlay: [visible: boolean];
 }>();
 const step = shallowRef(props.draft.step);
 const form = reactive<ReportFormState>(JSON.parse(JSON.stringify(props.draft.form)));
@@ -81,7 +82,9 @@ const {
   busy: locationBusy,
   choose,
   refresh,
-} = useLocation();
+} = useLocation({
+  onNativeOverlayVisibilityChange: (visible) => emit("nativeOverlay", visible),
+});
 const regionTree = computed(() => props.regionTree);
 const regionsLoading = computed(() => props.regionsLoading);
 const regionsError = computed(() => props.regionsError);
@@ -462,6 +465,7 @@ onBeforeUnmount(() => {
                 @update:model-value="updatePanoramaPhotos"
                 @pending="setPanoramaPending"
                 @permission-denied="emit('permissionDenied')"
+                @native-overlay="emit('nativeOverlay', $event)"
               />
             </view>
           </template>
@@ -497,6 +501,7 @@ onBeforeUnmount(() => {
           @photos="updateQuizPhotos"
           @pending="setPhotosPending"
           @permission-denied="emit('permissionDenied')"
+          @native-overlay="emit('nativeOverlay', $event)"
         />
         <view v-if="needsRectify && step === totalSteps - 1" class="form-field plan-field">
           <text class="form-label"><text class="required">*</text>计划整改完成日期</text>

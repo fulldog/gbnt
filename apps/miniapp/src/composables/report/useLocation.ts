@@ -1,6 +1,7 @@
 import { computed, shallowRef } from "vue";
 import { hasValidCoordinates } from "@/utils/issue-display";
 import { showDeviceFailure } from "@/utils/device-permissions";
+import { beginNativeOverlay, type NativeOverlayVisibilityChange } from "@/utils/native-overlay";
 
 export interface SelectedLocation {
   address: string;
@@ -20,38 +21,53 @@ export interface LocationCenter {
   longitude: number;
 }
 
+export interface LocationOptions {
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange;
+}
+
 type LocationAction = "map" | "refresh" | null;
 
-function openLocationPicker(center?: LocationCenter): Promise<SelectedLocation | null> {
+function openLocationPicker(
+  center?: LocationCenter,
+  onNativeOverlayVisibilityChange?: NativeOverlayVisibilityChange,
+): Promise<SelectedLocation | null> {
   return new Promise((resolve, reject) => {
-    uni.chooseLocation({
-      ...(center ? { latitude: center.latitude, longitude: center.longitude } : {}),
-      success: (result: ChooseLocationResult) => {
-        const latitude = Number(result.latitude);
-        const longitude = Number(result.longitude);
-        if (!hasValidCoordinates(latitude, longitude)) {
-          reject(new Error("选中的坐标无效，请重新选择现场位置"));
-          return;
-        }
-        const address = [result.address, result.name]
-          .map((item) => item?.trim())
-          .filter(Boolean)
-          .join(" ");
-        resolve({ address, latitude, longitude });
-      },
-      fail: (error) => {
-        if (error.errMsg?.includes("cancel")) {
+    const closeOverlay = beginNativeOverlay(onNativeOverlayVisibilityChange);
+    try {
+      uni.chooseLocation({
+        ...(center ? { latitude: center.latitude, longitude: center.longitude } : {}),
+        success: (result: ChooseLocationResult) => {
+          closeOverlay();
+          const latitude = Number(result.latitude);
+          const longitude = Number(result.longitude);
+          if (!hasValidCoordinates(latitude, longitude)) {
+            reject(new Error("选中的坐标无效，请重新选择现场位置"));
+            return;
+          }
+          const address = [result.address, result.name]
+            .map((item) => item?.trim())
+            .filter(Boolean)
+            .join(" ");
+          resolve({ address, latitude, longitude });
+        },
+        fail: (error) => {
+          closeOverlay();
+          if (error.errMsg?.includes("cancel")) {
+            resolve(null);
+            return;
+          }
+          showDeviceFailure(error, "选择现场位置", onNativeOverlayVisibilityChange);
           resolve(null);
-          return;
-        }
-        showDeviceFailure(error, "选择现场位置");
-        resolve(null);
-      },
-    });
+        },
+      });
+    } catch (error) {
+      closeOverlay();
+      reject(error);
+    }
   });
 }
 
-export function useLocation() {
+export function useLocation(options: LocationOptions = {}) {
   const action = shallowRef<LocationAction>(null);
   const choosing = computed(() => action.value === "map");
   const refreshing = computed(() => action.value === "refresh");
@@ -61,7 +77,7 @@ export function useLocation() {
     if (busy.value) return null;
     action.value = "map";
     try {
-      return await openLocationPicker(center);
+      return await openLocationPicker(center, options.onNativeOverlayVisibilityChange);
     } finally {
       action.value = null;
     }
@@ -81,13 +97,13 @@ export function useLocation() {
       if (!hasValidCoordinates(center.latitude, center.longitude)) {
         throw new Error("未获取到有效定位，请开启手机定位后重试");
       }
-      return await openLocationPicker(center);
+      return await openLocationPicker(center, options.onNativeOverlayVisibilityChange);
     } catch (cause) {
       const error = cause as { message?: string; errMsg?: string };
       if (error.message && !error.errMsg) {
         uni.showToast({ title: error.message, icon: "none", duration: 3000 });
       } else {
-        showDeviceFailure(error, "重新定位");
+        showDeviceFailure(error, "重新定位", options.onNativeOverlayVisibilityChange);
       }
       return null;
     } finally {
