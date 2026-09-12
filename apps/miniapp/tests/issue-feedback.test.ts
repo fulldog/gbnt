@@ -74,6 +74,12 @@ describe("整单整改反馈", () => {
     await state.submitRectification({ note: "修复", photoPaths: ["/p"] });
     expect(api.issues.submitFeedback).not.toHaveBeenCalled();
   });
+  it("未指派工单可由当前用户提交反馈", async () => {
+    const { state } = detail();
+    await state.loadDetail();
+    state.issue.value = { ...state.issue.value, assignee_user: 0 };
+    expect(state.canRectify.value).toBe(true);
+  });
   it("离开页面后迟到的照片上传结果不能再提交反馈", async () => {
     const { state, api, unload } = detail();
     await state.loadDetail();

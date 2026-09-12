@@ -39,7 +39,7 @@ func (s *IssueService) DeleteReported(ctx context.Context, id uint64) error {
 	return s.deleteIssue(ctx, id, user.ID)
 }
 
-// SubmitFeedback 一份说明和照片原子完成本轮剩余整改项；仅整改人本人可提交。
+// SubmitFeedback 一份说明和照片原子完成本轮剩余整改项；仅未指派或当前用户为整改人时可提交，成功后认领为当前用户。
 func (s *IssueService) SubmitFeedback(ctx context.Context, id uint64, in IssueFeedbackInput) (*IssueVO, error) {
 	if _, err := database.UserFromContext(ctx); err != nil {
 		return nil, err

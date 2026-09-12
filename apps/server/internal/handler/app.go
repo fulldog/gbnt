@@ -86,7 +86,7 @@ func (d *Deps) AppDeleteIssue(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// AppSubmitFeedback 小程序整单整改；必传说明、照片和当前轮次，后端原子完成剩余项。
+// AppSubmitFeedback 小程序整单整改；仅 assignee_user 为 0 或当前用户时可改；必传说明、照片和当前轮次。
 func (d *Deps) AppSubmitFeedback(c *gin.Context) {
 	d.OpLog.Mark(c, "小程序整改反馈", c.Param("id"))
 	id, ok := parseID(c)
@@ -239,7 +239,7 @@ func (d *Deps) appIssuePayload(c *gin.Context, item *service.IssueVO) {
 	response.OK(c, list[0])
 }
 
-// AppListTodos 小程序待办：筛选 type/status/org_id/project_year/keyword/page/size。
+// AppListTodos 小程序待办：筛选 type/status/org_id/project_year/keyword/page/size；仅未指派或指派给当前用户的工单。
 // status 空或 all 表示不限状态；分页前按逾期、即将逾期、正常排序，同组剩余时间倒序。
 // org_id>0 时含该组织及下级，并与登录用户组织子树取交集。
 func (d *Deps) AppListTodos(c *gin.Context) {
@@ -336,9 +336,10 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	// [PRD] App 端上报人、责任人固定为当前登录用户，忽略外部传入值。
+	// [PRD] App 上报人固定为当前登录用户；整改人不自动填充，忽略外部传入的 assignee_user。
 	req.ReportUserID = user.ID
-	req.AssigneeUser = user.ID
+	req.AssigneeUser = 0
+	req.AllowUnassignedAssignee = true
 	item, err := d.Issue.Create(c.Request.Context(), req)
 	if err != nil {
 		if issueWriteConflict(c, err) {

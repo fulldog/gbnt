@@ -7,6 +7,7 @@ import type { MiniappIssueListResult } from "./types";
 
 export function createTodosApi(client: ApiClient) {
   return {
+    /** 待办列表：服务端仅返回未指派或指派给当前用户的工单。 */
     async list(query: MiniappTodoQuery = {}): Promise<MiniappIssueListResult> {
       const response = await client.request<unknown>("/api/app/todos", {
         query: { ...query },

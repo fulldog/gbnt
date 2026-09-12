@@ -6,7 +6,7 @@ import type {
 import { parseIssue } from "./response";
 import type { MiniappIssue } from "./types";
 
-/** 一份反馈完成本轮尚未完成的整改项；只能由整改人本人提交。 */
+/** 一份反馈完成本轮尚未完成的整改项；未指派或当前用户为整改人时可提交。 */
 export interface IssueFeedbackInput {
   /** 去除首尾空白后 1–500 字。 */
   note: string;

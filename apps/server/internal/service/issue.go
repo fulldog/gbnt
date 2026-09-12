@@ -49,7 +49,8 @@ type IssueInput struct {
 	PlanDate                string          `json:"plan_date"`                  // 计划整改完成日 YYYY-MM-DD；需整改时必填
 	ReporterSignatureFileID string          `json:"reporter_signature_file_id"` // 排查电子签名 file_id（新建必填）
 	ReportUserID            uint64          `json:"report_user_id"`             // 上报人账号：App 由登录用户注入；后台旧版必填，新版手工填报可不关联账号
-	AssigneeUser            uint64          `json:"assignee_user"`              // 需整改时必填；App 注入当前用户；须启用；用户 org_id=0 不限组织，否则须与表单 org_id 同枝（同一节点或互为上下级）
+	AssigneeUser            uint64          `json:"assignee_user"`              // 管理端需整改时必填；App 上报固定为 0 不自动填充；非 0 须启用且用户组织与表单 org_id 同枝
+	AllowUnassignedAssignee bool            `json:"-"`                          // 仅 App 上报置 true：需整改也可不指定整改人
 	TypeExt                 json.RawMessage `json:"type_ext"`                   // 类型扩展 JSON（含 checklist[] QuizBool，新建必填）
 	Status                  string          `json:"status"`                     // 兼容历史请求；创建忽略该值，状态由排查清单推导
 }
@@ -116,7 +117,7 @@ func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
 		}
 	}
 	var records []model.IssueRectifyRecord
-	if err := s.DB.Where("issue_id = ?", item.ID).Order("id DESC").Find(&records).Error; err != nil {
+	if err := s.DB.Where("issue_id = ?", item.ID).Group("issue_id,round,created_at").Order("id DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	out := make([]RectifyRecordVO, 0, len(records))
@@ -267,6 +268,7 @@ func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, o
 
 // ListTodos 小程序待办：已逾期、即将逾期、正常依次排列，同组剩余时间倒序。
 // 权限范围为登录用户组织及下属（用户 OrgID=0 不限）；query org_id>0 再与该组织子树取交集。
+// [PRD] 仅返回 assignee_user IN (0, 当前用户)。
 func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, int64, error) {
 	if q.Status == "all" {
 		q.Status = ""
@@ -290,6 +292,7 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 	if err != nil {
 		return nil, 0, err
 	}
+	db = db.Where("assignee_user IN (?, ?)", int64(0), int64(user.ID))
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -487,7 +490,7 @@ func (s *IssueService) Create(ctx context.Context, in IssueInput) (*IssueVO, err
 		return nil, err
 	}
 	if needsRectify {
-		if in.AssigneeUser == 0 {
+		if in.AssigneeUser == 0 && !in.AllowUnassignedAssignee {
 			return nil, errors.New("请指定整改人")
 		}
 		if strings.TrimSpace(in.PlanDate) == "" {
@@ -618,14 +621,12 @@ func reRectifyGate(status string, needsRectify bool) error {
 	return nil
 }
 
+// assertAppAssignee [PRD] App 整改/反馈仅允许操作未指派（0）或已指派给当前用户的工单。
 func assertAppAssignee(item *model.Issue, userID uint64) error {
-	if item.AssigneeUser == 0 {
-		return errors.New("该工单尚未指派整改人，请联系管理员指派")
+	if item.AssigneeUser == 0 || item.AssigneeUser == userID {
+		return nil
 	}
-	if item.AssigneeUser != userID {
-		return errors.New("该问题已由他人认领整改")
-	}
-	return nil
+	return errors.New("该问题已由他人认领整改")
 }
 
 // Rectify 提交分项整改：仅本轮记录覆盖全部需整改 type 才转 done，否则 pending。

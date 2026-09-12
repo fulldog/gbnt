@@ -243,6 +243,7 @@ type IssueCreateByType =
   | { type: "forest"; type_ext: ForestTypeExt }
   | { type: "transformer"; type_ext: TransformerTypeExt };
 
+/** 小程序上报；服务端不自动填充整改人，忽略客户端 assignee_user。 */
 export type MiniappCreateIssueInput = IssueCreateCommon & IssueCreateByType;
 export type AdminCreateIssueInput = IssueCreateCommon & IssueCreateByType & {
   /** 旧版必填；新版手工填报可不关联账号。 */
@@ -552,6 +553,7 @@ export interface AdminLoginInput {
   captcha?: string;
 }
 
+/** 小程序待办筛选；结果限定 assignee_user 为 0 或当前用户。 */
 export interface MiniappTodoQuery extends IssueListQuery {}
 
 export interface MiniappRegionsResult {

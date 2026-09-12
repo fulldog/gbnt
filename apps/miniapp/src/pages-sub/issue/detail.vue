@@ -63,7 +63,7 @@ const canRectify = computed(
     Boolean(issue.value) &&
     (issue.value?.status === "new" || issue.value?.status === "pending") &&
     editableQuizzes.value.length > 0 &&
-    Boolean(auth.user?.id && issue.value?.assignee_user === auth.user.id),
+    Boolean(auth.user?.id && (issue.value?.assignee_user === 0 || issue.value?.assignee_user === auth.user.id)),
 );
 const hasUnsupportedRectification = computed(
   () =>
@@ -365,9 +365,6 @@ onUnload(() => {
         </text>
       </view>
 
-      <view v-if="(issue.status === 'new' || issue.status === 'pending') && !issue.assignee_user" class="detail-page__warning">
-        <text>该工单尚未指派整改人，请联系管理员指派。</text>
-      </view>
     </template>
   </view>
 </template>

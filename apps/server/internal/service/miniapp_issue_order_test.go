@@ -35,11 +35,14 @@ func TestMiniappDeadlineOrderBeforePagination(t *testing.T) {
 					if !strings.Contains(query, "END DESC, id DESC") || !strings.Contains(query, "LAST_DAY") {
 						t.Fatalf("缺少剩余时间倒序或日期有效性检查：%s", query)
 					}
+					if !strings.Contains(query, "assignee_user IN") {
+						t.Fatalf("待办必须按未指派或当前用户筛选：%s", query)
+					}
 					values := make([]any, len(args))
 					for i, arg := range args {
 						values[i] = arg.Value
 					}
-					want := []any{int64(0), test.overdueBefore, test.normalFrom, int64(3), int64(3)}
+					want := []any{int64(0), int64(0), int64(1), test.overdueBefore, test.normalFrom, int64(3), int64(3)}
 					if !reflect.DeepEqual(values, want) {
 						t.Fatalf("时间边界/分页参数 %v；期望 %v", values, want)
 					}
@@ -72,7 +75,7 @@ func TestMiniappIssueMySQLOrdering(t *testing.T) {
 	sqlDB.SetMaxIdleConns(1)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	for _, query := range []string{
-		"CREATE TEMPORARY TABLE issues (id BIGINT UNSIGNED PRIMARY KEY, type VARCHAR(32), type_ext JSON, status VARCHAR(16), plan_date VARCHAR(32), created_at DATETIME, is_delete INT NOT NULL DEFAULT 0)",
+		"CREATE TEMPORARY TABLE issues (id BIGINT UNSIGNED PRIMARY KEY, type VARCHAR(32), type_ext JSON, status VARCHAR(16), plan_date VARCHAR(32), created_at DATETIME, is_delete INT NOT NULL DEFAULT 0, assignee_user BIGINT UNSIGNED NOT NULL DEFAULT 0)",
 		"CREATE TEMPORARY TABLE issue_rectify_records (id BIGINT UNSIGNED PRIMARY KEY, issue_id BIGINT UNSIGNED, is_delete INT NOT NULL DEFAULT 0)",
 	} {
 		if err := db.Exec(query).Error; err != nil {
@@ -89,7 +92,7 @@ func TestMiniappIssueMySQLOrdering(t *testing.T) {
 		{7, "new", "", 0}, {8, "pending", "2026-02-30", 0}, {9, "done", "2020-01-01", 0}, {10, "done", "", 0},
 		{99, "new", "2026-09-09", 1},
 	} {
-		if err := db.Exec("INSERT INTO issues VALUES (?, 'well', '{}', ?, ?, '2026-09-01 10:00:00', ?)", row.id, row.status, row.plan, row.deleted).Error; err != nil {
+		if err := db.Exec("INSERT INTO issues VALUES (?, 'well', '{}', ?, ?, '2026-09-01 10:00:00', ?, 0)", row.id, row.status, row.plan, row.deleted).Error; err != nil {
 			t.Fatal(err)
 		}
 	}

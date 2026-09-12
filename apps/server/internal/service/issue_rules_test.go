@@ -258,8 +258,8 @@ func TestNeededQuizTypesAndCover(t *testing.T) {
 
 func TestAssertAppAssignee(t *testing.T) {
 	t.Parallel()
-	if err := assertAppAssignee(&model.Issue{AssigneeUser: 0}, 2); err == nil || !strings.Contains(err.Error(), "尚未指派") {
-		t.Fatalf("未指派工单不能由任意用户认领：%v", err)
+	if err := assertAppAssignee(&model.Issue{AssigneeUser: 0}, 2); err != nil {
+		t.Fatalf("未指派工单应允许当前用户反馈：%v", err)
 	}
 	if err := assertAppAssignee(&model.Issue{AssigneeUser: 2}, 2); err != nil {
 		t.Fatal(err)
