@@ -117,7 +117,7 @@ func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
 		}
 	}
 	var records []model.IssueRectifyRecord
-	if err := s.DB.Where("issue_id = ?", item.ID).Group("issue_id,round,created_at").Order("id DESC").Find(&records).Error; err != nil {
+	if err := s.DB.Where("issue_id = ?", item.ID).Order("id DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	out := make([]RectifyRecordVO, 0, len(records))
