@@ -121,13 +121,21 @@ func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
 		return nil, err
 	}
 	out := make([]RectifyRecordVO, 0, len(records))
+
+	var filter = make(map[string]bool)
+
 	for i := range records {
+		var key = fmt.Sprintf("%d%d%s", records[i].IssueID, records[i].Round, records[i].CreatedAt.String())
+		if filter[key] {
+			continue
+		}
 		ids := parseFileIDJSON(records[i].PhotoFileIDs)
 		photos := []FileItem{}
 		if s.Attach != nil && len(ids) > 0 {
 			photos, _ = s.Attach.lookupExisting(ctx, ids)
 		}
 		out = append(out, RectifyRecordVO{IssueRectifyRecord: records[i], Photos: photos})
+		filter[key] = true
 	}
 	vo.RectifyRecords = out
 	return vo, nil
