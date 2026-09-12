@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	"gorm.io/gorm"
 )
@@ -23,6 +24,7 @@ type UserInfo struct {
 	OrgID        uint64
 	RoleID       uint64
 	TokenVer     int
+	AppTokenVer  int
 	IsSuperAdmin bool
 }
 
@@ -69,11 +71,48 @@ func fillCreatedAudit(db *gorm.DB) {
 	if uid == 0 {
 		return
 	}
-	if f := db.Statement.Schema.LookUpField("CreatedID"); f != nil {
-		_ = f.Set(db.Statement.Context, db.Statement.ReflectValue, uid)
+	created := db.Statement.Schema.LookUpField("CreatedID")
+	updated := db.Statement.Schema.LookUpField("UpdatedID")
+	if created == nil && updated == nil {
+		return
 	}
-	if f := db.Statement.Schema.LookUpField("UpdatedID"); f != nil {
-		_ = f.Set(db.Statement.Context, db.Statement.ReflectValue, uid)
+	// 批量 Create([]T) 时 ReflectValue 是 slice，不能按结构体 Field 赋值。
+	for _, dest := range auditDestValues(db.Statement.ReflectValue) {
+		if created != nil {
+			_ = created.Set(db.Statement.Context, dest, uid)
+		}
+		if updated != nil {
+			_ = updated.Set(db.Statement.Context, dest, uid)
+		}
+	}
+}
+
+func auditDestValues(rv reflect.Value) []reflect.Value {
+	if !rv.IsValid() {
+		return nil
+	}
+	for rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+		out := make([]reflect.Value, 0, rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			item := rv.Index(i)
+			if item.Kind() == reflect.Ptr {
+				if item.IsNil() {
+					continue
+				}
+				item = item.Elem()
+			}
+			out = append(out, item)
+		}
+		return out
+	default:
+		return []reflect.Value{rv}
 	}
 }
 

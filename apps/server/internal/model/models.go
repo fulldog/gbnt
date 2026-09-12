@@ -78,7 +78,8 @@ type SysUser struct {
 	Sort         *int32 `gorm:"type:int;not null;default:100;comment:排序号 越小越靠前" json:"sort"` // 指针保留显式 0，避免 GORM 将零值替换为默认 100
 	Status       int    `gorm:"default:1;comment:状态 1启用 0停用" json:"status"`
 	IsSuperAdmin bool   `gorm:"column:is_super_admin;index;default:0;comment:是否超级管理员 全库仅允许一名" json:"is_super_admin"`
-	TokenVer     int    `gorm:"column:token_ver;default:0;comment:令牌版本 登录、改密或强制下线时递增" json:"-"`
+	TokenVer     int    `gorm:"column:token_ver;default:0;comment:管理后台令牌版本 后台登录、改密或重置时递增" json:"-"`
+	AppTokenVer  int    `gorm:"column:app_token_ver;default:0;comment:小程序令牌版本 小程序登录、改密或重置时递增" json:"-"`
 	Base
 }
 

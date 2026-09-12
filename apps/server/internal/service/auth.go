@@ -28,17 +28,17 @@ type AuthService struct {
 // ErrMiniappSuperAdmin 超级管理员禁止登录小程序。
 var ErrMiniappSuperAdmin = errors.New("超级管理员不能登录小程序")
 
-// Login 校验账密并签发 JWT。
-// [PRD] 登录成功后递增 token_ver，使该账号此前所有 JWT 立即失效（重复登录踢下线）。
+// Login 校验账密并签发管理后台 JWT。
+// [PRD] 仅递增 token_ver，踢掉该账号其它管理后台会话；不影响小程序。
 func (s *AuthService) Login(username, password string) (*model.SysUser, string, time.Time, error) {
 	user, err := s.authenticate(username, password)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
-	return s.issueLoginToken(user)
+	return s.issueLoginToken(user, jwtutil.ClientWeb)
 }
 
-// LoginMiniapp 小程序登录：账密通过后拒绝超级管理员，且不递增 token_ver、不签发 token。
+// LoginMiniapp 小程序登录：账密通过后拒绝超级管理员；仅递增 app_token_ver，不影响管理后台。
 func (s *AuthService) LoginMiniapp(username, password string) (*model.SysUser, string, time.Time, error) {
 	user, err := s.authenticate(username, password)
 	if err != nil {
@@ -47,7 +47,7 @@ func (s *AuthService) LoginMiniapp(username, password string) (*model.SysUser, s
 	if user.IsSuperAdmin {
 		return nil, "", time.Time{}, ErrMiniappSuperAdmin
 	}
-	return s.issueLoginToken(user)
+	return s.issueLoginToken(user, jwtutil.ClientApp)
 }
 
 func (s *AuthService) authenticate(username, password string) (*model.SysUser, error) {
@@ -64,33 +64,55 @@ func (s *AuthService) authenticate(username, password string) (*model.SysUser, e
 	return &user, nil
 }
 
-func (s *AuthService) issueLoginToken(user *model.SysUser) (*model.SysUser, string, time.Time, error) {
-	if err := s.bumpLoginTokenVer(user); err != nil {
+func (s *AuthService) issueLoginToken(user *model.SysUser, client string) (*model.SysUser, string, time.Time, error) {
+	client = jwtutil.NormalizeClient(client)
+	if err := s.bumpLoginTokenVer(user, client); err != nil {
 		return nil, "", time.Time{}, err
 	}
-	token, exp, err := s.JWT.Sign(user.ID, user.TokenVer)
+	ver := user.TokenVer
+	if client == jwtutil.ClientApp {
+		ver = user.AppTokenVer
+	}
+	token, exp, err := s.JWT.Sign(user.ID, ver, client)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
 	return user, token, exp, nil
 }
 
-// bumpLoginTokenVer 事务内递增令牌版本并写回 user.TokenVer，供签发使用。
-func (s *AuthService) bumpLoginTokenVer(user *model.SysUser) error {
+// bumpLoginTokenVer 事务内递增对应端令牌版本并写回 user，供签发使用。
+func (s *AuthService) bumpLoginTokenVer(user *model.SysUser, client string) error {
 	if user == nil || user.ID == 0 {
 		return errors.New("账号或密码不正确")
 	}
+	column := "token_ver"
+	if jwtutil.NormalizeClient(client) == jwtutil.ClientApp {
+		column = "app_token_ver"
+	}
 	return s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Update("token_ver", gorm.Expr("token_ver + 1")).Error; err != nil {
+		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Update(column, gorm.Expr(column+" + 1")).Error; err != nil {
 			return err
 		}
 		var ver int
-		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Select("token_ver").Scan(&ver).Error; err != nil {
+		if err := tx.Model(&model.SysUser{}).Where("id = ?", user.ID).Select(column).Scan(&ver).Error; err != nil {
 			return err
 		}
-		user.TokenVer = ver
+		if column == "app_token_ver" {
+			user.AppTokenVer = ver
+		} else {
+			user.TokenVer = ver
+		}
 		return nil
 	})
+}
+
+func invalidateAllSessions(updates map[string]interface{}) map[string]interface{} {
+	if updates == nil {
+		updates = map[string]interface{}{}
+	}
+	updates["token_ver"] = gorm.Expr("token_ver + 1")
+	updates["app_token_ver"] = gorm.Expr("app_token_ver + 1")
+	return updates
 }
 
 // ChangePasswordReq 本人修改密码。
@@ -100,7 +122,7 @@ type ChangePasswordReq struct {
 	ConfirmPassword string `json:"confirm_password"` // 确认新密码（必填；须与 new_password 一致）
 }
 
-// ChangePassword 当前登录用户改密：校验旧密码与确认密码后写入新哈希，并递增 token_ver。
+// ChangePassword 当前登录用户改密：校验旧密码与确认密码后写入新哈希，并同时作废管理后台与小程序会话。
 func (s *AuthService) ChangePassword(ctx context.Context, userID uint64, oldPwd, newPwd, confirmPwd string) error {
 	oldPwd = strings.TrimSpace(oldPwd)
 	newPwd = strings.TrimSpace(newPwd)
@@ -134,10 +156,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint64, oldPwd,
 	if err != nil {
 		return err
 	}
-	return s.DB.WithContext(ctx).Model(&user).Updates(map[string]interface{}{
-		"password":  string(hash),
-		"token_ver": gorm.Expr("token_ver + 1"),
-	}).Error
+	return s.DB.WithContext(ctx).Model(&user).Updates(invalidateAllSessions(map[string]interface{}{
+		"password": string(hash),
+	})).Error
 }
 
 // Logout 将当前 token 的 jti 加入黑名单（TTL=剩余有效期）。
@@ -186,6 +207,7 @@ func UserInfoFromModel(u *model.SysUser) *database.UserInfo {
 		OrgID:        u.OrgID,
 		RoleID:       u.RoleID,
 		TokenVer:     u.TokenVer,
+		AppTokenVer:  u.AppTokenVer,
 		IsSuperAdmin: u.IsSuperAdmin,
 	}
 }

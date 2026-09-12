@@ -204,7 +204,7 @@ onMounted(() => {
           :show-file-list="false"
           :http-request="importUsers"
         >
-          <ElTooltip content="角色ID填写英文标识（如 admin、test）；兼容旧文件的数字ID或唯一角色名称。">
+          <ElTooltip content="请填写角色名称；名称不唯一时无法导入，请先在系统中区分角色。">
             <ElButton :icon="Upload">导入 Excel</ElButton>
           </ElTooltip>
         </ElUpload>

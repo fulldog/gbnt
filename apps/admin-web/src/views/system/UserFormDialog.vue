@@ -114,7 +114,7 @@ async function submit(): Promise<void> {
         <ElFormItem label="手机号"><ElInput v-model="form.phone" maxlength="32" /></ElFormItem>
         <ElFormItem label="角色" prop="role_id">
           <ElSelect v-model="form.role_id" class="w-full" filterable>
-            <ElOption v-for="role in roles" :key="role.id" :label="`${role.name}（角色ID：${role.code || '未配置'}）`" :value="role.id" :disabled="role.status !== 1" />
+            <ElOption v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" :disabled="role.status !== 1" />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="排序" prop="sort">

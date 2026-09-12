@@ -455,8 +455,8 @@ export interface RoleInput {
 
 /** 一次创建角色和授权；名称由后端生成，角色默认启用。 */
 export interface CreateRoleInput {
-  /** 英文开头，支持英文、数字、_、-，最多64位；服务端统一小写并保证唯一。 */
-  code: string;
+  /** 可选；服务端忽略并自行生成英文标识。 */
+  code?: string;
   desc: string;
   api_ids: number[];
 }

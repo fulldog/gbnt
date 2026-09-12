@@ -26,7 +26,7 @@ func TestRoleCodeBackfillChangesOnlyMissingCodesAndRetriesCollision(t *testing.T
 				t.Error("仅允许回填缺失标识", query)
 			}
 		}},
-		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`", Check: check("admin", 1)},
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`", Check: check("role-1", 1)},
 		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`", Check: check("role-2", 2), Err: &mysql.MySQLError{Number: 1062}},
 		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`", Check: check("role-2-1", 2)},
 		testutil.QueryStep{Kind: "commit"},
@@ -68,7 +68,7 @@ func TestRoleCodeMySQLAdditiveMigration(t *testing.T) {
 	if err := db.Unscoped().Order("id").Find(&roles).Error; err != nil {
 		t.Fatal(err)
 	}
-	for i, code := range []string{"admin", "role-2", "role-3"} {
+	for i, code := range []string{"role-1", "role-2", "role-3"} {
 		if roles[i].ID != uint64(i+1) || roles[i].Code == nil || *roles[i].Code != code {
 			t.Fatalf("迁移标识异常: %+v", roles)
 		}

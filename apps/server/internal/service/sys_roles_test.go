@@ -186,16 +186,28 @@ func TestNewInvalidRolePermissionsAreRejected(t *testing.T) {
 			}
 		})
 	}
-	svc := SysService{}
-	if _, err := svc.UpdateRole(context.Background(), 1, UpdateRoleInput{}); err == nil {
-		t.Fatal("管理员角色不能修改")
+}
+
+func TestRoleIdOneIsOrdinary(t *testing.T) {
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id", "name", "desc", "status", "code"}, Rows: [][]driver.Value{{int64(1), "历史角色", "备注", int64(1), "role-1"}}},
+		testutil.QueryStep{Kind: "commit"})
+	svc := SysService{DB: db}
+	role, err := svc.UpdateRole(context.Background(), 1, UpdateRoleInput{})
+	if err != nil || role == nil || role.ID != 1 {
+		t.Fatalf("id=1 应可更新: %+v %v", role, err)
 	}
 }
 
 func TestRoleDeleteProtectionsStillApply(t *testing.T) {
-	svc := SysService{}
-	if err := svc.DeleteRole(context.Background(), 1); err == nil {
-		t.Fatal("内置管理员不能删除")
+	svc := SysService{DB: testutil.NewTransactionDB(t,
+		testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}},
+		testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`"},
+		testutil.QueryStep{Kind: "commit"},
+	)}
+	if err := svc.DeleteRole(context.Background(), 1); err != nil {
+		t.Fatalf("无绑定用户时应可删除 id=1: %v", err)
 	}
 	svc.DB = testutil.NewQueryDB(t, testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(1)}}})
 	if err := svc.DeleteRole(context.Background(), 7); err == nil || !strings.Contains(err.Error(), "仍有用户绑定") {

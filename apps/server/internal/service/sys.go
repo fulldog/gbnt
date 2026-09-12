@@ -361,6 +361,7 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 		}
 		updates["password"] = string(hash)
 		updates["token_ver"] = gorm.Expr("token_ver + 1")
+		updates["app_token_ver"] = gorm.Expr("app_token_ver + 1")
 	}
 	if err := s.db(ctx).Model(&u).Updates(updates).Error; err != nil {
 		return nil, err
@@ -380,7 +381,7 @@ func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
 	return s.db(ctx).Delete(&model.SysUser{}, id).Error
 }
 
-// ResetPassword 将密码重置为账户名（username），并递增 token_ver。
+// ResetPassword 将密码重置为账户名（username），并同时作废管理后台与小程序会话。
 func (s *SysService) ResetPassword(ctx context.Context, id uint64) error {
 	var u model.SysUser
 	if err := s.db(ctx).First(&u, id).Error; err != nil {
@@ -393,10 +394,9 @@ func (s *SysService) ResetPassword(ctx context.Context, id uint64) error {
 	if err != nil {
 		return err
 	}
-	return s.db(ctx).Model(&u).Updates(map[string]interface{}{
-		"password":  string(hash),
-		"token_ver": gorm.Expr("token_ver + 1"),
-	}).Error
+	return s.db(ctx).Model(&u).Updates(invalidateAllSessions(map[string]interface{}{
+		"password": string(hash),
+	})).Error
 }
 
 func (s *SysService) ListRoles() ([]model.SysRole, error) {
@@ -410,12 +410,6 @@ func (s *SysService) ListRoles() ([]model.SysRole, error) {
 }
 
 func (s *SysService) DeleteRole(ctx context.Context, id uint64) error {
-
-	if id == perm.SuperAdminRoleID {
-
-		return errors.New("管理员角色不可删除")
-
-	}
 
 	var cnt int64
 
@@ -456,12 +450,6 @@ func (s *SysService) ListAPIs() ([]model.SysAPI, error) {
 // GetRoleAPIs 返回角色已授权 API id 列表。
 
 func (s *SysService) GetRoleAPIs(roleID uint64) ([]uint64, error) {
-
-	if roleID == perm.SuperAdminRoleID {
-
-		return nil, nil
-
-	}
 
 	var ids []uint64
 

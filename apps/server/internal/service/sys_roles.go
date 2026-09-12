@@ -13,13 +13,12 @@ import (
 	"gorm.io/gorm/clause"
 
 	"gbnt/apps/server/internal/model"
-	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/rolecode"
 )
 
 // CreateRoleInput 创建角色；传 api_ids 时按职责自动命名并原子保存授权。
 type CreateRoleInput struct {
-	Code   *string  `json:"code"`    // 新页面必填英文角色ID；旧客户端省略时生成独立兼容标识
+	Code   *string  `json:"code"`    // 忽略客户端传入；服务端生成独立英文标识
 	Name   string   `json:"name"`    // 旧客户端必填名称；传 api_ids 时忽略，使用自动名称
 	Desc   string   `json:"desc"`    // 角色备注，可空，最多255字
 	Status int      `json:"status"`  // 兼容旧请求的0/1；新建始终默认启用
@@ -28,7 +27,7 @@ type CreateRoleInput struct {
 
 // UpdateRoleInput 部分更新角色；未传字段保持不变，权限空数组表示清空。
 type UpdateRoleInput struct {
-	Code   *string  `json:"code"`    // 选填英文角色ID；省略不变，空串或重复值拒绝
+	Code   *string  `json:"code"`    // 忽略；英文标识创建后不可改
 	Name   *string  `json:"name"`    // 兼容旧客户端改名；新页面不提交，修改授权不重命名
 	Desc   *string  `json:"desc"`    // 选填备注；空字符串表示清空，最多255字
 	Status *int     `json:"status"`  // 选填状态，1启用、0停用
@@ -184,15 +183,8 @@ func (s *SysService) CreateRole(ctx context.Context, in CreateRoleInput) (*model
 	if in.Status != 0 && in.Status != 1 {
 		return nil, errors.New("角色状态只能为0或1")
 	}
-	// 兼容未传code的旧客户端；不再把名称当作唯一标识。
+	// 英文标识仅服务端生成，客户端传入的 code 一律忽略。
 	code := "role-" + uuid.NewString()
-	if in.Code != nil {
-		var err error
-		code, err = rolecode.Normalize(*in.Code)
-		if err != nil {
-			return nil, err
-		}
-	}
 	role := &model.SysRole{Name: strings.TrimSpace(in.Name), Desc: strings.TrimSpace(in.Desc), Status: 1, Code: &code}
 	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
 		var ids []uint64
@@ -227,18 +219,8 @@ func (s *SysService) CreateRole(ctx context.Context, in CreateRoleInput) (*model
 
 // UpdateRole 事务内部分更新角色和授权；授权变化不触发职责重命名。
 func (s *SysService) UpdateRole(ctx context.Context, id uint64, in UpdateRoleInput) (*model.SysRole, error) {
-	if id == perm.SuperAdminRoleID {
-		return nil, errors.New("管理员角色不可编辑")
-	}
 	if in.Status != nil && *in.Status != 0 && *in.Status != 1 {
 		return nil, errors.New("角色状态只能为0或1")
-	}
-	if in.Code != nil {
-		code, err := rolecode.Normalize(*in.Code)
-		if err != nil {
-			return nil, err
-		}
-		in.Code = &code
 	}
 	var role model.SysRole
 	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
@@ -250,10 +232,6 @@ func (s *SysService) UpdateRole(ctx context.Context, id uint64, in UpdateRoleInp
 			return err
 		}
 		updates := map[string]any{}
-		if in.Code != nil {
-			role.Code = in.Code
-			updates["code"] = *in.Code
-		}
 		if in.Name != nil {
 			role.Name = strings.TrimSpace(*in.Name)
 			updates["name"] = role.Name

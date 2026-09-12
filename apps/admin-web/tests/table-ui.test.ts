@@ -602,12 +602,12 @@ describe("组织和人员操作栏对齐原型", () => {
 });
 
 describe("其他列表回归", () => {
-  it("角色表七列、仅修改删除、查询条件显式应用且ID精确匹配", async () => {
+  it("角色表六列、仅修改删除、查询条件显式应用", async () => {
     api.roles.list.mockResolvedValue([sysRole(7, "系统配置员"), sysRole(8, "系统配置员"), sysRole(9, "汇总管理员")]);
     api.roles.listApis.mockResolvedValue(roleCatalog);
     const wrapper = render(RoleView);
     await flushPromises();
-    expect(wrapper.findAll("[data-column]").map((item) => item.attributes("data-column"))).toEqual(["序号", "角色名称", "角色ID", "备注", "创建时间", "状态", "操作"]);
+    expect(wrapper.findAll("[data-column]").map((item) => item.attributes("data-column"))).toEqual(["序号", "角色名称", "备注", "创建时间", "状态", "操作"]);
     expect(wrapper.get('[data-column="操作"]').findAll("button").map((item) => item.text())).toEqual(["修改", "删除", "修改", "删除", "修改", "删除"]);
     const inputs = wrapper.findAllComponents({ name: "ElInput" });
     inputs[0]!.vm.$emit("update:modelValue", "系统配置");
@@ -615,13 +615,6 @@ describe("其他列表回归", () => {
     expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(3);
     await wrapper.get(".query-panel form").trigger("submit");
     expect((wrapper.getComponent(TableStub).props("data") as Row[]).map((row) => row.id)).toEqual([8, 7]);
-    inputs[1]!.vm.$emit("update:modelValue", " TEST-7 ");
-    await wrapper.get(".query-panel form").trigger("submit");
-    expect((wrapper.getComponent(TableStub).props("data") as Row[]).map((row) => row.id)).toEqual([7]);
-    expect(wrapper.get('[data-column="角色ID"]').text()).toContain("test-7");
-    inputs[1]!.vm.$emit("update:modelValue", "1.2");
-    await wrapper.get(".query-panel form").trigger("submit");
-    expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(1);
     await click(wrapper, "重置");
     expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(3);
   });
@@ -643,14 +636,14 @@ describe("其他列表回归", () => {
     expect(wrapper.getComponent(TableStub).props("data")).toHaveLength(10);
   });
 
-  it("状态开关仅发送status，失败不改变状态，内置管理员保持禁用", async () => {
+  it("状态开关仅发送status，失败不改变状态", async () => {
     api.roles.list.mockResolvedValue([sysRole(1, "管理员"), sysRole(7)]);
     api.roles.listApis.mockResolvedValue(roleCatalog);
     api.roles.update.mockRejectedValueOnce(new Error("状态保存失败")).mockResolvedValueOnce({ ...sysRole(7), status: 0 });
     const wrapper = render(RoleView);
     await flushPromises();
     const switches = wrapper.findAllComponents(ElSwitch);
-    expect(switches[1]!.props("disabled")).toBe(true);
+    expect(switches[1]!.props("disabled")).toBe(false);
     await switches[0]!.trigger("click");
     await flushPromises();
     expect(switches[0]!.props("modelValue")).toBe(true);
@@ -659,7 +652,7 @@ describe("其他列表回归", () => {
     await flushPromises();
     expect(api.roles.update).toHaveBeenLastCalledWith(7, { status: 0 });
     expect(switches[0]!.props("modelValue")).toBe(false);
-    expect(wrapper.get('[data-column="操作"]').findAll("button").slice(2).every((item) => item.attributes("disabled") !== undefined)).toBe(true);
+    expect(wrapper.get('[data-column="操作"]').findAll("button").every((item) => item.attributes("disabled") === undefined)).toBe(true);
   });
 
   it("只有新增没有修改授权能力时不能进入组合创建", async () => {
@@ -709,7 +702,7 @@ describe("其他列表回归", () => {
     expect(tree.text()).not.toContain("当前用户");
     await click(wrapper, "保存");
     await flushPromises();
-    expect(api.roles.update).toHaveBeenCalledWith(role.id, { code: "street-admin", desc: "", api_ids: [1] });
+    expect(api.roles.update).toHaveBeenCalledWith(role.id, { desc: "", api_ids: [1] });
     expect(api.roles.updatePermissions).not.toHaveBeenCalled();
   });
 

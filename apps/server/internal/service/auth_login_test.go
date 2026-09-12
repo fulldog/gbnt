@@ -34,8 +34,8 @@ func TestLoginBumpsTokenVerAndSignsNewVersion(t *testing.T) {
 		},
 		testutil.QueryStep{Kind: "begin"},
 		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_users`", Check: func(query string, _ []driver.NamedValue) {
-			if !strings.Contains(query, "token_ver") || !strings.Contains(query, "token_ver + 1") {
-				t.Fatalf("登录必须递增 token_ver: %s", query)
+			if !strings.Contains(query, "`token_ver`") || !strings.Contains(query, "token_ver + 1") || strings.Contains(query, "app_token_ver") {
+				t.Fatalf("后台登录只递增 token_ver: %s", query)
 			}
 		}},
 		testutil.QueryStep{Contains: "token_ver", Columns: []string{"token_ver"}, Rows: [][]driver.Value{{int64(4)}}},
@@ -53,8 +53,46 @@ func TestLoginBumpsTokenVerAndSignsNewVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.UserID != 7 || claims.TokenVer != 4 {
+	if claims.UserID != 7 || claims.TokenVer != 4 || claims.ClientKind() != jwtutil.ClientWeb {
 		t.Fatalf("JWT token_ver 必须与库一致: %+v", claims)
+	}
+}
+
+func TestLoginMiniappBumpsAppTokenVerOnly(t *testing.T) {
+	t.Parallel()
+	hash, err := bcrypt.GenerateFromPassword([]byte("Passw0rd9"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := testutil.NewTransactionDB(t,
+		testutil.QueryStep{
+			Contains: "FROM `sys_users`",
+			Columns:  []string{"id", "username", "password", "role_id", "token_ver", "app_token_ver", "status", "is_super_admin"},
+			Rows:     [][]driver.Value{{int64(7), "worker", string(hash), int64(0), int64(3), int64(11), int64(1), false}},
+		},
+		testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_users`", Check: func(query string, _ []driver.NamedValue) {
+			if !strings.Contains(query, "app_token_ver") || !strings.Contains(query, "app_token_ver + 1") || strings.Contains(query, "`token_ver`") {
+				t.Fatalf("小程序登录只递增 app_token_ver: %s", query)
+			}
+		}},
+		testutil.QueryStep{Contains: "app_token_ver", Columns: []string{"app_token_ver"}, Rows: [][]driver.Value{{int64(12)}}},
+		testutil.QueryStep{Kind: "commit"},
+	)
+	svc := &AuthService{DB: db, JWT: jwtutil.New("miniapp-kick-test", 72, 24)}
+	user, token, _, err := svc.LoginMiniapp("worker", "Passw0rd9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user == nil || user.ID != 7 || user.AppTokenVer != 12 || user.TokenVer != 3 {
+		t.Fatalf("应只递增小程序版本: %+v", user)
+	}
+	claims, err := svc.JWT.Parse(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.UserID != 7 || claims.TokenVer != 12 || claims.ClientKind() != jwtutil.ClientApp {
+		t.Fatalf("小程序 JWT 须带 app 端版本: %+v", claims)
 	}
 }
 

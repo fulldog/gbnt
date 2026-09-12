@@ -61,15 +61,14 @@ func TestRoleCatalogAddsDutyWithoutChangingArrayContract(t *testing.T) {
 	}
 }
 
-func TestRoleCodeHTTPContractKeepsInternalIDSeparate(t *testing.T) {
+func TestRoleHTTPContractIgnoresClientCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := testutil.NewTransactionDB(t,
 		testutil.QueryStep{Kind: "begin"},
 		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 37},
 		testutil.QueryStep{Kind: "commit"},
 		testutil.QueryStep{Kind: "begin"},
-		testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id", "code", "name", "status"}, Rows: [][]driver.Value{{int64(37), "test", "未分配职责", int64(1)}}},
-		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`"},
+		testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id", "code", "name", "status"}, Rows: [][]driver.Value{{int64(37), "role-keep", "未分配职责", int64(1)}}},
 		testutil.QueryStep{Kind: "commit"},
 	)
 	d := Deps{Sys: &service.SysService{DB: db}}
@@ -78,22 +77,32 @@ func TestRoleCodeHTTPContractKeepsInternalIDSeparate(t *testing.T) {
 		c.Request = c.Request.WithContext(database.WithUser(c.Request.Context(), &database.UserInfo{ID: 1, IsSuperAdmin: true}))
 	})
 	d.registerSysRoles(r.Group("/api"))
-	for _, tc := range []struct{ method, url, body, code string }{
-		{"POST", "/api/sys/roles", `{"code":" Test ","api_ids":[]}`, "test"},
-		{"PUT", "/api/sys/roles/37", `{"code":"Test-Edit"}`, "test-edit"},
-	} {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(tc.method, tc.url, strings.NewReader(tc.body))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-		var response struct {
-			Data model.SysRole `json:"data"`
-		}
-		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
-		}
-		if w.Code != 200 || response.Data.ID != 37 || response.Data.Code == nil || *response.Data.Code != tc.code || response.Data.Name != "未分配职责" {
-			t.Fatalf("契约异常: %s", w.Body.String())
-		}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/sys/roles", strings.NewReader(`{"code":" Test ","api_ids":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	var created struct {
+		Data model.SysRole `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || created.Data.ID != 37 || created.Data.Code == nil || !strings.HasPrefix(*created.Data.Code, "role-") || *created.Data.Code == "test" {
+		t.Fatalf("创建应忽略客户端code: %s", w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("PUT", "/api/sys/roles/37", strings.NewReader(`{"code":"Test-Edit"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	var updated struct {
+		Data model.SysRole `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || updated.Data.ID != 37 || updated.Data.Code == nil || *updated.Data.Code != "role-keep" {
+		t.Fatalf("更新应忽略改号: %s", w.Body.String())
 	}
 }

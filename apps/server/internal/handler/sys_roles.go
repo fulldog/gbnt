@@ -4,7 +4,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gbnt/apps/server/internal/database"
-	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
 )
@@ -32,7 +31,7 @@ func (d *Deps) ListRoles(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// CreateRole POST /api/sys/roles — 新增英文code角色ID，传api_ids时自动命名并原子保存权限。
+// CreateRole POST /api/sys/roles — 服务端生成英文标识，传api_ids时自动命名并原子保存权限。
 func (d *Deps) CreateRole(c *gin.Context) {
 	d.OpLog.Mark(c, "新增角色", "")
 	var req service.CreateRoleInput
@@ -51,7 +50,7 @@ func (d *Deps) CreateRole(c *gin.Context) {
 	response.OK(c, r)
 }
 
-// UpdateRole PUT /api/sys/roles/:id — 数字id定位，部分更新英文code及原子保存权限；超管不可编辑。
+// UpdateRole PUT /api/sys/roles/:id — 数字id定位，部分更新备注/状态及原子保存权限；忽略改号。
 func (d *Deps) UpdateRole(c *gin.Context) {
 	d.OpLog.Mark(c, "更新角色", c.Param("id"))
 	id, ok := parseID(c)
@@ -71,7 +70,7 @@ func (d *Deps) UpdateRole(c *gin.Context) {
 	response.OK(c, r)
 }
 
-// DeleteRole DELETE /api/sys/roles/:id — 删除角色（超管不可删；仍有用户绑定时拒绝）。
+// DeleteRole DELETE /api/sys/roles/:id — 删除角色（仍有用户绑定时拒绝）。
 func (d *Deps) DeleteRole(c *gin.Context) {
 	d.OpLog.Mark(c, "删除角色", c.Param("id"))
 	id, ok := parseID(c)
@@ -85,7 +84,7 @@ func (d *Deps) DeleteRole(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// GetRoleAPIs GET /api/sys/roles/:id/apis — 角色已授权 API id；超管返回 api_ids="*"。
+// GetRoleAPIs GET /api/sys/roles/:id/apis — 角色已授权 API id。
 func (d *Deps) GetRoleAPIs(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
@@ -96,17 +95,13 @@ func (d *Deps) GetRoleAPIs(c *gin.Context) {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
 	}
-	if id == perm.SuperAdminRoleID {
-		response.OK(c, gin.H{"api_ids": "*"})
-		return
-	}
 	if ids == nil {
 		ids = []uint64{}
 	}
 	response.OK(c, gin.H{"api_ids": ids})
 }
 
-// SetRoleAPIs PUT /api/sys/roles/:id/apis — 覆盖授权 {api_ids:[...]}（超管不可编辑）。
+// SetRoleAPIs PUT /api/sys/roles/:id/apis — 覆盖授权 {api_ids:[...]}。
 func (d *Deps) SetRoleAPIs(c *gin.Context) {
 	d.OpLog.Mark(c, "设置角色API权限", c.Param("id"))
 	id, ok := parseID(c)

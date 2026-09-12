@@ -13,8 +13,6 @@ const visible = defineModel<boolean>({ required: true });
 const { role = null } = defineProps<{ role?: SysRole | null }>();
 const emit = defineEmits<{ saved: [role: SysRole, created: boolean] }>();
 const api = useAdminApi();
-const code = shallowRef("");
-const codeTouched = shallowRef(false);
 const desc = shallowRef("");
 const catalog = shallowRef<SysApi[]>([]);
 const selected = shallowRef<number[]>([]);
@@ -27,10 +25,9 @@ let sequence = 0;
 let disposed = false;
 const preview = computed(() => previewRoleName(catalog.value, selected.value));
 const name = computed(() => role?.name ?? (ready.value ? preview.value.name : ""));
-const codeError = computed(() => !code.value.trim() ? "请输入角色ID" : /^[a-z][a-z0-9_-]{0,63}$/i.test(code.value.trim()) ? "" : "以英文字母开头，支持英文、数字、下划线和短横线，最多64位");
 const hasAdminLogin = computed(() => catalog.value.some((item) => item.module === "web.auth" && item.action === "login" && selected.value.includes(item.id)));
 const validationError = computed(() => [...desc.value.trim()].length > 255 ? "角色备注不能超过255字" : !role ? preview.value.error : "");
-const canSave = computed(() => ready.value && !loading.value && !submitting.value && !codeError.value && !validationError.value && role?.id !== 1);
+const canSave = computed(() => ready.value && !loading.value && !submitting.value && !validationError.value);
 
 async function load(): Promise<void> {
   const request = ++sequence;
@@ -51,7 +48,7 @@ async function load(): Promise<void> {
     if (!catalog.value.some((item) => item.duty && item.role_code_supported)) throw new Error("角色配置服务尚未更新，请联系管理员后重试");
     if (editing) {
       const ids = permissions?.api_ids;
-      if (ids === "*" && editing.id === 1) selected.value = catalog.value.map((item) => item.id);
+      if (ids === "*") selected.value = catalog.value.map((item) => item.id);
       else if (Array.isArray(ids) && ids.every((id) => Number.isSafeInteger(id) && id > 0)) selected.value = [...ids];
       else throw new Error("角色权限数据异常，请重试");
     } else {
@@ -69,7 +66,7 @@ async function save(): Promise<void> {
   if (!canSave.value) return;
   const request = sequence;
   const editing = role;
-  const input = { code: code.value.trim().toLowerCase(), desc: desc.value.trim(), api_ids: [...selected.value] };
+  const input = { desc: desc.value.trim(), api_ids: [...selected.value] };
   submitting.value = true;
   saveError.value = "";
   try {
@@ -88,8 +85,6 @@ async function save(): Promise<void> {
 watch([visible, () => role?.id], ([open]) => {
   sequence += 1;
   if (!open) return;
-  code.value = role?.code ?? "";
-  codeTouched.value = false;
   desc.value = role?.desc ?? "";
   saveError.value = "";
   submitting.value = false;
@@ -102,10 +97,8 @@ onScopeDispose(() => { disposed = true; sequence += 1; });
   <ElDialog v-model="visible" class="role-form-dialog" :title="role ? '修改角色' : '新增角色'" width="min(640px, 94vw)" top="10vh" destroy-on-close :close-on-click-modal="!submitting" :close-on-press-escape="!submitting" :show-close="!submitting">
     <div @submit.prevent="save">
     <ElForm class="role-form" label-position="right" label-width="98px">
-      <ElFormItem label="角色ID" required :error="codeTouched ? codeError : ''">
-        <ElInput v-model="code" maxlength="64" placeholder="例如 admin、test" autocomplete="off" :disabled="submitting || role?.id === 1" @blur="codeTouched = true; code = code.trim().toLowerCase()" />
-        <p class="role-form-hint">英文开头，可含数字、下划线和短横线，保存时统一小写。</p>
-        <p class="role-form-hint">角色名称：<span class="role-name-preview">{{ name || (loading ? '正在加载职责…' : '根据授权职责自动生成') }}</span>（{{ role ? '创建时生成，修改权限后保持不变' : '根据授权职责自动生成' }}）</p>
+      <ElFormItem label="角色名称">
+        <p class="role-form-hint role-name-line">角色名称：<span class="role-name-preview">{{ name || (loading ? '正在加载职责…' : '根据授权职责自动生成') }}</span>（{{ role ? '创建时生成，修改权限后保持不变' : '根据授权职责自动生成' }}）</p>
       </ElFormItem>
       <ElFormItem label="角色备注">
         <ElInput v-model="desc" type="textarea" :rows="1" :autosize="{ minRows: 1, maxRows: 3 }" maxlength="255" show-word-limit placeholder="填写角色职责或权限备注" :disabled="submitting" />
@@ -113,7 +106,7 @@ onScopeDispose(() => { disposed = true; sequence += 1; });
       <ElFormItem label="授权" class="role-auth-item">
         <div class="role-auth" v-loading="loading" :aria-busy="loading">
           <AsyncError v-if="loadError" :message="loadError" @retry="load" />
-          <PermissionMatrix v-else-if="ready" v-model="selected" :apis="catalog" :disabled="loading || submitting || role?.id === 1" />
+          <PermissionMatrix v-else-if="ready" v-model="selected" :apis="catalog" :disabled="loading || submitting" />
           <p v-if="ready && !hasAdminLogin" class="role-form-hint">未授予管理后台登录权限，此角色不能登录管理后台。</p>
           <p v-if="ready && !selected.length" class="role-form-hint">未分配职责：当前未授予任何管理后台操作权限。</p>
         </div>

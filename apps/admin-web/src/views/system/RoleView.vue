@@ -29,9 +29,8 @@ const { data, loading, loadError, hasLoaded, run: load } = useLatestQuery<{ role
   },
   errorMessage: "角色列表加载失败",
 });
-const filters = reactive({ name: "", code: "" });
-const applied = shallowRef({ name: "", code: "" });
-const queryError = shallowRef("");
+const filters = reactive({ name: "" });
+const applied = shallowRef({ name: "" });
 const filtersVisible = shallowRef(true);
 const page = shallowRef(1);
 const size = shallowRef(10);
@@ -39,7 +38,7 @@ const formVisible = shallowRef(false);
 const editingRole = shallowRef<SysRole | null>(null);
 const busyIds = shallowRef<number[]>([]);
 const columns = [
-  { key: "name", label: "角色名称" }, { key: "code", label: "角色ID" }, { key: "desc", label: "备注" },
+  { key: "name", label: "角色名称" }, { key: "desc", label: "备注" },
   { key: "created", label: "创建时间" }, { key: "status", label: "状态" },
 ];
 const visibleColumns = shallowRef(columns.map((column) => column.key));
@@ -48,9 +47,7 @@ const canEdit = computed(() => permission.can("web.sys-roles", "edit"));
 const canCreate = computed(() => permission.can("web.sys-roles", "create") && canEdit.value);
 const filteredRoles = computed(() => {
   const name = applied.value.name.toLowerCase();
-  return data.value.roles.filter((role) =>
-    (!name || role.name.toLowerCase().includes(name)) && (!applied.value.code || role.code?.toLowerCase() === applied.value.code),
-  ).sort((a, b) => {
+  return data.value.roles.filter((role) => !name || role.name.toLowerCase().includes(name)).sort((a, b) => {
     const date = (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
     return date || b.id - a.id;
   });
@@ -62,18 +59,11 @@ watch([total, size, hasLoaded], () => {
 });
 
 function search(): void {
-  const code = filters.code.trim().toLowerCase();
-  if (code && !/^[a-z][a-z0-9_-]{0,63}$/.test(code)) {
-    queryError.value = "请输入英文角色ID，例如 admin、test";
-    return;
-  }
-  queryError.value = "";
-  applied.value = { name: filters.name.trim(), code };
+  applied.value = { name: filters.name.trim() };
   page.value = 1;
 }
 function reset(): void {
   filters.name = "";
-  filters.code = "";
   search();
 }
 function createRole(): void {
@@ -82,7 +72,7 @@ function createRole(): void {
   formVisible.value = true;
 }
 function editRole(role: SysRole): void {
-  if (!canEdit.value || role.id === 1) return;
+  if (!canEdit.value) return;
   editingRole.value = role;
   formVisible.value = true;
 }
@@ -121,7 +111,7 @@ async function saved(role: SysRole, created: boolean): Promise<void> {
   if (await refreshCurrentRole(role.id)) await load();
 }
 async function toggleStatus(role: SysRole): Promise<boolean> {
-  if (!canEdit.value || role.id === 1 || busyIds.value.includes(role.id) || !serviceReady.value) return false;
+  if (!canEdit.value || busyIds.value.includes(role.id) || !serviceReady.value) return false;
   busyIds.value = [...busyIds.value, role.id];
   try {
     const updated = await api.roles.update(role.id, { status: role.status === 1 ? 0 : 1 });
@@ -137,10 +127,10 @@ async function toggleStatus(role: SysRole): Promise<boolean> {
   }
 }
 async function removeRole(role: SysRole): Promise<void> {
-  if (role.id === 1 || busyIds.value.includes(role.id) || !permission.can("web.sys-roles", "delete")) return;
+  if (busyIds.value.includes(role.id) || !permission.can("web.sys-roles", "delete")) return;
   busyIds.value = [...busyIds.value, role.id];
   try {
-    await ElMessageBox.confirm("确定删除角色“" + role.name + "”（角色ID：" + (role.code || "未配置") + "）吗？", "删除确认", {
+    await ElMessageBox.confirm("确定删除角色“" + role.name + "”吗？", "删除确认", {
       confirmButtonText: "删除", cancelButtonText: "取消", type: "warning",
     });
     await api.roles.remove(role.id);
@@ -160,7 +150,6 @@ onMounted(() => { void load(); });
   <div ref="tablePage" class="data-page">
     <QueryPanel v-show="filtersVisible" :loading="loading" @search="search" @reset="reset">
       <ElFormItem label="角色名称"><ElInput v-model="filters.name" clearable placeholder="请输入" /></ElFormItem>
-      <ElFormItem label="角色ID" :error="queryError"><ElInput v-model="filters.code" clearable placeholder="例如 admin、test" maxlength="64" /></ElFormItem>
     </QueryPanel>
     <AsyncError v-if="loadError" :message="loadError" @retry="load" />
     <section class="data-card">
@@ -173,19 +162,18 @@ onMounted(() => { void load(); });
         <ElTable height="100%" v-loading="loading" :data="rows" row-key="id" :empty-text="loading ? '正在加载…' : loadError ? '加载失败，请重试' : '暂无角色'">
           <ElTableColumn type="index" label="序号" width="80" align="center" :index="(index: number) => total - (page - 1) * size - index" />
           <ElTableColumn v-if="visibleColumns.includes('name')" prop="name" label="角色名称" min-width="180" align="center" show-overflow-tooltip />
-          <ElTableColumn v-if="visibleColumns.includes('code')" prop="code" label="角色ID" min-width="160" align="center" show-overflow-tooltip />
           <ElTableColumn v-if="visibleColumns.includes('desc')" prop="desc" label="备注" min-width="240" align="center" show-overflow-tooltip />
           <ElTableColumn v-if="visibleColumns.includes('created')" label="创建时间" min-width="180" align="center"><template #default="scope">{{ formatDateTime(scope.row.created_at, true) }}</template></ElTableColumn>
           <ElTableColumn v-if="visibleColumns.includes('status')" label="状态" width="100" align="center">
             <template #default="scope">
-              <ElSwitch :model-value="scope.row.status === 1" :loading="busyIds.includes(scope.row.id)" :disabled="scope.row.id === 1 || !canEdit || !serviceReady" :before-change="() => toggleStatus(asRole(scope.row))" v-bind="{ 'aria-label': scope.row.name + '状态' }" />
+              <ElSwitch :model-value="scope.row.status === 1" :loading="busyIds.includes(scope.row.id)" :disabled="!canEdit || !serviceReady" :before-change="() => toggleStatus(asRole(scope.row))" v-bind="{ 'aria-label': scope.row.name + '状态' }" />
             </template>
           </ElTableColumn>
           <ElTableColumn label="操作" width="140" align="center" fixed="right">
             <template #default="scope">
-              <div class="table-actions" :title="scope.row.id === 1 ? '内置管理员角色不可修改或删除' : undefined">
-                <ElButton v-if="canEdit" link type="primary" :disabled="scope.row.id === 1 || busyIds.includes(scope.row.id)" @click="editRole(asRole(scope.row))">修改</ElButton>
-                <ElButton v-if="permission.can('web.sys-roles', 'delete')" link type="danger" :disabled="scope.row.id === 1 || busyIds.includes(scope.row.id)" @click="removeRole(asRole(scope.row))">删除</ElButton>
+              <div class="table-actions">
+                <ElButton v-if="canEdit" link type="primary" :disabled="busyIds.includes(scope.row.id)" @click="editRole(asRole(scope.row))">修改</ElButton>
+                <ElButton v-if="permission.can('web.sys-roles', 'delete')" link type="danger" :disabled="busyIds.includes(scope.row.id)" @click="removeRole(asRole(scope.row))">删除</ElButton>
               </div>
             </template>
           </ElTableColumn>

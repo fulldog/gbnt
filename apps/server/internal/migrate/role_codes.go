@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm/clause"
 
 	"gbnt/apps/server/internal/model"
-	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/internal/rolecode"
 )
 
@@ -21,9 +20,6 @@ func ensureRoleCodes(db *gorm.DB) error {
 		}
 		for _, role := range roles {
 			base := fmt.Sprintf("role-%d", role.ID)
-			if role.ID == perm.SuperAdminRoleID {
-				base = "admin"
-			}
 			for suffix := 0; ; suffix++ {
 				candidate := base
 				if suffix > 0 {

@@ -9,11 +9,35 @@ import (
 	"github.com/google/uuid"
 )
 
-// Claims 业务声明；用户详情由中间件按 user_id 查库，token_ver 须与库一致。
+const (
+	// ClientWeb 管理后台会话。
+	ClientWeb = "web"
+	// ClientApp 小程序会话。
+	ClientApp = "app"
+)
+
+// Claims 业务声明；用户详情由中间件按 user_id 查库，token_ver 须与对应端版本一致。
 type Claims struct {
 	UserID   uint64 `json:"user_id"`
 	TokenVer int    `json:"token_ver"`
+	Client   string `json:"client,omitempty"` // web=管理后台，app=小程序；空视为 web 以兼容旧票
 	jwt.RegisteredClaims
+}
+
+// NormalizeClient 归一化客户端；未知或空视为管理后台。
+func NormalizeClient(client string) string {
+	if client == ClientApp {
+		return ClientApp
+	}
+	return ClientWeb
+}
+
+// ClientKind 当前票所属端；空 client 视为管理后台。
+func (c *Claims) ClientKind() string {
+	if c == nil {
+		return ClientWeb
+	}
+	return NormalizeClient(c.Client)
 }
 
 // Manager JWT 管理器。
@@ -48,13 +72,14 @@ func (m *Manager) Expire() time.Duration { return m.expire }
 // RenewBefore 返回滑动续期窗口。
 func (m *Manager) RenewBefore() time.Duration { return m.renewBefore }
 
-// Sign 签发 access token（含 jti 与 token_ver）。
-func (m *Manager) Sign(userID uint64, tokenVer int) (string, time.Time, error) {
+// Sign 签发 access token（含 jti、token_ver 与端标识）。
+func (m *Manager) Sign(userID uint64, tokenVer int, client string) (string, time.Time, error) {
 	now := time.Now()
 	exp := now.Add(m.expire)
 	claims := Claims{
 		UserID:   userID,
 		TokenVer: tokenVer,
+		Client:   NormalizeClient(client),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
 			ExpiresAt: jwt.NewNumericDate(exp),
@@ -71,7 +96,7 @@ func (m *Manager) Resign(c *Claims) (string, time.Time, error) {
 	if c == nil {
 		return "", time.Time{}, errors.New("nil claims")
 	}
-	return m.Sign(c.UserID, c.TokenVer)
+	return m.Sign(c.UserID, c.TokenVer, c.ClientKind())
 }
 
 // NeedRenew 是否处于滑动续期窗口（仍有效，但剩余时间 < renewBefore）。

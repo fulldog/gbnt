@@ -62,11 +62,11 @@ func TestJWTAuthRequiresTokenWhenUnindexed(t *testing.T) {
 func TestJWTAuthRejectsStaleTokenVerAfterRelogin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	jm := jwtutil.New("jwt-kick-test", 72, 24)
-	oldToken, _, err := jm.Sign(1, 1)
+	oldToken, _, err := jm.Sign(1, 1, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
-	newToken, _, err := jm.Sign(1, 2)
+	newToken, _, err := jm.Sign(1, 2, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestJWTAuthRejectsStaleTokenVerAfterRelogin(t *testing.T) {
 func TestJWTAuthPasswordBumpSameAsKick(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	jm := jwtutil.New("jwt-kick-pwd", 72, 24)
-	token, _, err := jm.Sign(1, 4)
+	token, _, err := jm.Sign(1, 4, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestJWTAuthPasswordBumpSameAsKick(t *testing.T) {
 func TestJWTAuthRenewKeepsTokenVer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	jm := jwtutil.New("jwt-renew-ver", 1, 1) // 签发后立即进入续期窗口
-	token, _, err := jm.Sign(1, 9)
+	token, _, err := jm.Sign(1, 9, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,8 +160,56 @@ func TestJWTAuthRenewKeepsTokenVer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if claims.TokenVer != 9 || claims.UserID != 1 {
-		t.Fatalf("续期不得改变 token_ver: %+v", claims)
+	if claims.TokenVer != 9 || claims.UserID != 1 || claims.ClientKind() != jwtutil.ClientWeb {
+		t.Fatalf("续期不得改变 token_ver 或端标识: %+v", claims)
+	}
+}
+
+func TestJWTAuthAppAndWebSessionsDoNotKickEachOther(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	jm := jwtutil.New("jwt-split-session", 72, 24)
+	webToken, _, err := jm.Sign(1, 4, jwtutil.ClientWeb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appToken, _, err := jm.Sign(1, 9, jwtutil.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := perm.NewStaticService(nil, []model.SysAPI{
+		{Method: http.MethodGet, Path: "/api/me", IsJWT: true, IsRBAC: false},
+		{Method: http.MethodGet, Path: "/api/app/me", IsJWT: true, IsRBAC: false},
+	})
+	r := gin.New()
+	r.Use(JWTAuth(jm, func(context.Context, uint64) (*database.UserInfo, error) {
+		return &database.UserInfo{ID: 1, TokenVer: 4, AppTokenVer: 9}, nil
+	}, nil, svc))
+	r.GET("/api/me", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/app/me", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, tc := range []struct{ path, token string }{
+		{"/api/me", webToken},
+		{"/api/app/me", appToken},
+	} {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		req.Header.Set("Authorization", "Bearer "+tc.token)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s 独立会话应通过: %d %s", tc.path, w.Code, w.Body.String())
+		}
+	}
+
+	staleApp, _, err := jm.Sign(1, 8, jwtutil.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/app/me", nil)
+	req.Header.Set("Authorization", "Bearer "+staleApp)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("小程序同端旧票仍应被踢: %d", w.Code)
 	}
 }
 

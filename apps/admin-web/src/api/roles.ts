@@ -15,7 +15,7 @@ export function createRolesApi(client: ApiClient) {
       return client.request<SysRole[]>("/api/sys/roles");
     },
 
-    /** 提交英文code、备注和权限并自动命名；返回内部id与英文code，RoleInput仅供旧调用兼容。 */
+    /** 提交备注和权限并自动命名；英文标识由服务端生成。 */
     create(input: CreateRoleInput | RoleInput): Promise<SysRole> {
       return client.request<SysRole, CreateRoleInput | RoleInput>("/api/sys/roles", {
         method: "POST",
@@ -23,7 +23,7 @@ export function createRolesApi(client: ApiClient) {
       });
     },
 
-    /** 路径仍使用内部数字id；英文code、备注及api_ids在同一事务内保存。 */
+    /** 路径仍使用内部数字id；备注及api_ids在同一事务内保存，忽略改号。 */
     update(id: number, input: UpdateRoleInput): Promise<SysRole> {
       return client.request<SysRole, UpdateRoleInput>(`/api/sys/roles/${id}`, {
         method: "PUT",

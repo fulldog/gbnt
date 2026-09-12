@@ -21,11 +21,11 @@ func newAPINotFoundTestRouter(t *testing.T) (*gin.Engine, string, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	jm := jwtutil.New("api-not-found-test-secret", 72, 24)
-	token, _, err := jm.Sign(7, 1)
+	token, _, err := jm.Sign(7, 1, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalToken, _, err := jm.Sign(8, 1)
+	normalToken, _, err := jm.Sign(8, 1, jwtutil.ClientWeb)
 	if err != nil {
 		t.Fatal(err)
 	}
