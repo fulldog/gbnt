@@ -468,7 +468,6 @@ onBeforeUnmount(() => {
               :loading="regionsLoading" :error="regionsError" :disabled="!props.visible || submitting || regionLocked"
               @select="selectRegion" @retry="load"
             />
-            <text v-if="regionLocked" class="region-scope-hint">已按账号所属村锁定</text>
           </view>
         </view>
         <view class="form-field">
@@ -487,8 +486,7 @@ onBeforeUnmount(() => {
               <button :class="{ selected: form.codeMode === 'auto' }" :disabled="submitting" @tap="setCodeMode('auto')">自动生成</button>
               <button :class="{ selected: form.codeMode === 'manual' }" :disabled="submitting" @tap="setCodeMode('manual')">手动填写</button>
             </view>
-            <text v-if="form.codeMode === 'auto'" class="code-hint">提交时自动生成</text>
-            <input v-else class="form-input" :value="form.code" :disabled="submitting" maxlength="64" placeholder="请输入设施编号" @input="updateText('code', $event)" />
+            <input v-if="form.codeMode === 'manual'" class="form-input" :value="form.code" :disabled="submitting" maxlength="64" placeholder="请输入设施编号" @input="updateText('code', $event)" />
             <text v-if="codeError" class="code-error">{{ codeError }}</text>
           </view>
         </view>
@@ -627,14 +625,6 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 0;
 }
-.region-scope-hint {
-  display: block;
-  margin-top: 3px;
-  color: var(--color-text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: right;
-}
 .panorama-field {
   padding: 12px 0 8px;
   border-bottom: 1px solid #eef2f6;
@@ -650,7 +640,6 @@ onBeforeUnmount(() => {
 .code-mode-options { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
 .code-mode-options button { margin: 0; padding: 4px 10px; font-size: 13px; line-height: 24px; background: #f1f4f8; color: var(--color-text-secondary); }
 .code-mode-options button.selected { color: var(--color-primary); background: #edf5ff; }
-.code-hint { font-size: 13px; line-height: 28px; color: var(--color-text-secondary); }
 .code-error { display: block; text-align: left; font-size: 12px; line-height: 20px; color: #c74735; }
 .form-input, .picker-value {
   flex: 1;
