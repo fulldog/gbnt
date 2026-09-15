@@ -23,6 +23,7 @@ function picker(mode: "leaf" | "filter" = "filter", startLevel: "district" | "st
     show: () => void; cancel: () => void; commit: () => void;
     onChange: (event: { detail: { value: number[] } }) => void;
     opened: vue.Ref<boolean>; rolling: vue.Ref<boolean>; triggerLabel: vue.Ref<string>;
+    confirmDisabled: vue.Ref<boolean>;
   };
   return { props, emit, state, hide: () => hide() };
 }
@@ -43,15 +44,37 @@ describe("共享行政区划组件接入", () => {
     expect(emit).toHaveBeenCalledWith("select", { id: 1, label: "甲区" });
   });
 
-  it("滚动过程中不能确认，页面隐藏会关闭弹窗且不提交", () => {
+  it("滚动过程中不能确认，收到有效 change 后无需等待 pickend 即可确认", () => {
     const { state, emit, hide } = picker();
     state.show();
     state.rolling.value = true;
+    expect(state.confirmDisabled.value).toBe(true);
     state.commit();
     expect(emit).not.toHaveBeenCalled();
+    state.onChange({ detail: { value: [1, 0, 0] } });
+    state.rolling.value = true;
+    state.onChange({ detail: { value: [1, 1, 0] } });
+    state.rolling.value = true;
+    state.onChange({ detail: { value: [1, 1, 1] } });
+    expect(state.rolling.value).toBe(false);
+    expect(state.confirmDisabled.value).toBe(false);
+    state.commit();
+    expect(emit).toHaveBeenCalledWith("select", { id: 3, label: "甲区甲街道甲村" });
+
+    state.show();
     hide();
     expect(state.opened.value).toBe(false);
-    state.rolling.value = false;
+    state.commit();
+    expect(emit).toHaveBeenCalledTimes(1);
+  });
+
+  it("异常 change 不会提前解除滚动保护并提交旧候选", () => {
+    const { state, emit } = picker();
+    state.show();
+    state.rolling.value = true;
+    state.onChange({ detail: { value: [99, 0, 0] } });
+    expect(state.rolling.value).toBe(true);
+    expect(state.confirmDisabled.value).toBe(true);
     state.commit();
     expect(emit).not.toHaveBeenCalled();
   });
@@ -88,13 +111,14 @@ describe("共享行政区划组件接入", () => {
     expect(state.triggerLabel.value).toBe("甲街道");
   });
 
-  it("待办默认全选，可选权限内街道或村，清除筛选恢复全选", async () => {
+  it("待办默认全选，可选权限内区街村，不可选权限外祖先", async () => {
     const { state, loader } = setupTodo(11);
     await state.loadRegions();
     expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10 });
     state.changeRegion({ id: 11, label: "甲街道" });
     expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10, org_id: 11 });
     const requests = loader.mock.calls.length;
+    state.changeRegion({ id: 1, label: "权限外区县" });
     state.changeRegion({ id: 22, label: "其他街道的村" });
     state.changeRegion({ id: -1, label: "隐藏容器" });
     expect(loader).toHaveBeenCalledTimes(requests);
@@ -105,11 +129,13 @@ describe("共享行政区划组件接入", () => {
     expect(loader).toHaveBeenLastCalledWith({ page: 1, size: 10 });
   });
 
-  it("创建和筛选只引用同一个组件，弹窗不再渲染底部已选路径", () => {
+  it("创建和筛选共用三级组件，弹窗不再渲染底部已选路径", () => {
     const read = (path: string) => readFileSync(new URL(`../src/${path}`, import.meta.url), "utf8");
     for (const path of ["components/report/ReportTypeForm.vue", "pages/todo/index.vue"]) {
       expect(read(path)).toContain('import RegionPicker from "@/components/region/RegionPicker.vue"');
       expect(read(path)).toContain("<RegionPicker");
+      expect(read(path)).toContain('start-level="district"');
+      expect(read(path)).not.toContain('start-level="street"');
     }
     const { descriptor } = parse(read("components/region/RegionPicker.vue"));
     expect(descriptor.template!.content).not.toContain("region-picker__summary");

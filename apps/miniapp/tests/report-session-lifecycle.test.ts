@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { shallowRef, type Ref } from "vue";
 import type { IssueType } from "@gbnt/api-client";
@@ -75,6 +76,21 @@ function setupReportPage() {
 }
 
 describe("巡查表单页面会话", () => {
+  it("自定义导航保留动态顶部占位，并用同高度固定遮罩隔离滚动内容", () => {
+    const report = readFileSync(new URL("../src/pages/report/index.vue", import.meta.url), "utf8");
+    const inset = readFileSync(new URL("../src/components/common/PageTopInset.vue", import.meta.url), "utf8");
+    const pages = JSON.parse(readFileSync(new URL("../src/pages.json", import.meta.url), "utf8")) as {
+      pages: Array<{ path: string; style: Record<string, unknown> }>;
+    };
+    const reportPage = pages.pages.find(({ path }) => path === "pages/report/index");
+
+    expect(reportPage?.style).toMatchObject({ navigationStyle: "custom", backgroundColorTop: "#ffffff" });
+    expect(report).toContain("<PageTopInset fixed-cover />");
+    expect(inset).toContain('v-if="fixedCover"');
+    expect(inset).toContain('class="page-top-inset__cover"');
+    expect(inset).toMatch(/\.page-top-inset__cover\s*\{[\s\S]*position:\s*fixed;/);
+  });
+
   it("页内切换保留输入，切到其他页面后清空全部类型并拒绝迟到回写", async () => {
     const { state, hooks, storage } = setupReportPage();
     storage.set("gbnt:miniapp:report-draft:v1", { old: true });

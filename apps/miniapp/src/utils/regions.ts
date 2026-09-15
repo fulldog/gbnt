@@ -14,11 +14,16 @@ export function findRegion(tree: readonly OrgTreeNode[], id: number): OrgTreeNod
   return undefined;
 }
 
-/** 保留账号组织的祖先路径和下级，排除兄弟组织，供街道／村滚轮使用。 */
+/** 保留账号组织的祖先路径和下级，并明确标记可选范围。 */
 export function scopeRegionTree(tree: readonly OrgTreeNode[], orgId: number): OrgTreeNode[] {
-  return tree.flatMap((node) => {
-    if (node.id === orgId) return [node];
-    const children = scopeRegionTree(node.children, orgId);
-    return children.length ? [{ ...node, children }] : [];
-  });
+  function scope(nodes: readonly OrgTreeNode[], withinScope: boolean): OrgTreeNode[] {
+    return nodes.flatMap((node) => {
+      const allowed = withinScope || node.id === orgId;
+      const children = scope(node.children, allowed);
+      if (!allowed && children.length === 0) return [];
+      return [{ ...node, within_org_scope: allowed, children }];
+    });
+  }
+
+  return scope(tree, false);
 }

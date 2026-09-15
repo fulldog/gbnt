@@ -42,14 +42,19 @@ describe("上报组织范围", () => {
     let account = user(10, 4);
     const regions = useRegions(() => account, async () => ({ list: fullTree }));
     await regions.load();
-    expect(regions.options.value).toEqual([{ id: 4, label: "根 / 区 / 甲街道 / 甲村" }]);
+    expect(regions.options.value).toEqual([{ id: 4, label: "区 / 甲街道 / 甲村" }]);
+    expect(regions.tree.value[0]?.within_org_scope).toBe(false);
+    expect(regions.tree.value[0]?.children[0]?.within_org_scope).toBe(false);
+    expect(regions.tree.value[0]?.children[0]?.children[0]?.within_org_scope).toBe(false);
+    expect(regions.tree.value[0]?.children[0]?.children[0]?.children[0]?.within_org_scope).toBe(true);
 
     account = user(11, 3);
     await regions.load();
     expect(regions.options.value).toEqual([
-      { id: 4, label: "根 / 区 / 甲街道 / 甲村" },
-      { id: 5, label: "根 / 区 / 甲街道 / 乙村" },
+      { id: 4, label: "区 / 甲街道 / 甲村" },
+      { id: 5, label: "区 / 甲街道 / 乙村" },
     ]);
+    expect(regions.tree.value[0]?.children[0]?.children[0]?.within_org_scope).toBe(true);
     expect(regions.options.value.some((item) => item.id === 7)).toBe(false);
   });
 
@@ -71,6 +76,6 @@ describe("上报组织范围", () => {
 
     expect(calls).toBe(2);
     expect(regions.loading.value).toBe(false);
-    expect(regions.options.value).toEqual([{ id: 7, label: "根 / 区 / 乙街道 / 丙村" }]);
+    expect(regions.options.value).toEqual([{ id: 7, label: "区 / 乙街道 / 丙村" }]);
   });
 });

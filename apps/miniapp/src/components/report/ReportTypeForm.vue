@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
           <text class="form-label">区划</text>
           <view class="form-control">
             <RegionPicker
-              start-level="street" :tree="regionTree" :value="form.orgId" :label="form.orgLabel"
+              start-level="district" :tree="regionTree" :value="form.orgId" :label="form.orgLabel"
               :loading="regionsLoading" :error="regionsError" :disabled="!props.visible || submitting || regionLocked"
               @select="selectRegion" @retry="load"
             />

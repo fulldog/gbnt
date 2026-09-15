@@ -1,5 +1,5 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ title?: string }>(), { title: "" });
+withDefaults(defineProps<{ title?: string; fixedCover?: boolean }>(), { title: "", fixedCover: false });
 
 // 按设备状态栏与微信胶囊留白；标题位于胶囊左侧的透明导航区。
 const windowInfo = uni.getWindowInfo();
@@ -17,6 +17,12 @@ if (capsule.height > 0 && capsule.top >= statusHeight) {
 
 <template>
   <view class="page-top-inset" :style="{ height: `${height}px` }">
+    <cover-view
+      v-if="fixedCover"
+      class="page-top-inset__cover"
+      :style="{ height: `${height}px` }"
+      aria-hidden="true"
+    />
     <view
       v-if="title"
       class="page-top-inset__navigation"
@@ -29,6 +35,15 @@ if (capsule.height > 0 && capsule.top >= statusHeight) {
 
 <style scoped>
 .page-top-inset { flex: none; width: 100%; pointer-events: none; }
+.page-top-inset__cover {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 19;
+  background: var(--gb-color-surface, #fff);
+  pointer-events: auto;
+}
 .page-top-inset__navigation {
   position: fixed;
   left: 16px;

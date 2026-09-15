@@ -29,7 +29,7 @@ const { opened, indices, columns, selection, selectedLabel, selectedName, open, 
   () => props.startLevel,
 );
 // 展示已确认值；滚轮中的临时候选不会改动输入栏或筛选条件。
-const fullLabel = computed(() => (props.startLevel === "street" ? selectedLabel.value : props.label.replace(/\s*\/\s*/g, "") || selectedLabel.value) ||
+const fullLabel = computed(() => selectedLabel.value || props.label.replace(/\s*\/\s*/g, "") ||
   (props.value !== null ? "所选行政区划已失效" : ""));
 const triggerLabel = computed(() => {
   if (props.loading && !props.label) return "正在加载…";
@@ -50,7 +50,8 @@ function onChange(event: { detail?: { value?: unknown } }): void {
   const value = event.detail?.value;
   if (!Array.isArray(value) || value.length !== headings.value.length ||
     !value.every((index) => typeof index === "number" && Number.isInteger(index) && index >= 0)) return;
-  change(value);
+  // immediate-change 在手指松开时已给出当前索引；此时即可确认，不必等待惯性动画结束后的 pickend。
+  if (change(value)) rolling.value = false;
 }
 
 function commit(): void {

@@ -22,7 +22,8 @@
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "巡查上报",
-        "backgroundColor": "#f4f7fb"
+        "backgroundColor": "#f4f7fb",
+        "backgroundColorTop": "#ffffff"
       }
     },
     {

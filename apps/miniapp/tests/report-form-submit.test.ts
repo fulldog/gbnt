@@ -20,12 +20,13 @@ const defaultRegionTree: OrgTreeNode[] = [{
   type: "root",
   sort: 1,
   children: [{
-    id: 2,
+    id: 10,
     parent_id: 1,
-    name: "街道",
-    type: "street",
+    name: "区",
+    type: "district",
     sort: 1,
-    children: [{ id: 3, parent_id: 2, name: "村", type: "village", sort: 1, children: [] }],
+    children: [{ id: 2, parent_id: 10, name: "街道", type: "street", sort: 1,
+      children: [{ id: 3, parent_id: 2, name: "村", type: "village", sort: 1, children: [] }] }],
   }],
 }];
 function validTransformer() {
@@ -91,27 +92,44 @@ describe("当前类型提交与签名", () => {
     villageForm.orgLabel = "旧组织";
     const village = setup(villageForm);
     expect(village.state.regionLocked.value).toBe(true);
-    expect(village.state.form).toMatchObject({ orgId: 3, orgLabel: "根 / 街道 / 村" });
+    expect(village.state.form).toMatchObject({ orgId: 3, orgLabel: "区 / 街道 / 村" });
     village.state.selectRegion({ id: 99, label: "范围外组织" });
     expect(village.state.form.orgId).toBe(3);
 
     const streetTree: OrgTreeNode[] = [{
-      id: 2,
-      parent_id: 1,
-      name: "街道",
-      type: "street",
+      id: 1,
+      parent_id: 0,
+      name: "区",
+      type: "district",
       sort: 1,
-      children: [
+      children: [{ id: 2, parent_id: 1, name: "街道", type: "street", sort: 1, children: [
         { id: 3, parent_id: 2, name: "甲村", type: "village", sort: 1, children: [] },
         { id: 4, parent_id: 2, name: "乙村", type: "village", sort: 2, children: [] },
-      ],
+      ] }],
     }];
     const street = setup(validTransformer(), true, {}, { regionTree: streetTree, userOrgId: 2 });
     expect(street.state.regionLocked.value).toBe(false);
     street.state.selectRegion({ id: 4, label: "伪造名称" });
-    expect(street.state.form).toMatchObject({ orgId: 4, orgLabel: "街道 / 乙村" });
+    expect(street.state.form).toMatchObject({ orgId: 4, orgLabel: "区 / 街道 / 乙村" });
     street.state.selectRegion({ id: 99, label: "范围外组织" });
     expect(street.state.form.orgId).toBe(4);
+  });
+
+  it("两级组织提交街道 ID，三级组织提交村 ID", async () => {
+    const threeLevel = setup();
+    await threeLevel.state.submit();
+    expect(api.issues.create).toHaveBeenLastCalledWith(expect.objectContaining({ org_id: 3 }));
+
+    const twoLevelTree: OrgTreeNode[] = [{
+      id: 10, parent_id: 0, name: "区", type: "district", sort: 1,
+      children: [{ id: 2, parent_id: 10, name: "无村街道", type: "street", sort: 1, children: [] }],
+    }];
+    const twoLevelForm = validTransformer();
+    twoLevelForm.orgId = 2;
+    twoLevelForm.orgLabel = "区 / 无村街道";
+    const twoLevel = setup(twoLevelForm, true, {}, { regionTree: twoLevelTree, userOrgId: 2 });
+    await twoLevel.state.submit();
+    expect(api.issues.create).toHaveBeenLastCalledWith(expect.objectContaining({ org_id: 2 }));
   });
 
   it("地图原生窗口状态统一上报给提交页", () => {

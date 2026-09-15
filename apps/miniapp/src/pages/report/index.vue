@@ -106,7 +106,7 @@ onShareTimeline(() => ({ title: "农田专项整治 · 巡查上报", query: "" 
 
 <template>
   <view class="report-page page-shell">
-    <PageTopInset />
+    <PageTopInset fixed-cover />
     <view v-if="!draftReady" class="access-loading" role="status">正在准备巡查表单…</view>
     <template v-else>
       <view v-if="access.phase.value === 'denied'" class="access-panel">

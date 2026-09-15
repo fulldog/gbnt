@@ -211,7 +211,7 @@ onUnload(() => {
         <view class="todo-page__region-filter">
           <RegionPicker
             mode="filter"
-            start-level="street"
+            start-level="district"
             :tree="regionTree"
             :value="region.selectedId.value ?? null"
             :loading="regionLoading"

@@ -13,13 +13,16 @@ export function useTodoRegion(getUser: () => MiniappAuthUser | null, loadTree = 
   const scope = shallowRef("");
   const userScope = () => `${getUser()?.id}:${getUser()?.org_id}:${getUser()?.is_super_admin}`;
   let sequence = 0;
-  const isRegion = (id: number) => ["street", "village"].includes(findRegion(tree.value, id)?.type ?? "");
+  const isRegion = (id: number) => {
+    const node = findRegion(tree.value, id);
+    return Boolean(node && node.within_org_scope !== false && ["district", "street", "village"].includes(node.type));
+  };
   const ready = computed(() => Boolean(getUser()) && scope.value === userScope() && tree.value.length > 0 &&
     (selectedId.value === undefined || isRegion(selectedId.value)));
 
   function select(id: number | undefined | null): boolean {
     if (!ready.value || (id != null && !isRegion(id))) return false;
-    // 不传 org_id 表示当前账号权限范围内的全部街道，由后端继续限制数据范围。
+    // 不传 org_id 表示当前账号权限范围内的全部区域，由后端继续限制数据范围。
     selectedId.value = id ?? undefined;
     return true;
   }

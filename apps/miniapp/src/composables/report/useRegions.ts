@@ -15,6 +15,11 @@ export function flattenLeafRegions(
 ): RegionOption[] {
   const result: RegionOption[] = [];
   for (const node of nodes) {
+    // root 是技术树容器，小程序只展示区县／街道／村社区业务路径。
+    if (node.type === "root") {
+      result.push(...flattenLeafRegions(node.children, parentNames));
+      continue;
+    }
     const names = [...parentNames, node.name];
     if (node.children.length === 0) {
       result.push({ id: node.id, label: names.join(" / ") });

@@ -73,6 +73,7 @@ function compileAndInspect(source: string, filename: string) {
 const files = vueFiles(sourceRoot);
 const expectedProps: Record<string, string[]> = {
   "components/auth/AuthSlider.vue": ["disabled"],
+  "components/common/PageTopInset.vue": ["title", "fixedCover"],
   "components/media/PhotoPicker.vue": ["maximum", "cameraOnly", "cooldownSeconds", "watermark", "location", "modelValue"],
   "components/report/QuizCard.vue": ["item", "definition", "issueType", "location", "disabled"],
   "components/report/IssueTypeFields.vue": ["type", "details"],

@@ -56,7 +56,7 @@ export function useRegionPicker(
       for (const node of nodes) {
         const path = [...names, node.name];
         if (node.type === "root") collect(node.children, path);
-        else if (node.type === "district") entries.push({ node, names: path });
+        else if (node.type === "district") entries.push({ node, names: [node.name] });
       }
     }
     collect(getTree(), []);
@@ -78,9 +78,13 @@ export function useRegionPicker(
     return find(getTree(), []) ?? [];
   });
   const selectedLabel = computed(() => getSelectedId() === null && isFilter.value
-    ? allLabel.value : selectedPath.value.filter((node) => getStartLevel() !== "street" || ["street", "village"].includes(node.type)).map((node) => node.name).join(""));
-  const selectedName = computed(() => getSelectedId() === null && isFilter.value
-    ? allLabel.value : selectedPath.value[selectedPath.value.length - 1]?.name ?? "");
+    ? allLabel.value : selectedPath.value.filter((node) => node.type !== "root" &&
+      (getStartLevel() !== "street" || ["street", "village"].includes(node.type))).map((node) => node.name).join(""));
+  const selectedName = computed(() => {
+    if (getSelectedId() === null && isFilter.value) return allLabel.value;
+    const endpoint = selectedPath.value[selectedPath.value.length - 1];
+    return endpoint?.type === "root" ? "" : endpoint?.name ?? "";
+  });
 
   function streetsOf(node: OrgTreeNode | undefined): OrgTreeNode[] {
     return node?.children.filter((child) => child.type === "street") ?? [];
@@ -128,6 +132,8 @@ export function useRegionPicker(
     if (ids[2] !== null && !village) return null;
     const path = [entry.node, ...(street ? [street] : []), ...(village ? [village] : [])];
     const endpoint = path[path.length - 1]!;
+    // 祖先节点仅用于补全三级路径，不能越过登录账号的组织范围提交。
+    if (endpoint.within_org_scope === false) return null;
     // 创建兼容无下级的真实区县/街道；筛选可选有下级的父组织。
     if (!isFilter.value && endpoint.children.length !== 0) return null;
     if (getMode() === "village" && endpoint.type !== "village") return null;
@@ -170,21 +176,22 @@ export function useRegionPicker(
     return items.length === 0 ? index === 0 : index < items.length;
   }
 
-  function change(values: readonly number[]): void {
-    if (!opened.value || values.length !== 3 || values.some((value) => !Number.isInteger(value) || value < 0)) return;
+  function change(values: readonly number[]): boolean {
+    if (!opened.value || values.length !== 3 || values.some((value) => !Number.isInteger(value) || value < 0)) return false;
     const districtOption = columns.value[0][values[0]!];
-    if (!districtOption) return;
+    if (!districtOption) return false;
     const district = districts.value.find((entry) => entry.node.id === districtOption.id)?.node;
     const districtChanged = districtOption.id !== pendingIds.value?.[0];
     const streetOptions = options(streetsOf(district), 1);
     const streetIndex = districtChanged ? 0 : values[1]!;
-    if (!validIndex(streetIndex, streetOptions)) return;
+    if (!validIndex(streetIndex, streetOptions)) return false;
     const streetId = streetOptions[streetIndex]?.id ?? null;
     const street = streetsOf(district).find((node) => node.id === streetId);
     const villageOptions = options(villagesOf(street), 2);
     const villageIndex = districtChanged || streetId !== pendingIds.value?.[1] ? 0 : values[2]!;
-    if (!validIndex(villageIndex, villageOptions)) return;
+    if (!validIndex(villageIndex, villageOptions)) return false;
     pendingIds.value = [districtOption.id, streetId, villageOptions[villageIndex]?.id ?? null];
+    return true;
   }
 
   function confirm(): void {

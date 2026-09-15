@@ -36,7 +36,7 @@ function setup(tree = regions(), selectedId: number | null = null, initialMode: 
 }
 
 describe("report region picker", () => {
-  it("shows districtstreetvillage columns without the root and keeps the full confirmation path", () => {
+  it("shows districtstreetvillage columns and keeps the business confirmation path without root", () => {
     const { picker, onConfirm } = setup();
     expect(picker.opened.value).toBe(false);
     picker.open();
@@ -44,11 +44,11 @@ describe("report region picker", () => {
       ["甲区", "乙区"], ["甲街道", "乙街道"], ["甲村", "乙社区"],
     ]);
     expect(picker.indices.value).toEqual([0, 0, 0]);
-    expect(picker.selection.value).toEqual({ id: 111, label: "管委会甲区甲街道甲村" });
+    expect(picker.selection.value).toEqual({ id: 111, label: "甲区甲街道甲村" });
     expect(onConfirm).not.toHaveBeenCalled();
     picker.confirm();
     picker.confirm();
-    expect(onConfirm.mock.calls).toEqual([[{ id: 111, label: "管委会甲区甲街道甲村" }]]);
+    expect(onConfirm.mock.calls).toEqual([[{ id: 111, label: "甲区甲街道甲村" }]]);
     expect(picker.opened.value).toBe(false);
   });
 
@@ -56,7 +56,7 @@ describe("report region picker", () => {
     const { picker } = setup(regions(), 221);
     picker.open();
     expect(picker.indices.value).toEqual([1, 1, 0]);
-    expect(picker.selection.value?.label).toBe("管委会乙区丁街道己村");
+    expect(picker.selection.value?.label).toBe("乙区丁街道己村");
   });
 
   it("resets both descendants when the district changes, ignoring stale child indices", () => {
@@ -103,21 +103,21 @@ describe("report region picker", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("preserves all roots in labels and also accepts a tree whose root wrapper is omitted", () => {
+  it("omits every root wrapper from labels and also accepts a tree whose root wrapper is omitted", () => {
     const tree = regions();
     tree.push(node(2, "root", "第二管委会", [node(30, "district", "丙区")]));
     const { picker } = setup(tree, 30);
     picker.open();
     expect(picker.columns.value[0].map((item) => item.id)).toEqual([10, 20, 30]);
-    expect(picker.selection.value).toEqual({ id: 30, label: "第二管委会丙区" });
+    expect(picker.selection.value).toEqual({ id: 30, label: "丙区" });
     const direct = setup(regions()[0]!.children, 112).picker;
     direct.open();
     expect(direct.selection.value?.label).toBe("甲区甲街道乙社区");
   });
 
   it.each([
-    { tree: [node(1, "root", "根", [node(10, "district", "空区")])], id: 10, lengths: [1, 0, 0], label: "根空区" },
-    { tree: [node(1, "root", "根", [node(10, "district", "区", [node(11, "street", "空街道")])])], id: 11, lengths: [1, 1, 0], label: "根区空街道" },
+    { tree: [node(1, "root", "根", [node(10, "district", "空区")])], id: 10, lengths: [1, 0, 0], label: "空区" },
+    { tree: [node(1, "root", "根", [node(10, "district", "区", [node(11, "street", "空街道")])])], id: 11, lengths: [1, 1, 0], label: "区空街道" },
   ])("preserves existing non-root leaf compatibility for organization $id without fabricated descendants", ({ tree, id, lengths, label }) => {
     const { picker, onConfirm } = setup(tree, id);
     picker.open();
@@ -125,6 +125,25 @@ describe("report region picker", () => {
     expect(picker.selection.value).toEqual({ id, label });
     picker.confirm();
     expect(onConfirm).toHaveBeenCalledWith({ id, label });
+  });
+
+  it("同一区内两级街道提交街道 ID，三级街道提交村 ID", () => {
+    const twoLevel = node(11, "street", "两级街道");
+    const village = node(121, "village", "三级村");
+    const threeLevel = node(12, "street", "三级街道", [village]);
+    const { picker, onConfirm } = setup([node(10, "district", "甲区", [twoLevel, threeLevel])], 11);
+
+    picker.open();
+    expect(picker.columns.value[2]).toEqual([]);
+    expect(picker.selection.value).toEqual({ id: 11, label: "甲区两级街道" });
+    picker.confirm();
+    expect(onConfirm).toHaveBeenLastCalledWith({ id: 11, label: "甲区两级街道" });
+
+    picker.open();
+    picker.change([0, 1, 0]);
+    expect(picker.selection.value).toEqual({ id: 121, label: "甲区三级街道三级村" });
+    picker.confirm();
+    expect(onConfirm).toHaveBeenLastCalledWith({ id: 121, label: "甲区三级街道三级村" });
   });
 
   it.each([
@@ -247,7 +266,7 @@ describe("report region picker", () => {
     const updated = regions();
     updated[0]!.children[0]!.children[1]!.name = "更新街道";
     source.value = updated;
-    expect(picker.selection.value?.label).toBe("管委会甲区更新街道丙村");
+    expect(picker.selection.value?.label).toBe("甲区更新街道丙村");
   });
 });
 
@@ -268,11 +287,24 @@ describe("shared region picker filter mode", () => {
     expect(onConfirm.mock.calls).toEqual([[{ id: null, label: "全部区域" }]]);
   });
 
+  it("祖先区只用于补全路径，只能确认账号范围内的街道或下级", () => {
+    const street = { ...node(11, "street", "甲街道"), within_org_scope: true };
+    const district = { ...node(10, "district", "甲区", [street]), within_org_scope: false };
+    const { picker, onConfirm } = setup([district], null, "filter");
+    picker.open();
+    picker.change([1, 0, 0]);
+    expect(picker.selection.value).toBeNull();
+    picker.confirm();
+    expect(onConfirm).not.toHaveBeenCalled();
+    picker.change([1, 1, 0]);
+    expect(picker.selection.value).toEqual({ id: 11, label: "甲区甲街道" });
+  });
+
   it.each([
-    { id: 10, indices: [1, 0, 0], label: "管委会甲区", name: "甲区" },
-    { id: 12, indices: [1, 2, 0], label: "管委会甲区乙街道", name: "乙街道" },
-    { id: 112, indices: [1, 1, 2], label: "管委会甲区甲街道乙社区", name: "乙社区" },
-    { id: 221, indices: [2, 2, 1], label: "管委会乙区丁街道己村", name: "己村" },
+    { id: 10, indices: [1, 0, 0], label: "甲区", name: "甲区" },
+    { id: 12, indices: [1, 2, 0], label: "甲区乙街道", name: "乙街道" },
+    { id: 112, indices: [1, 1, 2], label: "甲区甲街道乙社区", name: "乙社区" },
+    { id: 221, indices: [2, 2, 1], label: "乙区丁街道己村", name: "己村" },
   ])("restores and confirms any real level $id without choosing an arbitrary descendant", ({ id, indices, label, name }) => {
     const { picker, onConfirm } = setup(regions(), id, "filter");
     expect(picker.selectedLabel.value).toBe(label);
@@ -291,7 +323,7 @@ describe("shared region picker filter mode", () => {
     expect(picker.indices.value).toEqual([2, 0, 0]);
     expect(picker.columns.value[1].map(({ id }) => id)).toEqual([null, 21, 22]);
     expect(picker.columns.value[2]).toEqual([{ id: null, name: "全部村（社区）" }]);
-    expect(picker.selection.value).toEqual({ id: 20, label: "管委会乙区" });
+    expect(picker.selection.value).toEqual({ id: 20, label: "乙区" });
   });
 
   it("resets to all villages when selecting a different street", () => {
@@ -299,7 +331,7 @@ describe("shared region picker filter mode", () => {
     picker.open();
     picker.change([1, 2, 2]);
     expect(picker.indices.value).toEqual([1, 2, 0]);
-    expect(picker.selection.value).toEqual({ id: 12, label: "管委会甲区乙街道" });
+    expect(picker.selection.value).toEqual({ id: 12, label: "甲区乙街道" });
     expect(picker.columns.value[2].map(({ id }) => id)).toEqual([null, 121, 122]);
     picker.change([1, 2, 2]);
     expect(picker.selection.value?.id).toBe(122);
@@ -377,13 +409,13 @@ describe("shared region picker filter mode", () => {
     source.value = regions();
     expect(picker.selection.value).toBeNull();
     expect(selected.value).toBe(id);
-    expect(picker.selectedLabel.value).toBe(id === 1 ? "管委会" : "");
-    expect(picker.selectedName.value).toBe(id === 1 ? "管委会" : "");
+    expect(picker.selectedLabel.value).toBe("");
+    expect(picker.selectedName.value).toBe("");
     expect(onConfirm).not.toHaveBeenCalled();
     picker.change([1, 0, 0]);
     expect(picker.selection.value?.id).toBe(10);
     picker.confirm();
-    expect(onConfirm).toHaveBeenCalledWith({ id: 10, label: "管委会甲区" });
+    expect(onConfirm).toHaveBeenCalledWith({ id: 10, label: "甲区" });
   });
 
   it("allows explicitly selecting all even when the existing ID is not representable", () => {
@@ -460,14 +492,14 @@ describe("confirmed region labels", () => {
     const { picker, selected, source } = setup(regions(), 112);
     picker.open();
     picker.change([1, 1, 0]);
-    expect(picker.selectedLabel.value).toBe("管委会甲区甲街道乙社区");
+    expect(picker.selectedLabel.value).toBe("甲区甲街道乙社区");
     expect(picker.selectedName.value).toBe("乙社区");
     selected.value = 221;
     expect(picker.selectedName.value).toBe("己村");
     const updated = regions();
     updated[0]!.children[1]!.children[1]!.children[0]!.name = "更新村";
     source.value = updated;
-    expect(picker.selectedLabel.value).toBe("管委会乙区丁街道更新村");
+    expect(picker.selectedLabel.value).toBe("乙区丁街道更新村");
   });
 
   it("uses empty labels for a cleared creation value and never mistakes unknown IDs for all", () => {
