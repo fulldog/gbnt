@@ -186,8 +186,10 @@ defineExpose({ reset });
   box-sizing: border-box;
 }
 
-.auth-slider__track--verified {
+.auth-slider__track--verified .auth-slider__text {
+  z-index: 2;
   color: #fff;
+  pointer-events: none;
 }
 
 .auth-slider__track--verified::after {
@@ -219,6 +221,11 @@ defineExpose({ reset });
   box-shadow: inset 0 0 0 1px #f3b7b3;
   background: #fff4f3;
   color: var(--gbnt-danger, #b42318);
+}
+
+// 错误态没有拖动轨迹，移除起点遮罩，避免盖住左侧边框。
+.auth-slider__track--error::after {
+  display: none;
 }
 
 .auth-slider__track--error .auth-slider__text,

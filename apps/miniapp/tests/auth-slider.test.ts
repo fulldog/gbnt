@@ -144,6 +144,7 @@ describe("安全验证生命周期", () => {
     expect(options.start).toHaveBeenCalledTimes(1);
     expect(options.verified).not.toHaveBeenCalled();
     expect(slider.state.value).toBe("error");
+    expect(slider.stateText.value).toBe("验证未通过");
     expect(slider.errorMessage.value).toContain("平稳拖动");
     await slider.prepare();
     await gesture(slider);
@@ -223,6 +224,7 @@ describe("安全验证生命周期", () => {
     vi.advanceTimersByTime(1000);
     await slider.onTouchEnd({ changedTouches: [{ clientX: 1000 }] });
     expect(slider.state.value).toBe("error");
+    expect(slider.stateText.value).toBe("验证已过期");
     expect(slider.errorMessage.value).toContain("会话已过期");
     expect(options.finish).not.toHaveBeenCalled();
     expect(options.invalidated).toHaveBeenCalledTimes(2);
@@ -236,6 +238,7 @@ describe("安全验证生命周期", () => {
     expect(slider.state.value).toBe("verified");
     vi.setSystemTime(Date.now() + 1001);
     expect(slider.checkExpiry()).toBe(true);
+    expect(slider.stateText.value).toBe("验证已过期");
     expect(slider.errorMessage.value).toContain("凭证已过期");
     expect(options.invalidated).toHaveBeenCalledTimes(2);
     expect(slider.checkExpiry()).toBe(false);

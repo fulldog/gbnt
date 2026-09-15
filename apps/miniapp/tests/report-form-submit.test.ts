@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reactive, nextTick, shallowRef, type Ref } from "vue";
 import { setupSfc } from "./helpers/setup-sfc";
@@ -67,7 +68,7 @@ function setup(form = validTransformer(), visible = true, locationApi: {
     "@/domain/issues/definitions": definitions, "@/domain/issues/form": forms, "@/domain/issues/mapper": mapper,
     "@/domain/issues/validation": validation, "@/utils/events": events, "@/utils/issue-display": display,
     "@/composables/report/useRegions": reportRegions, "@/utils/regions": regions,
-  }, emit) as unknown as { form: forms.ReportFormState; step: Ref<number>; codeError: Ref<string>; hasPendingPhotos: Ref<boolean>; submitting: Ref<boolean>; uploadingSignature: Ref<boolean>; regionLocked: Ref<boolean>; setPhotosPending(change: {type: forms.QuizFormItem['type']; value: boolean}): void; updateQuizPhotos(change: {type: forms.QuizFormItem['type']; value: forms.UploadedPhoto[]}): void; updateText(key: "code" | "address", event: { detail: { value: string } }): void; setCodeMode(mode: "auto" | "manual"): void; selectRegion(option: { id: number | null; label: string }): void; selectLocationOnMap(): Promise<void>; refreshCurrentLocation(): Promise<void>; submit(): Promise<void>; updateSignatureStrokes(strokes: forms.ReportFormState["signatureStrokes"]): void; signatureRef: Ref<unknown> };
+  }, emit) as unknown as { form: forms.ReportFormState; step: Ref<number>; codeError: Ref<string>; hasPendingPhotos: Ref<boolean>; submitting: Ref<boolean>; uploadingSignature: Ref<boolean>; regionLocked: Ref<boolean>; setPhotosPending(change: {type: forms.QuizFormItem['type']; value: boolean}): void; updateQuizPhotos(change: {type: forms.QuizFormItem['type']; value: forms.UploadedPhoto[]}): void; updateText(key: "code" | "address", event: { detail: { value: string } }): void; selectRegion(option: { id: number | null; label: string }): void; selectLocationOnMap(): Promise<void>; refreshCurrentLocation(): Promise<void>; submit(): Promise<void>; updateSignatureStrokes(strokes: forms.ReportFormState["signatureStrokes"]): void; signatureRef: Ref<unknown> };
   return { state, props, emit, choose, refresh, notifyLocationOverlay: (visible: boolean) => notifyLocationOverlay?.(visible) };
 }
 beforeEach(() => {
@@ -76,6 +77,14 @@ beforeEach(() => {
   api.issues.create.mockResolvedValue({ issue_key: "created", code: "03" });
 });
 describe("当前类型提交与签名", () => {
+  it("设施编号只展示必填的手动输入框", () => {
+    const source = readFileSync(new URL("../src/components/report/ReportTypeForm.vue", import.meta.url), "utf8");
+    expect(source).toContain('<text class="form-label"><text class="required">*</text>设施编号</text>');
+    expect(source).toContain('placeholder="请输入设施编号" aria-required="true"');
+    expect(source).not.toContain("自动生成");
+    expect(source).not.toContain("code-mode-options");
+  });
+
   it("村账号自动锁定本村，街道账号只能在自身下级村切换", () => {
     const villageForm = validTransformer();
     villageForm.orgId = 99;
@@ -149,14 +158,14 @@ describe("当前类型提交与签名", () => {
     expect(() => state.setPhotosPending({ type: "device_ok", value: false })).not.toThrow();
     expect(state.hasPendingPhotos.value).toBe(false);
   });
-  it("自动模式不预占、不传草稿中的手动号，成功回显后端真实编号", async () => {
+  it("旧自动模式恢复为手动模式并提交填写的设施编号", async () => {
     const form = validTransformer(); form.codeMode = "auto";
     const { state, emit } = setup(form);
+    expect(state.form.codeMode).toBe("manual");
     expect(api.issues.create).not.toHaveBeenCalled();
     await state.submit();
     const input = api.issues.create.mock.calls[0]![0];
-    expect(input).toMatchObject({ code_mode: "auto", request_id: expect.stringMatching(/^[A-Za-z0-9_-]{16,64}$/) });
-    expect(input.code).toBeUndefined();
+    expect(input).toMatchObject({ code_mode: "manual", code: "保持原设施编号", request_id: expect.stringMatching(/^[A-Za-z0-9_-]{16,64}$/) });
     expect(input.codeMode).toBeUndefined();
     expect(input.submissionAttempt).toBeUndefined();
     expect(emit).toHaveBeenCalledWith("submitted", "03");
@@ -164,9 +173,8 @@ describe("当前类型提交与签名", () => {
     await state.submit();
     expect(api.issues.create).toHaveBeenCalledTimes(1);
   });
-  it("手动清空不自动改号，切换模式也不会清空已输入内容", async () => {
+  it("设施编号清空后禁止提交", async () => {
     const { state } = setup();
-    state.setCodeMode("auto"); state.setCodeMode("manual");
     expect(state.form.code).toBe("保持原设施编号");
     state.form.code = "";
     await state.submit();
@@ -183,14 +191,36 @@ describe("当前类型提交与签名", () => {
     expect(api.issues.create.mock.calls[1]![0].request_id).toBe(request);
     expect(api.attachments.uploadImages).not.toHaveBeenCalled();
   });
-  it("重复提示返回基本信息并保留当前字段、照片和签名", async () => {
-    api.issues.create.mockRejectedValueOnce(new ApiError("设施编号重复", { status: 409, code: FACILITY_CODE_CONFLICT }));
-    const { state, emit } = setup(); await state.submit();
+  it("编号冲突使用页面提示，真正修改编号后复用签名并生成新请求", async () => {
+    api.issues.create.mockRejectedValueOnce(new ApiError("当前组织该类型设施编号已存在，请修改或使用自动编号", { status: 409, code: FACILITY_CODE_CONFLICT }));
+    const { state, emit } = setup();
+    await state.submit();
+    const firstRequestId = api.issues.create.mock.calls[0]![0].request_id;
     expect(state.step.value).toBe(1);
-    expect(state.codeError.value).toBe("设施编号重复");
+    expect(state.codeError.value).toBe("设施编号已存在，请修改后重新提交");
+    expect(uni.showToast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "设施编号已存在，请修改后重新提交",
+    }));
     expect(state.form.signatureFileId).toBe("signed");
     expect(state.form.quizzes[0]!.photos).toHaveLength(1);
     expect(emit.mock.calls.some(([event]) => event === "submitted")).toBe(false);
+
+    state.updateText("code", { detail: { value: "  保持原设施编号  " } });
+    await nextTick();
+    expect(state.codeError.value).toBe("设施编号已存在，请修改后重新提交");
+    expect(state.form.signatureFileId).toBe("signed");
+
+    state.updateText("code", { detail: { value: "新设施编号" } });
+    await nextTick();
+    expect(state.codeError.value).toBe("");
+    expect(state.form.signatureFileId).toBe("signed");
+
+    await state.submit();
+    const secondInput = api.issues.create.mock.calls[1]![0];
+    expect(secondInput).toMatchObject({ code: "新设施编号", reporter_signature_file_id: "signed" });
+    expect(secondInput.request_id).not.toBe(firstRequestId);
+    expect(api.attachments.uploadImages).not.toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith("submitted", "03");
   });
   it("另一类型不完整不影响当前类型，只发送当前类型一次", async () => {
     const other = setup(forms.createReportForm("road"), false);

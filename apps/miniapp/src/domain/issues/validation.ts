@@ -1,4 +1,3 @@
-import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import type { IssueType, QuizType } from "@gbnt/api-client";
 import { QUIZ_DEFINITIONS, quizIndicatesIssue } from "./definitions";
 import type { QuizFormItem, ReportFormState } from "./form";
@@ -91,7 +90,7 @@ export function validateBasicStep(form: ReportFormState): string[] {
   if (!form.orgId) {
     errors.push("请选择行政区划");
   }
-  if (resolveFacilityCodeMode(form) === "manual" && !form.code.trim()) {
+  if (!form.code.trim()) {
     errors.push("请填写设施编号");
   }
   if (!form.address.trim()) {

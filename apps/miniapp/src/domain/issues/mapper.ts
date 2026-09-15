@@ -1,4 +1,3 @@
-import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import type {
   BridgeQuizType,
   ForestQuizType,
@@ -39,8 +38,8 @@ function common(form: ReportFormState) {
   return {
     project_year: form.projectYear,
     org_id: form.orgId ?? 0,
-    code_mode: resolveFacilityCodeMode(form),
-    code: resolveFacilityCodeMode(form) === "manual" ? form.code.trim() : undefined,
+    code_mode: "manual" as const,
+    code: form.code.trim(),
     address: form.address.trim(),
     lat: form.lat ?? undefined,
     lng: form.lng ?? undefined,

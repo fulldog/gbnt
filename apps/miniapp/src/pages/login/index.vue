@@ -167,7 +167,6 @@ onShow(() => { pageActive.value = true; });
               :aria-label="showPassword ? '隐藏密码' : '显示密码'"
               :disabled="authStore.loading"
               hover-class="login-field__toggle--pressed"
-              @touchstart.stop
               @tap.stop="togglePassword"
             >
               <image :src="showPassword ? '/static/icons/eye-primary.png' : '/static/icons/eyeOff-primary.png'" class="login-field__eye" mode="aspectFit" aria-hidden="true" />
@@ -361,6 +360,7 @@ onShow(() => { pageActive.value = true; });
 .login-field__eye {
   width: 18px;
   height: 18px;
+  pointer-events: none;
   filter: grayscale(1);
   opacity: .6;
 }

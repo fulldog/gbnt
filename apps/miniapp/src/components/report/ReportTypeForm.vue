@@ -2,7 +2,7 @@
 import { computed, reactive, ref, shallowRef, watch, onBeforeUnmount } from "vue";
 import { onHide } from "@dcloudio/uni-app";
 import { ApiError, FACILITY_CODE_CONFLICT, ISSUE_REQUEST_CONFLICT, prepareIssueSubmission } from "@gbnt/api-client";
-import type { OrgTreeNode, FacilityCodeMode } from "@gbnt/api-client";
+import type { OrgTreeNode } from "@gbnt/api-client";
 import type { ReportTypeDraft } from "@/composables/report/useReportWorkspace";
 import { miniappApi, toAssetUrl } from "@/api/runtime";
 import SignaturePad from "@/components/media/SignaturePad.vue";
@@ -38,6 +38,13 @@ import { hasValidCoordinates } from "@/utils/issue-display";
 import { findRegion } from "@/utils/regions";
 
 type SignaturePadInstance = InstanceType<typeof SignaturePad>;
+type FacilityCodeConflict = {
+  orgId: ReportFormState["orgId"];
+  type: ReportFormState["type"];
+  code: string;
+};
+
+const FACILITY_CODE_CONFLICT_MESSAGE = "设施编号已存在，请修改后重新提交";
 
 const props = defineProps<{
   draft: ReportTypeDraft;
@@ -99,7 +106,19 @@ const lockedRegion = computed(() => {
 });
 const regionLocked = computed(() => Boolean(lockedRegion.value));
 const codeError = shallowRef("");
-watch(() => [form.orgId, form.type, form.code, form.codeMode], () => { codeError.value = ""; });
+const codeConflict = shallowRef<FacilityCodeConflict | null>(null);
+watch(
+  () => [form.orgId, form.type, form.code.trim()] as const,
+  ([orgId, type, code]) => {
+    const conflict = codeConflict.value;
+    codeError.value = conflict &&
+      conflict.orgId === orgId &&
+      conflict.type === type &&
+      conflict.code === code
+      ? FACILITY_CODE_CONFLICT_MESSAGE
+      : "";
+  },
+);
 
 function reconcileRegionScope(): void {
   if (props.regionsLoading || props.regionsError || regionTree.value.length === 0) return;
@@ -157,6 +176,7 @@ const locationInput = computed(() => ({
 const hasLocation = computed(() =>
   form.lat !== null && form.lng !== null && hasValidCoordinates(form.lat, form.lng),
 );
+const hasLocationData = computed(() => hasLocation.value && form.address.trim().length > 0);
 function showFirstError(nextErrors: string[]): void {
   errors.value = nextErrors;
   if (nextErrors[0]) {
@@ -200,14 +220,8 @@ function updateText(
   event: Event | InputEventLike,
 ): void {
   const value = inputEventValue(event);
-  if (key === "code") { form.codeMode = "manual"; form.code = value; saveDraft(); }
+  if (key === "code") { form.code = value; saveDraft(); }
   else form.address = value;
-}
-
-function setCodeMode(mode: FacilityCodeMode): void {
-  if (submitting.value || uploadingSignature.value) return;
-  form.codeMode = mode;
-  saveDraft();
 }
 
 function updateDetail(key: keyof ReportDetailsForm, value: string): void {
@@ -398,15 +412,18 @@ async function submit(): Promise<void> {
   } catch (error) {
     hideLoading();
     if (!active) return;
+    let message = error instanceof Error ? error.message : "上报失败，请稍后重试";
     if (error instanceof ApiError && error.code === FACILITY_CODE_CONFLICT) {
-      codeError.value = error.message;
+      codeConflict.value = { orgId: form.orgId, type: form.type, code: form.code.trim() };
+      codeError.value = FACILITY_CODE_CONFLICT_MESSAGE;
+      message = FACILITY_CODE_CONFLICT_MESSAGE;
       step.value = 1;
       uni.pageScrollTo({ scrollTop: 0, duration: 180 });
     }
     if (error instanceof ApiError && error.code === ISSUE_REQUEST_CONFLICT) form.submissionAttempt = undefined;
     saveDraft(form);
     uni.showToast({
-      title: error instanceof Error ? error.message : "上报失败，请稍后重试",
+      title: message,
       icon: "none",
       duration: 3000,
     });
@@ -422,8 +439,9 @@ watch(form, () => {
   draftTimer = setTimeout(() => saveDraft(form), 500);
 }, { deep: true });
 
+// 编号冲突后的更正不改变现场排查内容，复用已上传签名，避免对保留笔迹重复上传。
 watch(() => JSON.stringify({ type: form.type, year: form.projectYear, org: form.orgId,
-  address: form.address, lat: form.lat, lng: form.lng, code: form.code, codeMode: form.codeMode, details: form.details,
+  address: form.address, lat: form.lat, lng: form.lng, details: form.details,
   panoramaPhotos: form.panoramaPhotos, quizzes: form.quizzes, planDate: form.planDate }),
 () => {
   if (draftReady.value && form.signatureFileId) resetSignatureUpload();
@@ -480,14 +498,11 @@ onBeforeUnmount(() => {
           </view>
         </view>
         <view class="form-field">
-          <text class="form-label">设施编号</text>
+          <text class="form-label"><text class="required">*</text>设施编号</text>
           <view class="code-control">
-            <view class="code-mode-options">
-              <button :class="{ selected: form.codeMode === 'auto' }" :disabled="submitting" @tap="setCodeMode('auto')">自动生成</button>
-              <button :class="{ selected: form.codeMode === 'manual' }" :disabled="submitting" @tap="setCodeMode('manual')">手动填写</button>
-            </view>
-            <input v-if="form.codeMode === 'manual'" class="form-input" :value="form.code" :disabled="submitting" maxlength="64" placeholder="请输入设施编号" @input="updateText('code', $event)" />
-            <text v-if="codeError" class="code-error">{{ codeError }}</text>
+            <input class="form-input" :value="form.code" :disabled="submitting" maxlength="64"
+              placeholder="请输入设施编号" aria-required="true" :aria-invalid="Boolean(codeError)" @input="updateText('code', $event)" />
+            <text v-if="codeError" class="code-error" role="alert">{{ codeError }}</text>
           </view>
         </view>
         <IssueTypeFields :type="form.type" :details="form.details" @update-field="updateDetail">
@@ -510,9 +525,11 @@ onBeforeUnmount(() => {
             :aria-label="choosingLocation ? '正在打开地图' : '打开地图选择位置'" @tap="selectLocationOnMap">
             <image class="location-icon" src="/static/icons/map-pin-primary.svg" mode="aspectFit" aria-hidden="true" />
           </button>
-          <textarea class="location-address" :value="form.address" maxlength="300" auto-height
+          <button v-if="!hasLocationData" class="location-acquire" :disabled="locationBusy"
+            :loading="refreshingLocation" @tap="refreshCurrentLocation">点击获取定位</button>
+          <textarea v-else class="location-address" :value="form.address" maxlength="300" auto-height
             placeholder="请选择定位或填写详细地址" @input="updateText('address', $event)" />
-          <button class="location-button" :disabled="locationBusy"
+          <button v-if="hasLocationData" class="location-button" :disabled="locationBusy"
             :aria-label="refreshingLocation ? '正在重新定位' : '重新定位'" @tap="refreshCurrentLocation">
             <image class="location-icon" :class="{ 'location-icon--loading': refreshingLocation }"
               src="/static/icons/refresh-primary.svg" mode="aspectFit" aria-hidden="true" />
@@ -637,9 +654,6 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 .code-control { flex: 1; min-width: 0; text-align: right; }
-.code-mode-options { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
-.code-mode-options button { margin: 0; padding: 4px 10px; font-size: 13px; line-height: 24px; background: #f1f4f8; color: var(--color-text-secondary); }
-.code-mode-options button.selected { color: var(--color-primary); background: #edf5ff; }
 .code-error { display: block; text-align: left; font-size: 12px; line-height: 20px; color: #c74735; }
 .form-input, .picker-value {
   flex: 1;
@@ -703,6 +717,21 @@ onBeforeUnmount(() => {
   color: #5a677a;
   font-size: 14px;
   line-height: 24px;
+}
+.location-acquire {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 14px;
+  line-height: 32px;
+  text-align: left;
+}
+.location-acquire::after {
+  border: 0;
 }
 .location-button {
   display: flex;

@@ -40,7 +40,11 @@ export function useAuthSlider(options: SliderOptions) {
     if (state.value === "preparing") return "正在准备验证…";
     if (state.value === "verifying") return "正在验证…";
     if (state.value === "verified") return "验证通过";
-    if (state.value === "error") return "验证暂不可用";
+    if (state.value === "error") {
+      if (errorMessage.value.includes("未通过")) return "验证未通过";
+      if (errorMessage.value.includes("过期")) return "验证已过期";
+      return "验证暂不可用";
+    }
     return "请按住滑块拖动";
   });
   let sliderId = "";

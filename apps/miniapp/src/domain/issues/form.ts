@@ -8,7 +8,6 @@ import type {
   QuizType,
   TransformerVoltage,
 } from "@gbnt/api-client";
-import { resolveFacilityCodeMode } from "@gbnt/api-client";
 import { QUIZ_DEFINITIONS } from "./definitions";
 
 export interface UploadedPhoto {
@@ -54,7 +53,7 @@ export interface ReportFormState {
   orgId: number | null;
   orgLabel: string;
   code: string;
-  /** 旧草稿可省略，恢复时按编号来源推断；新表单显式保存模式。 */
+  /** 仅用于兼容旧草稿；当前小程序统一归一化为 manual。 */
   codeMode?: FacilityCodeMode;
   submissionAttempt?: IssueSubmissionAttempt;
   /** 仅草稿元数据；manual 包括用户主动清空，禁止迟到的自动填充覆盖。 */
@@ -75,14 +74,14 @@ export interface ReportFormState {
   quizzes: QuizFormItem[];
 }
 
-/** 迁移旧建议值/手动草稿，不把用户主动清空误判成自动编号。 */
+/** 将旧编号草稿迁移到手动填写模式；旧自动建议值不能冒充用户输入。 */
 export function restoreReportCodeMode(form: ReportFormState): void {
-  form.codeMode = resolveFacilityCodeMode(form);
   if (form.codeSource === "auto" && form.code !== "") {
     form.code = "";
     form.signatureFileId = "";
     form.signaturePreviewUrl = "";
   }
+  form.codeMode = "manual";
   delete form.codeSource;
   delete form.codeScopeKey;
 }
@@ -143,6 +142,7 @@ export function createReportForm(type: IssueType = "well"): ReportFormState {
     orgId: null,
     orgLabel: "",
     code: "",
+    codeMode: "manual",
     address: "",
     lat: null,
     lng: null,

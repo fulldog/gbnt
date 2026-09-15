@@ -51,31 +51,23 @@ describe("巡查权限入口", () => {
     await pending;
     expect(visibility.mock.calls).toEqual([[true], [false]]);
   });
-  it("隐私协议原生页打开失败时解除页面会话保护", () => {
-    let contractOptions!: { fail(error: { errMsg?: string }): void };
-    vi.stubGlobal("wx", {
-      onNeedPrivacyAuthorization: vi.fn(),
-      offNeedPrivacyAuthorization: vi.fn(),
-      requirePrivacyAuthorize: vi.fn(),
-      openPrivacyContract: vi.fn((options) => { contractOptions = options; }),
-    });
-    const visibility = vi.fn();
-    const access = setup({ onNativeOverlayVisibilityChange: visibility });
+  it("进入、返回巡查页及从设置返回时均不主动检查或申请隐私授权", async () => {
+    const requirePrivacyAuthorize = vi.fn(() => { throw new Error("不应主动申请隐私授权"); });
+    const getPrivacySetting = vi.fn(() => { throw new Error("不应主动检查隐私授权"); });
+    vi.stubGlobal("wx", { requirePrivacyAuthorize, getPrivacySetting });
+    const access = setup();
 
-    access.openPrivacy();
-    expect(visibility.mock.calls).toEqual([[true]]);
-    contractOptions.fail({ errMsg: "openPrivacyContract:fail" });
-    expect(visibility.mock.calls).toEqual([[true], [false]]);
-  });
-  it("隐私同意前不调用设备权限，拒绝后保留不可用状态", async () => {
-    let onPrivacy!: (resolve: (value: { event: string }) => void) => void;
-    vi.stubGlobal("wx", { onNeedPrivacyAuthorization: (callback: typeof onPrivacy) => { onPrivacy = callback; },
-      offNeedPrivacyAuthorization: vi.fn(), requirePrivacyAuthorize: ({ success, fail }: { success(): void; fail(error: object): void }) =>
-        onPrivacy((result) => result.event === "agree" ? success() : fail({ errMsg: "privacy deny" })) });
-    const access = setup(); const pending = access.request();
-    expect(access.phase.value).toBe("privacy"); expect(uni.authorize).not.toHaveBeenCalled();
-    access.rejectPrivacy(); await pending; expect(access.ready.value).toBe(false);
-    const retry = access.request(); access.acceptPrivacy(); await retry; expect(access.ready.value).toBe(true);
+    await access.request();
+    expect(access.ready.value).toBe(true);
+    await access.request();
+    await access.openSettings();
+
+    expect(access.ready.value).toBe(true);
+    expect(requirePrivacyAuthorize).not.toHaveBeenCalled();
+    expect(getPrivacySetting).not.toHaveBeenCalled();
+    expect(uni.authorize).toHaveBeenCalledWith({ scope: "scope.userLocation" });
+    expect(uni.authorize).toHaveBeenCalledWith({ scope: "scope.camera" });
+    expect(uni.getLocation).toHaveBeenCalled();
   });
   it("重复进入的检查合并，卸载后迟到结果不放行", async () => {
     let finish!: (point: { latitude: number; longitude: number }) => void;
@@ -83,5 +75,14 @@ describe("巡查权限入口", () => {
     const access = setup(); const first = access.request(); expect(access.request()).toBe(first);
     await vi.waitFor(() => expect(finish).toBeTypeOf("function")); scopes[0]!.stop(); finish({ latitude: 36, longitude: 116 }); await first;
     expect(access.ready.value).toBe(false);
+  });
+  it("定位接口返回声明错误时仅显示普通失败提示", async () => {
+    vi.mocked(uni.getLocation).mockRejectedValueOnce({ errMsg: "getLocation:fail api scope is not declared in the privacy agreement" });
+    const access = setup();
+
+    await access.request();
+
+    expect(access.ready.value).toBe(false);
+    expect(access.message.value).toBe("继续巡查失败，请重试");
   });
 });
