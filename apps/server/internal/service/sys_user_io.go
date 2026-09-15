@@ -312,7 +312,7 @@ func (s *SysService) exportUsers(q *gorm.DB) ([]byte, error) {
 	return xlsxutil.Export(headers, rows)
 }
 
-// ImportUsers 从xlsx新增人员；角色ID优先、排序空则 100，任一校验失败则整批不落库。
+// ImportUsers 从xlsx新增人员；角色ID优先、排序空则 100，初始密码等于登录账号，任一校验失败则整批不落库。
 func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -430,7 +430,7 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 			return 0, fmt.Errorf("第 %d 行: %w", line, cerr)
 		}
 
-		plain, perr := RandomLoginPassword()
+		plain, perr := ResolveStaffPlainPassword(username, "")
 		if perr != nil {
 			return 0, perr
 		}

@@ -77,7 +77,7 @@ type AdminOrgVO struct {
 // UserInput 创建/更新用户入参。
 type UserInput struct {
 	Username string `json:"username"` // 登录账号（新建必填）
-	Password string `json:"password"` // 明文密码（新建必填，6～14 位字母+数字；编辑空则不改）
+	Password string `json:"password"` // 明文密码（新建选填，空则=登录账号；填写须 6～14 位字母+数字；编辑空则不改）
 	Name     string `json:"name"`     // 姓名
 	Phone    string `json:"phone"`    // 手机号（选填；有值须为中国大陆 11 位）
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
@@ -412,8 +412,8 @@ func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUs
 	if err := ValidateOptionalCNPhone(in.Phone); err != nil {
 		return nil, err
 	}
-	pwd := strings.TrimSpace(in.Password)
-	if err := ValidateSetPassword(pwd); err != nil {
+	pwd, err := ResolveStaffPlainPassword(in.Username, in.Password)
+	if err != nil {
 		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
@@ -511,7 +511,7 @@ func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
 	return s.db(ctx).Delete(&model.SysUser{}, id).Error
 }
 
-// ResetPassword 重置为随机复杂密码，并同时作废管理后台与小程序会话；调用方须把明文告知操作者。
+// ResetPassword 将密码重置为登录账号，并同时作废管理后台与小程序会话；调用方须把明文告知操作者。
 func (s *SysService) ResetPassword(ctx context.Context, id uint64) (string, error) {
 	var u model.SysUser
 	if err := s.db(ctx).First(&u, id).Error; err != nil {
@@ -526,10 +526,7 @@ func (s *SysService) ResetPassword(ctx context.Context, id uint64) (string, erro
 	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
 		return "", err
 	}
-	plain, err := RandomLoginPassword()
-	if err != nil {
-		return "", err
-	}
+	plain := u.Username
 	hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err

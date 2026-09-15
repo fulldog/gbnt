@@ -83,7 +83,7 @@ export function createUsersApi(client: ApiClient) {
       });
     },
 
-    /** sort 为可选整数，默认100；排序越小越靠前，同值按id倒序。 */
+    /** 密码选填，空则初始密码等于登录账号；sort 为可选整数，默认100，越小越靠前。 */
     create(input: CreateUserInput): Promise<SysUser> {
       return client.request<SysUser, CreateUserInput>("/api/sys/users", {
         method: "POST",
@@ -111,6 +111,7 @@ export function createUsersApi(client: ApiClient) {
       return client.request<null>(`/api/sys/users/${id}`, { method: "DELETE" });
     },
 
+    /** 将密码重置为登录账号，响应 password 为明文。 */
     resetPassword(id: number): Promise<{ password: string }> {
       return client.request<{ password: string }>(`/api/sys/users/${id}/reset-password`, {
         method: "POST",

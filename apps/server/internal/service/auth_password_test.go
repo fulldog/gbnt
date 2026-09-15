@@ -34,6 +34,24 @@ func TestValidateSetPassword(t *testing.T) {
 	}
 }
 
+func TestResolveStaffPlainPassword(t *testing.T) {
+	t.Parallel()
+	plain, err := ResolveStaffPlainPassword("worker", "")
+	if err != nil || plain != "worker" {
+		t.Fatalf("空密码应等于账号: %q %v", plain, err)
+	}
+	plain, err = ResolveStaffPlainPassword("worker", "  Passw0rd9  ")
+	if err != nil || plain != "Passw0rd9" {
+		t.Fatalf("自定义密码应保留校验后的明文: %q %v", plain, err)
+	}
+	if _, err := ResolveStaffPlainPassword("worker", "abc"); err == nil {
+		t.Fatal("自定义弱密码应拒绝")
+	}
+	if _, err := ResolveStaffPlainPassword("", ""); err == nil {
+		t.Fatal("无账号时不能生成默认密码")
+	}
+}
+
 func TestValidateOptionalCNPhone(t *testing.T) {
 	t.Parallel()
 	if err := ValidateOptionalCNPhone(""); err != nil {

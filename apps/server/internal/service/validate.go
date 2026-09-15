@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/rand"
 	"errors"
 	"regexp"
 	"strings"
@@ -55,28 +54,17 @@ func ValidateSetPassword(pwd string) error {
 	return nil
 }
 
-// RandomLoginPassword 生成符合 ValidateSetPassword 的随机初始密码（10 位字母+数字）。
-func RandomLoginPassword() (string, error) {
-	const letters = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
-	const digits = "23456789"
-	buf := make([]byte, 10)
-	if _, err := rand.Read(buf); err != nil {
+// ResolveStaffPlainPassword 工作人员初始密码：未填写则等于登录账号；填写则须符合复杂度规则。
+func ResolveStaffPlainPassword(username, password string) (string, error) {
+	pwd := strings.TrimSpace(password)
+	if pwd == "" {
+		if username == "" {
+			return "", errors.New("username 必填")
+		}
+		return username, nil
+	}
+	if err := ValidateSetPassword(pwd); err != nil {
 		return "", err
 	}
-	buf[0] = letters[int(buf[0])%len(letters)]
-	buf[1] = digits[int(buf[1])%len(digits)]
-	alphabet := letters + digits
-	for i := 2; i < len(buf); i++ {
-		buf[i] = alphabet[int(buf[i])%len(alphabet)]
-	}
-	// 打乱除保证位外的顺序，避免固定前缀形态。
-	for i := len(buf) - 1; i > 0; i-- {
-		j := int(buf[i]) % (i + 1)
-		buf[i], buf[j] = buf[j], buf[i]
-	}
-	out := string(buf)
-	if err := ValidateSetPassword(out); err != nil {
-		return RandomLoginPassword()
-	}
-	return out, nil
+	return pwd, nil
 }

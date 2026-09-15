@@ -78,7 +78,7 @@ func (d *Deps) ExportUsers(c *gin.Context) {
 	xlsxutil.WriteDownload(c, "users.xlsx", data)
 }
 
-// ImportUsers POST /api/sys/users/import — 上传 xlsx 仅新增人员；排序列可选，缺失或空值默认 100。
+// ImportUsers POST /api/sys/users/import — 上传 xlsx 仅新增人员；排序列可选，缺失或空值默认 100；初始密码等于登录账号。
 func (d *Deps) ImportUsers(c *gin.Context) {
 	d.markOp(c, "导入人员", "")
 	fh, err := c.FormFile("file")
@@ -186,7 +186,7 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ResetUserPassword POST /api/sys/users/:id/reset-password — 重置为随机复杂密码，响应 data.password 仅此一次返回明文。
+// ResetUserPassword POST /api/sys/users/:id/reset-password — 重置密码为登录账号，响应 data.password 仅此一次返回明文。
 func (d *Deps) ResetUserPassword(c *gin.Context) {
 	d.markOp(c, "重置密码", "user_id="+c.Param("id"))
 	id, ok := parseID(c)
