@@ -88,8 +88,21 @@ type RBACConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 }
 
-// Load 从 configs/config.yaml 读取，并用 GBNT_ 前缀环境变量覆盖。
+// Load 从 configs/config.yaml 读取，并用 GBNT_ 前缀环境变量覆盖；同时校验服务进程的运行期必需项。
 func Load(path string) (*Config, error) {
+	c, err := LoadWithoutRuntimeValidation(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateRuntime(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// LoadWithoutRuntimeValidation 供只访问数据库的运维命令使用：保留同样的 YAML 解析、默认值
+// 与 GBNT_ 环境覆盖语义，但不校验 jwt.secret、RBAC 等仅 HTTP 服务进程才需要的运行期约束。
+func LoadWithoutRuntimeValidation(path string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(path)
 	v.SetEnvPrefix("GBNT")
@@ -170,9 +183,6 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	normalizeCaptcha(&c.Captcha)
-	if err := ValidateRuntime(&c); err != nil {
-		return nil, err
-	}
 	return &c, nil
 }
 

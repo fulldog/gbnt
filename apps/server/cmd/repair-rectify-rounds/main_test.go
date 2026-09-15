@@ -218,7 +218,7 @@ func TestCommandConfigPathAndDSNEnvironmentOverrides(t *testing.T) {
 	}
 	t.Setenv("GBNT_CONFIG", path)
 	t.Setenv("GBNT_MYSQL_DSN", "env_user:env-test-secret@tcp(env.invalid:3307)/from_env?parseTime=true")
-	f.dependencies.loadConfig = config.Load
+	f.dependencies.loadConfig = config.LoadWithoutRuntimeValidation
 	f.checkReport.Database = "from_env"
 	code, out, errOut := runFixture(f)
 	if code != 0 || f.connectionConfig.DBName != "from_env" || f.connectionConfig.Passwd != "env-test-secret" || f.connectionConfig.User != "env_user" {

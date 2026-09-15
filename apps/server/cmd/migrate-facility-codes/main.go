@@ -47,7 +47,8 @@ func run(args []string, output, errorOutput io.Writer) int {
 		fmt.Fprintln(errorOutput, "执行条件不完整，请使用 --help；未连接数据库")
 		return 2
 	}
-	cfg, err := config.Load(configPath)
+	// 只读审计或补约束都只用到 mysql.dsn，不需要服务进程的 jwt/RBAC 运行期校验。
+	cfg, err := config.LoadWithoutRuntimeValidation(configPath)
 	if err != nil {
 		fmt.Fprintln(errorOutput, "读取数据库配置失败")
 		return 1

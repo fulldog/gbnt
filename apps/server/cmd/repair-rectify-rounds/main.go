@@ -82,7 +82,8 @@ func parseCommandOptions(args []string, defaultConfig string) (commandOptions, b
 
 func realCommandDependencies() commandDependencies {
 	return commandDependencies{
-		loadConfig: config.Load,
+		// 本命令只需要 mysql.dsn，不启动 HTTP 服务，因此不校验 jwt.secret 等运行期约束。
+		loadConfig: config.LoadWithoutRuntimeValidation,
 		openDB: func(configuration *mysql.Config) (*sql.DB, error) {
 			connector, err := mysql.NewConnector(configuration)
 			if err != nil {
