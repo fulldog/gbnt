@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
+	"gbnt/apps/server/internal/cachex"
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
 )
@@ -19,6 +21,7 @@ import (
 type IssueService struct {
 	DB     *gorm.DB
 	Attach *AttachService
+	Cache  *cachex.Store // 与 SysService 共用 sys_orgs:list
 }
 
 // IssueQuery 列表筛选。
@@ -99,46 +102,88 @@ func (s *IssueService) db(ctx context.Context) *gorm.DB {
 	return s.DB.WithContext(ctx)
 }
 
-func (s *IssueService) toVO(item *model.Issue) (*IssueVO, error) {
-	ctx := context.Background()
-	ext, err := s.hydrateTypeExt(ctx, item.Type, item.TypeExt)
+func (s *IssueService) toVO(ctx context.Context, item *model.Issue) (*IssueVO, error) {
+	if item == nil {
+		return nil, errors.New("问题不存在")
+	}
+	list, err := s.issuesToVO(ctx, []model.Issue{*item})
 	if err != nil {
 		return nil, err
 	}
-	vo := &IssueVO{
-		Issue:          *item,
-		TypeExtVO:      ext,
-		RectifyRecords: []RectifyRecordVO{},
+	return &list[0], nil
+}
+
+// issuesToVO 批量展开类型扩展、整改记录与附件，避免列表逐条查库。
+func (s *IssueService) issuesToVO(ctx context.Context, list []model.Issue) ([]IssueVO, error) {
+	out := make([]IssueVO, 0, len(list))
+	if len(list) == 0 {
+		return out, nil
 	}
-	if s.Attach != nil && strings.TrimSpace(item.ReporterSignatureFileID) != "" {
-		if list, lookErr := s.Attach.lookupExisting(ctx, []string{item.ReporterSignatureFileID}); lookErr == nil && len(list) == 1 {
-			sig := list[0]
-			vo.ReporterSignature = &sig
+	ids := make([]uint64, 0, len(list))
+	fileIDs := make([]string, 0)
+	for i := range list {
+		ids = append(ids, list[i].ID)
+		if sig := strings.TrimSpace(list[i].ReporterSignatureFileID); sig != "" {
+			fileIDs = append(fileIDs, sig)
 		}
 	}
 	var records []model.IssueRectifyRecord
-	if err := s.DB.Where("issue_id = ?", item.ID).Order("id DESC").Find(&records).Error; err != nil {
+	if err := s.db(ctx).Where("issue_id IN ?", ids).Order("id DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
-	out := make([]RectifyRecordVO, 0, len(records))
-
-	var filter = make(map[string]bool)
-
-	for i := range records {
-		var key = fmt.Sprintf("%d%d%s", records[i].IssueID, records[i].Round, records[i].CreatedAt.String())
-		if filter[key] {
-			continue
+	byIssue := make(map[uint64][]model.IssueRectifyRecord, len(list))
+	if len(list) == 1 {
+		byIssue[list[0].ID] = records
+	} else {
+		for i := range records {
+			byIssue[records[i].IssueID] = append(byIssue[records[i].IssueID], records[i])
 		}
-		ids := parseFileIDJSON(records[i].PhotoFileIDs)
-		photos := []FileItem{}
-		if s.Attach != nil && len(ids) > 0 {
-			photos, _ = s.Attach.lookupExisting(ctx, ids)
-		}
-		out = append(out, RectifyRecordVO{IssueRectifyRecord: records[i], Photos: photos})
-		filter[key] = true
 	}
-	vo.RectifyRecords = out
-	return vo, nil
+	for i := range records {
+		fileIDs = append(fileIDs, parseFileIDJSON(records[i].PhotoFileIDs)...)
+	}
+	files := map[string]FileItem{}
+	if s.Attach != nil && len(fileIDs) > 0 {
+		items, err := s.Attach.lookupExisting(ctx, fileIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			files[item.FileID] = item
+		}
+	}
+	for i := range list {
+		ext, err := s.hydrateTypeExt(ctx, list[i].Type, list[i].TypeExt)
+		if err != nil {
+			return nil, err
+		}
+		vo := IssueVO{Issue: list[i], TypeExtVO: ext, RectifyRecords: []RectifyRecordVO{}}
+		if sig := strings.TrimSpace(list[i].ReporterSignatureFileID); sig != "" {
+			if item, ok := files[sig]; ok {
+				copied := item
+				vo.ReporterSignature = &copied
+			}
+		}
+		seen := map[string]struct{}{}
+		issueRecords := byIssue[list[i].ID]
+		vo.RectifyRecords = make([]RectifyRecordVO, 0, len(issueRecords))
+		for j := range issueRecords {
+			key := fmt.Sprintf("%d:%d:%d", issueRecords[j].IssueID, issueRecords[j].Round, issueRecords[j].CreatedAt.UnixNano())
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			photos := []FileItem{}
+			for _, id := range parseFileIDJSON(issueRecords[j].PhotoFileIDs) {
+				if item, ok := files[id]; ok {
+					photos = append(photos, item)
+				}
+			}
+			vo.RectifyRecords = append(vo.RectifyRecords, RectifyRecordVO{IssueRectifyRecord: issueRecords[j], Photos: photos})
+		}
+		out = append(out, vo)
+	}
+	return out, nil
 }
 
 func parseFileIDJSON(raw string) []string {
@@ -155,27 +200,25 @@ func parseFileIDJSON(raw string) []string {
 
 // MarshalJSON 保留基础业务字段，并将类型扩展与整改附件展开为 JSON 对象。
 func (v IssueVO) MarshalJSON() ([]byte, error) {
-	b, err := json.Marshal(v.Issue)
-	if err != nil {
-		return nil, err
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
+	type issueDTO model.Issue
 	var ext any
 	if len(v.TypeExtVO) > 0 && string(v.TypeExtVO) != "null" {
 		if err := json.Unmarshal(v.TypeExtVO, &ext); err != nil {
-			m["type_ext"] = json.RawMessage(v.TypeExtVO)
-		} else {
-			m["type_ext"] = ext
+			ext = json.RawMessage(v.TypeExtVO)
 		}
 	}
-	m["rectify_records"] = v.RectifyRecords
-	if v.ReporterSignature != nil {
-		m["reporter_signature"] = v.ReporterSignature
+	out := struct {
+		issueDTO
+		TypeExt           any               `json:"type_ext"`
+		RectifyRecords    []RectifyRecordVO `json:"rectify_records"`
+		ReporterSignature *FileItem         `json:"reporter_signature,omitempty"`
+	}{
+		issueDTO:          issueDTO(v.Issue),
+		TypeExt:           ext,
+		RectifyRecords:    v.RectifyRecords,
+		ReporterSignature: v.ReporterSignature,
 	}
-	return json.Marshal(m)
+	return json.Marshal(out)
 }
 
 // List 管理端基础列表；按已逾期、即将逾期、待整改、已整改/已排查分组，同组按创建时间倒序。
@@ -190,6 +233,7 @@ func (s *IssueService) listVisible(ctx context.Context, q IssueQuery) ([]IssueVO
 }
 
 func (s *IssueService) list(ctx context.Context, q IssueQuery, visibleOnly bool) ([]IssueVO, int64, error) {
+	ctx = WithOrgLookup(ctx, s.Cache)
 	q.Page, q.Size = NormalizePagination(q.Page, q.Size, 0)
 	db := s.applyAdminIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
 	var err error
@@ -209,13 +253,9 @@ func (s *IssueService) list(ctx context.Context, q IssueQuery, visibleOnly bool)
 	if err := db.Clauses(adminIssueOrder(db.NowFunc())).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
-	out := make([]IssueVO, 0, len(list))
-	for i := range list {
-		vo, err := s.toVO(&list[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		out = append(out, *vo)
+	out, err := s.issuesToVO(ctx, list)
+	if err != nil {
+		return nil, 0, err
 	}
 	return out, total, nil
 }
@@ -279,12 +319,11 @@ func (s *IssueService) applyOrgSubtreeFilter(ctx context.Context, db *gorm.DB, o
 	if orgID == 0 {
 		return db, nil
 	}
-	var orgs []model.SysOrg
-	if err := s.db(ctx).Find(&orgs).Error; err != nil {
+	orgs, err := loadOrgIDParentRows(ctx, s.db(ctx))
+	if err != nil {
 		return nil, err
 	}
-	ids := orgSubtreeIDs(orgs, orgID)
-	return db.Where("org_id IN ?", ids), nil
+	return db.Where("org_id IN ?", orgSubtreeIDs(orgs, orgID)), nil
 }
 
 // ListTodos 小程序待办：已逾期、即将逾期、正常依次排列，同组剩余时间倒序。
@@ -300,6 +339,7 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 	if q.Size <= 0 {
 		q.Size = 20
 	}
+	ctx = WithOrgLookup(ctx, s.Cache)
 	user, err := database.UserFromContext(ctx)
 	if err != nil {
 		return nil, 0, err
@@ -317,13 +357,18 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 		}
 	}
 	db := s.applyIssueFilters(s.db(ctx).Model(&model.Issue{}), q)
-	db, err = s.applyOrgSubtreeFilter(ctx, db, user.OrgID)
-	if err != nil {
-		return nil, 0, err
+	var orgs []model.SysOrg
+	if user.OrgID != 0 || q.OrgID != 0 {
+		orgs, err = loadOrgCatalog(ctx, s.db(ctx))
+		if err != nil {
+			return nil, 0, err
+		}
 	}
-	db, err = s.applyOrgSubtreeFilter(ctx, db, q.OrgID)
-	if err != nil {
-		return nil, 0, err
+	if user.OrgID != 0 {
+		db = db.Where("org_id IN ?", orgSubtreeIDs(orgs, user.OrgID))
+	}
+	if q.OrgID != 0 {
+		db = db.Where("org_id IN ?", orgSubtreeIDs(orgs, q.OrgID))
 	}
 	db = db.Where("assignee_user IN (?, ?)", int64(0), int64(user.ID))
 	var total int64
@@ -337,28 +382,25 @@ func (s *IssueService) ListTodos(ctx context.Context, q IssueQuery) ([]IssueVO, 
 	if err := db.Clauses(miniappIssueOrder(q.AsOf)).Offset((q.Page - 1) * q.Size).Limit(q.Size).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
-	out := make([]IssueVO, 0, len(list))
-	for i := range list {
-		vo, err := s.toVO(&list[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		out = append(out, *vo)
+	out, convErr := s.issuesToVO(ctx, list)
+	if convErr != nil {
+		return nil, 0, convErr
 	}
 	return out, total, nil
 }
 
-func (s *IssueService) MineStats(userID uint64) (map[string]int64, error) {
+// MineStats 小程序「我的」计数：reported / pending / done。
+func (s *IssueService) MineStats(ctx context.Context, userID uint64) (map[string]int64, error) {
 	var reported, pending, done int64
-	if err := s.DB.Model(&model.Issue{}).Where("created_id = ?", userID).Count(&reported).Error; err != nil {
+	if err := s.db(ctx).Model(&model.Issue{}).Where("created_id = ?", userID).Count(&reported).Error; err != nil {
 		return nil, err
 	}
-	if err := s.DB.Model(&model.Issue{}).Where(
+	if err := s.db(ctx).Model(&model.Issue{}).Where(
 		"(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusNew,
 	).Count(&pending).Error; err != nil {
 		return nil, err
 	}
-	if err := s.DB.Model(&model.Issue{}).Where(
+	if err := s.db(ctx).Model(&model.Issue{}).Where(
 		"(created_id = ? OR assignee_user = ?) AND status = ?", userID, userID, model.IssueStatusDone,
 	).Count(&done).Error; err != nil {
 		return nil, err
@@ -366,14 +408,15 @@ func (s *IssueService) MineStats(userID uint64) (map[string]int64, error) {
 	return map[string]int64{"reported": reported, "pending": pending, "done": done}, nil
 }
 
-func (s *IssueService) ListMine(scope string, userID uint64, page, size int) ([]IssueVO, int64, error) {
+// ListMine 小程序「我的」列表；scope 为 reported|pending|done。
+func (s *IssueService) ListMine(ctx context.Context, scope string, userID uint64, page, size int) ([]IssueVO, int64, error) {
 	if page <= 0 {
 		page = 1
 	}
 	if size <= 0 {
 		size = 20
 	}
-	db := s.DB.Model(&model.Issue{})
+	db := s.db(ctx).Model(&model.Issue{})
 	switch scope {
 	case "reported":
 		db = db.Where("created_id = ?", userID)
@@ -392,23 +435,20 @@ func (s *IssueService) ListMine(scope string, userID uint64, page, size int) ([]
 	if err := db.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error; err != nil {
 		return nil, 0, err
 	}
-	out := make([]IssueVO, 0, len(list))
-	for i := range list {
-		vo, err := s.toVO(&list[i])
-		if err != nil {
-			return nil, 0, err
-		}
-		out = append(out, *vo)
+	out, err := s.issuesToVO(ctx, list)
+	if err != nil {
+		return nil, 0, err
 	}
 	return out, total, nil
 }
 
-func (s *IssueService) Get(id uint64) (*IssueVO, error) {
+// Get 按主键读取问题并展开附件与整改记录。
+func (s *IssueService) Get(ctx context.Context, id uint64) (*IssueVO, error) {
 	var item model.Issue
-	if err := s.DB.First(&item, id).Error; err != nil {
+	if err := s.db(ctx).First(&item, id).Error; err != nil {
 		return nil, err
 	}
-	return s.toVO(&item)
+	return s.toVO(ctx, &item)
 }
 
 // requireOrgID 校验 org_id 必填且 sys_orgs 中存在（不含已软删）。
@@ -618,7 +658,7 @@ func (s *IssueService) deleteIssue(ctx context.Context, id, reporterID uint64) e
 		var item model.Issue
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil
+				return gorm.ErrRecordNotFound
 			}
 			return err
 		}
@@ -630,6 +670,9 @@ func (s *IssueService) deleteIssue(ctx context.Context, id, reporterID uint64) e
 			return err
 		}
 		if err := lockIssueOrgs(tx, item.OrgID); err != nil {
+			return err
+		}
+		if err := retireUniqueColumn(tx, &model.Issue{}, item.ID, "issue_key", item.IssueKey, 64); err != nil {
 			return err
 		}
 		return tx.Delete(&item).Error
@@ -773,7 +816,7 @@ func (s *IssueService) rectifyPrepared(ctx context.Context, id uint64, expectedR
 	if err != nil {
 		return nil, err
 	}
-	return s.Get(id)
+	return s.Get(ctx, id)
 }
 
 // ReRectify 重新整改：行锁事务内 done → pending 并递增整改轮次；不删历史、不改责任人。
@@ -813,7 +856,7 @@ func (s *IssueService) ReRectify(ctx context.Context, id uint64, lockAssignee bo
 	if err != nil {
 		return nil, err
 	}
-	return s.Get(id)
+	return s.Get(ctx, id)
 }
 
 // Reassign 管理端重新指派整改人：只改 assignee_user，不改 status、不删整改记录。
@@ -844,7 +887,7 @@ func (s *IssueService) Reassign(ctx context.Context, id uint64, in ReassignInput
 	if err := s.db(ctx).Model(&item).Update("assignee_user", in.AssigneeUser).Error; err != nil {
 		return nil, err
 	}
-	return s.Get(id)
+	return s.Get(ctx, id)
 }
 
 // Import 逐行创建，失败时停止并保留前序成功行；错误附带行号与已导入数量。
@@ -866,44 +909,50 @@ func (s *IssueService) Stats(ctx context.Context) (map[string]interface{}, error
 	if err != nil {
 		return nil, err
 	}
-	fresh := func() *gorm.DB { return base.Session(&gorm.Session{}) }
-	var total, statusNew, statusPending, done int64
-	if err := fresh().Count(&total).Error; err != nil {
-		return nil, err
+	var row struct {
+		Total       int64 `gorm:"column:total"`
+		StatusNew   int64 `gorm:"column:status_new"`
+		StatusPend  int64 `gorm:"column:status_pend"`
+		StatusDone  int64 `gorm:"column:status_done"`
+		Well        int64 `gorm:"column:well"`
+		Road        int64 `gorm:"column:road"`
+		Bridge      int64 `gorm:"column:bridge"`
+		Forest      int64 `gorm:"column:forest"`
+		Transformer int64 `gorm:"column:transformer"`
 	}
-	if err := fresh().Where("status = ?", model.IssueStatusNew).Count(&statusNew).Error; err != nil {
+	err = base.Select(`COUNT(*) AS total,
+		COALESCE(SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END), 0) AS status_new,
+		COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS status_pend,
+		COALESCE(SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END), 0) AS status_done,
+		COALESCE(SUM(CASE WHEN type = 'well' THEN 1 ELSE 0 END), 0) AS well,
+		COALESCE(SUM(CASE WHEN type = 'road' THEN 1 ELSE 0 END), 0) AS road,
+		COALESCE(SUM(CASE WHEN type = 'bridge' THEN 1 ELSE 0 END), 0) AS bridge,
+		COALESCE(SUM(CASE WHEN type = 'forest' THEN 1 ELSE 0 END), 0) AS forest,
+		COALESCE(SUM(CASE WHEN type = 'transformer' THEN 1 ELSE 0 END), 0) AS transformer`).
+		Scan(&row).Error
+	if err != nil {
 		return nil, err
-	}
-	if err := fresh().Where("status = ?", model.IssueStatusPending).Count(&statusPending).Error; err != nil {
-		return nil, err
-	}
-	if err := fresh().Where("status = ?", model.IssueStatusDone).Count(&done).Error; err != nil {
-		return nil, err
-	}
-	byType := map[string]int64{}
-	for _, t := range []string{"well", "road", "bridge", "forest", "transformer"} {
-		var c int64
-		if err := fresh().Where("type = ?", t).Count(&c).Error; err != nil {
-			return nil, err
-		}
-		byType[t] = c
 	}
 	rate := float64(0)
-	if total > 0 {
-		rate = float64(done) / float64(total) * 100
+	if row.Total > 0 {
+		rate = float64(row.StatusDone) / float64(row.Total) * 100
 	}
 	return map[string]interface{}{
-		"total": total, "new": statusNew, "pending": statusPending, "done": done,
-		"complete_rate": rate, "by_type": byType,
+		"total": row.Total, "new": row.StatusNew, "pending": row.StatusPend, "done": row.StatusDone,
+		"complete_rate": rate,
+		"by_type": map[string]int64{
+			"well": row.Well, "road": row.Road, "bridge": row.Bridge, "forest": row.Forest, "transformer": row.Transformer,
+		},
 	}, nil
 }
 
 func (s *IssueService) applyLedgerDate(q *gorm.DB, from, to string) *gorm.DB {
+	from, to = strings.TrimSpace(from), strings.TrimSpace(to)
 	if from != "" {
-		q = q.Where("DATE(created_at) >= ?", from)
+		q = q.Where("created_at >= ?", from)
 	}
 	if to != "" {
-		q = q.Where("DATE(created_at) <= ?", to)
+		q = q.Where("created_at < DATE_ADD(?, INTERVAL 1 DAY)", to)
 	}
 	return q
 }
@@ -912,7 +961,7 @@ func (s *IssueService) filterLedgerOrg(ctx context.Context, q *gorm.DB, orgID ui
 	return applyVisibleOrgFilter(ctx, q, s.db(ctx), "org_id", orgID)
 }
 
-// LedgerStreet 按当前可见范围、落点组织与问题类型聚合；无记录仍返回 rows: []。
+// LedgerStreet 兼容旧聚合接口（按落点组织+类型）。新报表见 LedgerStreetReport。
 func (s *IssueService) LedgerStreet(ctx context.Context, streetOrgID uint64, from, to string) (interface{}, error) {
 	q, err := s.filterLedgerOrg(ctx, s.applyLedgerDate(s.db(ctx).Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {
@@ -947,7 +996,7 @@ func (s *IssueService) LedgerStreet(ctx context.Context, streetOrgID uint64, fro
 	return ginH{"rows": list, "street_org_id": streetOrgID}, nil
 }
 
-// LedgerSurvey 按当前可见范围及问题类型聚合；无记录返回空数组，查询失败不包装为成功。
+// LedgerSurvey 兼容旧聚合接口（按问题类型）。新报表见 LedgerSurveyReport。
 func (s *IssueService) LedgerSurvey(ctx context.Context, streetOrgID uint64, from, to string) (interface{}, error) {
 	q, err := s.filterLedgerOrg(ctx, s.applyLedgerDate(s.db(ctx).Model(&model.Issue{}), from, to), streetOrgID)
 	if err != nil {

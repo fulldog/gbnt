@@ -33,8 +33,8 @@ func ResolveOrgScope(ctx context.Context, db *gorm.DB) (*OrgScope, error) {
 	if scope.All || user.OrgID == 0 {
 		return scope, nil
 	}
-	var orgs []model.SysOrg
-	if err := db.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
+	orgs, err := loadOrgCatalog(ctx, db)
+	if err != nil {
 		return nil, err
 	}
 	for _, id := range orgSubtreeIDs(orgs, user.OrgID) {
@@ -65,11 +65,11 @@ func resolveVisibleOrgScope(ctx context.Context, db *gorm.DB) (*OrgScope, error)
 	if err != nil {
 		return nil, err
 	}
-	var orgs []model.SysOrg
 	if user.OrgID == 0 {
 		return visibleOrgScope(nil, 0), nil
 	}
-	if err := db.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
+	orgs, err := loadOrgCatalog(ctx, db)
+	if err != nil {
 		return nil, err
 	}
 	return visibleOrgScope(orgs, user.OrgID), nil
@@ -96,38 +96,29 @@ func visibleOrgScope(orgs []model.SysOrg, rootID uint64) *OrgScope {
 	return scope
 }
 
+// loadOrgIDParentRows 读取组织树（走 sys_orgs:list 与请求内备忘）。
+func loadOrgIDParentRows(ctx context.Context, db *gorm.DB) ([]model.SysOrg, error) {
+	return loadOrgCatalog(ctx, db)
+}
+
 // applyVisibleOrgFilter 将显式组织筛选与当前用户可见子树取交集；scopeDB 用于读取组织树。
 func applyVisibleOrgFilter(ctx context.Context, db, scopeDB *gorm.DB, orgColumn string, selectedOrgID uint64) (*gorm.DB, error) {
-	scope, err := resolveVisibleOrgScope(ctx, scopeDB)
+	user, err := database.UserFromContext(ctx)
+	switch {
+	case errors.Is(err, database.ErrUnauth):
+		if selectedOrgID == 0 {
+			return db, nil
+		}
+	case err != nil:
+		return nil, err
+	case user.OrgID == 0 && selectedOrgID == 0:
+		return db, nil
+	}
+	orgs, err := loadOrgIDParentRows(ctx, scopeDB)
 	if err != nil {
 		return nil, err
 	}
-	if scope.All && selectedOrgID == 0 {
-		return db, nil
-	}
-	visible := scope.allowed
-	if selectedOrgID != 0 && !(selectedOrgID == scope.RootID && !scope.All) {
-		var orgs []model.SysOrg
-		if err := scopeDB.WithContext(ctx).Select("id", "parent_id").Find(&orgs).Error; err != nil {
-			return nil, err
-		}
-		selected := make(map[uint64]struct{})
-		for _, id := range orgSubtreeIDs(orgs, selectedOrgID) {
-			selected[id] = struct{}{}
-		}
-		if scope.All {
-			visible = selected
-		} else {
-			intersection := make(map[uint64]struct{})
-			for id := range selected {
-				if _, ok := scope.allowed[id]; ok {
-					intersection[id] = struct{}{}
-				}
-			}
-			visible = intersection
-		}
-	}
-	return applyVisibleOrgIDs(db, orgColumn, visible), nil
+	return applyVisibleOrgFilterWithOrgs(ctx, db, orgColumn, selectedOrgID, orgs)
 }
 
 // applyVisibleOrgFilterWithOrgs 使用调用方已加载的组织树应用读取范围，避免报表重复查询组织。

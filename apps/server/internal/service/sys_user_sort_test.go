@@ -41,7 +41,7 @@ func TestCreateUserSortDefaultsAndPreservesExplicitZero(t *testing.T) {
 				testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_users`", InsertID: 2, Check: checkInsertedUserSort(t, want)},
 				testutil.QueryStep{Kind: "commit"},
 			)
-			user, err := (&SysService{DB: db}).CreateUser(context.Background(), UserInput{Username: "sort-worker", OrgID: 3, RoleID: 2, Sort: input})
+			user, err := (&SysService{DB: db}).CreateUser(context.Background(), UserInput{Username: "sort-worker", Password: "Passw0rd9", OrgID: 3, RoleID: 2, Sort: input})
 			if err != nil || user.Sort == nil || *user.Sort != want || user.Status != 1 {
 				t.Fatalf("默认启用及排序写入失败: user=%+v err=%v", user, err)
 			}
@@ -97,7 +97,7 @@ func TestListUsersSortBeforePaginationWithStableTieBreaker(t *testing.T) {
 			}
 		}},
 	)
-	users, total, err := (&SysService{DB: db}).ListUsers(3, "worker", 2, 2)
+	users, total, err := (&SysService{DB: db}).ListUsers(context.Background(), 3, "worker", 2, 2)
 	if err != nil || total != 3 || len(users) != 1 || *users[0].Sort != 100 {
 		t.Fatalf("列表排序或分页失败: total=%d users=%v err=%v", total, users, err)
 	}
@@ -105,7 +105,7 @@ func TestListUsersSortBeforePaginationWithStableTieBreaker(t *testing.T) {
 
 func TestListUsersByOrgUsesSameSort(t *testing.T) {
 	db := testutil.NewQueryDB(t, testutil.QueryStep{Contains: "ORDER BY sort ASC, id DESC", Columns: []string{"id", "sort"}, Rows: [][]driver.Value{{int64(2), int64(0)}}})
-	users, err := (&SysService{DB: db}).ListUsersByOrgID(3)
+	users, err := (&SysService{DB: db}).ListUsersByOrgID(context.Background(), 3)
 	if err != nil || len(users) != 1 || *users[0].Sort != 0 {
 		t.Fatalf("按单位查询未保留0排序: %v %v", users, err)
 	}
@@ -123,7 +123,7 @@ func TestUserSortMySQLPagination(t *testing.T) {
 	}
 	svc := SysService{DB: db}
 	for page, want := range [][]uint64{{4, 2}, {5, 3}, {1}} {
-		users, total, err := svc.ListUsers(3, "worker", page+1, 2)
+		users, total, err := svc.ListUsers(context.Background(), 3, "worker", page+1, 2)
 		if err != nil || total != 5 || len(users) != len(want) {
 			t.Fatalf("真实分页异常: total=%d users=%v err=%v", total, users, err)
 		}

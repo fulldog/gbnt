@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"strings"
@@ -42,7 +43,7 @@ func TestLoginBumpsTokenVerAndSignsNewVersion(t *testing.T) {
 		testutil.QueryStep{Kind: "commit"},
 	)
 	svc := &AuthService{DB: db, JWT: jwtutil.New("login-kick-test", 72, 24)}
-	user, token, _, err := svc.Login("worker", "Passw0rd9")
+	user, token, _, err := svc.Login(context.Background(), "worker", "Passw0rd9")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestLoginMiniappBumpsAppTokenVerOnly(t *testing.T) {
 		testutil.QueryStep{Kind: "commit"},
 	)
 	svc := &AuthService{DB: db, JWT: jwtutil.New("miniapp-kick-test", 72, 24)}
-	user, token, _, err := svc.LoginMiniapp("worker", "Passw0rd9")
+	user, token, _, err := svc.LoginMiniapp(context.Background(), "worker", "Passw0rd9")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestLoginMiniappRejectsSuperAdminWithoutBump(t *testing.T) {
 		Rows:     [][]driver.Value{{int64(1), "admin", string(hash), int64(0), int64(3), int64(1), true}},
 	})
 	svc := &AuthService{DB: db, JWT: jwtutil.New("miniapp-super-test", 72, 24)}
-	user, token, _, err := svc.LoginMiniapp("admin", "admin")
+	user, token, _, err := svc.LoginMiniapp(context.Background(), "admin", "admin")
 	if !errors.Is(err, ErrMiniappSuperAdmin) {
 		t.Fatalf("超管登录小程序应拒绝: user=%+v token=%q err=%v", user, token, err)
 	}

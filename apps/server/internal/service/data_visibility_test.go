@@ -54,7 +54,6 @@ func TestListVisibleUsersIntersectsExplicitOrganization(t *testing.T) {
 	}
 	db := testutil.NewQueryDB(t,
 		scopeOrgRows(),
-		scopeOrgRows(),
 		testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}, Check: check},
 		testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id"}, Check: check},
 	)
@@ -104,16 +103,15 @@ func TestWorkbenchStatsUsesVisibleOrganizationSubtree(t *testing.T) {
 		}
 		assertOrgArgs(t, args, 3, 4, 5)
 	}
-	steps := []testutil.QueryStep{scopeOrgRows()}
-	for range 9 {
-		steps = append(steps, testutil.QueryStep{
-			Contains: "SELECT count(*) FROM `issues`",
-			Columns:  []string{"count"},
-			Rows:     [][]driver.Value{{int64(0)}},
+	db := testutil.NewQueryDB(t,
+		scopeOrgRows(),
+		testutil.QueryStep{
+			Contains: "FROM `issues`",
+			Columns:  []string{"total", "status_new", "status_pend", "status_done", "well", "road", "bridge", "forest", "transformer"},
+			Rows:     [][]driver.Value{{int64(0), int64(0), int64(0), int64(0), int64(0), int64(0), int64(0), int64(0), int64(0)}},
 			Check:    check,
-		})
-	}
-	db := testutil.NewQueryDB(t, steps...)
+		},
+	)
 	ctx := database.WithUser(context.Background(), &database.UserInfo{ID: 7, OrgID: 3})
 	if _, err := (&IssueService{DB: db}).Stats(ctx); err != nil {
 		t.Fatal(err)

@@ -44,21 +44,7 @@ func (s *SysService) db(ctx context.Context) *gorm.DB {
 
 // ListOrgs 返回扁平组织列表；命中进程内缓存则不查库，后台改树后失效。
 func (s *SysService) ListOrgs() ([]model.SysOrg, error) {
-	if v, ok := s.Cache.Get(cacheKeySysOrgs); ok {
-		if list, ok := v.([]model.SysOrg); ok {
-			return cloneSysOrgs(list), nil
-		}
-	}
-	var list []model.SysOrg
-	if err := s.DB.Order("sort ASC, id ASC").Find(&list).Error; err != nil {
-		return nil, err
-	}
-	s.storeOrgList(list)
-	return cloneSysOrgs(list), nil
-}
-
-func (s *SysService) storeOrgList(list []model.SysOrg) {
-	s.Cache.Set(cacheKeySysOrgs, cloneSysOrgs(list), cachex.NoExpiration)
+	return fetchOrgCatalog(WithOrgLookup(context.Background(), s.Cache), s.DB)
 }
 
 func (s *SysService) invalidateOrgListCache() {
@@ -91,7 +77,7 @@ type AdminOrgVO struct {
 // UserInput 创建/更新用户入参。
 type UserInput struct {
 	Username string `json:"username"` // 登录账号（新建必填）
-	Password string `json:"password"` // 明文密码（新建空则=账户名且不套复杂度；有值则须 6～14 位字母+数字）
+	Password string `json:"password"` // 明文密码（新建必填，6～14 位字母+数字；编辑空则不改）
 	Name     string `json:"name"`     // 姓名
 	Phone    string `json:"phone"`    // 手机号（选填；有值须为中国大陆 11 位）
 	OrgID    uint64 `json:"org_id"`   // 所属组织 ID
@@ -348,7 +334,10 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 		return err
 	}
 	if issueCount > 0 {
-		return errors.New("该组织仍有关联整改记录，无法删除")
+		return errors.New("该组织仍有关联问题，无法删除")
+	}
+	if err := retireUniqueColumn(s.db(ctx), &model.SysOrg{}, id, "name", o.Name, 128); err != nil {
+		return err
 	}
 	if err := s.db(ctx).Delete(&model.SysOrg{}, id).Error; err != nil {
 		return err
@@ -358,9 +347,9 @@ func (s *SysService) DeleteOrg(ctx context.Context, id uint64) error {
 }
 
 // ListUsers 查询工作人员基础分页；排序在分页前执行，计数失败立即返回。
-func (s *SysService) ListUsers(orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
+func (s *SysService) ListUsers(ctx context.Context, orgID uint64, keyword string, page, size int) ([]model.SysUser, int64, error) {
 	page, size = NormalizePagination(page, size, 0)
-	q := s.userListQuery(orgID, keyword)
+	q := s.userListQuery(ctx, orgID, keyword)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -387,12 +376,12 @@ func (s *SysService) ListVisibleUsers(ctx context.Context, orgID uint64, keyword
 }
 
 // ListUsersByOrgID 按行政区划 org_id 返回用户列表（不分页）。
-func (s *SysService) ListUsersByOrgID(orgID uint64) ([]model.SysUser, error) {
+func (s *SysService) ListUsersByOrgID(ctx context.Context, orgID uint64) ([]model.SysUser, error) {
 	if orgID == 0 {
 		return nil, errors.New("org_id 必填")
 	}
 	var list []model.SysUser
-	err := s.DB.Model(&model.SysUser{}).Where("org_id = ?", orgID).Order(userListOrder).Find(&list).Error
+	err := s.db(ctx).Model(&model.SysUser{}).Where("org_id = ?", orgID).Order(userListOrder).Find(&list).Error
 	return list, err
 }
 
@@ -424,9 +413,7 @@ func (s *SysService) CreateUser(ctx context.Context, in UserInput) (*model.SysUs
 		return nil, err
 	}
 	pwd := strings.TrimSpace(in.Password)
-	if pwd == "" {
-		pwd = in.Username // 初始化密码=账户名
-	} else if err := ValidateSetPassword(pwd); err != nil {
+	if err := ValidateSetPassword(pwd); err != nil {
 		return nil, err
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.DefaultCost)
@@ -498,6 +485,7 @@ func (s *SysService) UpdateUser(ctx context.Context, id uint64, in UserInput) (*
 	if err := s.db(ctx).Model(&u).Updates(updates).Error; err != nil {
 		return nil, err
 	}
+	s.invalidateUserInfo(id)
 	_ = s.db(ctx).First(&u, id)
 	return &u, nil
 }
@@ -516,34 +504,43 @@ func (s *SysService) DeleteUser(ctx context.Context, id uint64) error {
 	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
 		return err
 	}
+	s.invalidateUserInfo(id)
+	if err := retireUniqueColumn(s.db(ctx), &model.SysUser{}, id, "username", u.Username, 64); err != nil {
+		return err
+	}
 	return s.db(ctx).Delete(&model.SysUser{}, id).Error
 }
 
-// ResetPassword 将密码重置为账户名（username），并同时作废管理后台与小程序会话。
-func (s *SysService) ResetPassword(ctx context.Context, id uint64) error {
+// ResetPassword 重置为随机复杂密码，并同时作废管理后台与小程序会话；调用方须把明文告知操作者。
+func (s *SysService) ResetPassword(ctx context.Context, id uint64) (string, error) {
 	var u model.SysUser
 	if err := s.db(ctx).First(&u, id).Error; err != nil {
-		return errors.New("用户不存在")
-	}
-	if u.Username == "" {
-		return errors.New("账户名为空，无法重置")
+		return "", errors.New("用户不存在")
 	}
 	if u.IsSuperAdmin {
-		return errors.New("超级管理员密码不可由工作人员页面重置")
+		return "", errors.New("超级管理员密码不可由工作人员页面重置")
 	}
 	if err := requireOrgScopeIfAuthenticated(ctx, s.db(ctx), u.OrgID); err != nil {
-		return err
+		return "", err
 	}
 	if err := s.requireAssignableRoleIfAuthenticated(ctx, u.RoleID); err != nil {
-		return err
+		return "", err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(u.Username), bcrypt.DefaultCost)
+	plain, err := RandomLoginPassword()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return s.db(ctx).Model(&u).Updates(invalidateAllSessions(map[string]interface{}{
+	hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	if err := s.db(ctx).Model(&u).Updates(invalidateAllSessions(map[string]interface{}{
 		"password": string(hash),
-	})).Error
+	})).Error; err != nil {
+		return "", err
+	}
+	s.invalidateUserInfo(id)
+	return plain, nil
 }
 
 func (s *SysService) ListRoles() ([]model.SysRole, error) {
@@ -586,13 +583,13 @@ func (s *SysService) DeleteRole(ctx context.Context, id uint64) error {
 	}
 
 	if cnt > 0 {
-
 		return errors.New("仍有用户绑定该角色，无法删除")
-
 	}
-
-	return s.db(ctx).Delete(&model.SysRole{}, id).Error
-
+	if err := s.db(ctx).Delete(&model.SysRole{}, id).Error; err != nil {
+		return err
+	}
+	s.InvalidateRoleCache(id)
+	return nil
 }
 
 // ListAPIs 返回 API 目录。
@@ -637,11 +634,11 @@ func (s *SysService) SetRoleAPIs(ctx context.Context, roleID uint64, apiIDs []ui
 }
 
 func (s *SysService) InvalidateRoleCache(roleID uint64) {
-
 	if s.Perm != nil {
-
 		s.Perm.InvalidateRole(roleID)
-
 	}
+}
 
+func (s *SysService) invalidateUserInfo(id uint64) {
+	InvalidateUserInfoCache(s.Cache, id)
 }

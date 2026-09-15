@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
@@ -196,7 +197,7 @@ func (s *AttachService) saveOneImage(ctx context.Context, fh *multipart.FileHead
 	fileName := sanitizeUploadFileName(fh.Filename)
 	ctype := fh.Header.Get("Content-Type")
 	if !watermark.IsImage(ctype, fileName) {
-		return empty, errors.New("仅支持 jpg/png/gif/webp 图片")
+		return empty, errors.New("仅支持 jpg/png/webp 图片")
 	}
 	if s.Cfg.MaxFileSize > 0 && fh.Size > s.Cfg.MaxFileSize {
 		return empty, errors.New("文件超过大小限制")
@@ -218,6 +219,15 @@ func (s *AttachService) saveOneImage(ctx context.Context, fh *multipart.FileHead
 		return empty, err
 	}
 	defer src.Close()
+	head := make([]byte, 16)
+	n, readErr := io.ReadFull(src, head)
+	if n == 0 && readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return empty, readErr
+	}
+	if !watermark.SniffRasterImage(head[:n]) {
+		return empty, errors.New("仅支持 jpg/png/webp 图片")
+	}
+	in := io.MultiReader(bytes.NewReader(head[:n]), src)
 
 	out, err := os.Create(finalPath)
 	if err != nil {
@@ -227,7 +237,7 @@ func (s *AttachService) saveOneImage(ctx context.Context, fh *multipart.FileHead
 	if max <= 0 {
 		max = 100 << 20
 	}
-	written, copyErr := io.Copy(out, io.LimitReader(src, max+1))
+	written, copyErr := io.Copy(out, io.LimitReader(in, max+1))
 	closeErr := out.Close()
 	if copyErr != nil {
 		_ = os.Remove(finalPath)
@@ -311,16 +321,16 @@ func (s *AttachService) EnsureFiles(ctx context.Context, fileIDs []string) ([]st
 	return clean, nil
 }
 
-// ListByFileIDs 按 file_id 顺序查附件，返回 file_id + 相对路径。
+// ListByFileIDs 按 file_id 顺序查附件，返回 file_id + 相对路径；任一缺失或未成功则失败。
 func (s *AttachService) ListByFileIDs(ctx context.Context, fileIDs []string) ([]FileItem, error) {
-	clean := cleanFileIDs(fileIDs)
-	if len(clean) == 0 {
-		return []FileItem{}, nil
+	byID, clean, err := s.attachmentsByFileID(ctx, fileIDs)
+	if err != nil {
+		return nil, err
 	}
 	list := make([]FileItem, 0, len(clean))
 	for _, id := range clean {
-		var att model.Attachment
-		if err := s.db(ctx).Where("file_id = ?", id).First(&att).Error; err != nil {
+		att, ok := byID[id]
+		if !ok {
 			return nil, fmt.Errorf("文件不存在: %s", id)
 		}
 		if att.Status != "success" {
@@ -331,22 +341,36 @@ func (s *AttachService) ListByFileIDs(ctx context.Context, fileIDs []string) ([]
 	return list, nil
 }
 
-// lookupExisting 回显用：跳过缺失或未成功的 file_id。
+// lookupExisting 回显用：跳过缺失或未成功的 file_id，保持入参去重后的顺序。
 func (s *AttachService) lookupExisting(ctx context.Context, fileIDs []string) ([]FileItem, error) {
-	clean := cleanFileIDs(fileIDs)
-	if len(clean) == 0 {
-		return []FileItem{}, nil
+	byID, clean, err := s.attachmentsByFileID(ctx, fileIDs)
+	if err != nil {
+		return nil, err
 	}
 	list := make([]FileItem, 0, len(clean))
 	for _, id := range clean {
-		var att model.Attachment
-		if err := s.db(ctx).Where("file_id = ?", id).First(&att).Error; err != nil {
-			continue
-		}
-		if att.Status != "success" {
+		att, ok := byID[id]
+		if !ok || att.Status != "success" {
 			continue
 		}
 		list = append(list, FileItem{FileID: att.FileID, URL: att.StoragePath})
 	}
 	return list, nil
+}
+
+// attachmentsByFileID 一次 IN 查出附件，按 file_id 建索引；clean 为去重后的请求顺序。
+func (s *AttachService) attachmentsByFileID(ctx context.Context, fileIDs []string) (map[string]model.Attachment, []string, error) {
+	clean := cleanFileIDs(fileIDs)
+	if len(clean) == 0 {
+		return map[string]model.Attachment{}, clean, nil
+	}
+	var rows []model.Attachment
+	if err := s.db(ctx).Where("file_id IN ?", clean).Find(&rows).Error; err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[string]model.Attachment, len(rows))
+	for _, row := range rows {
+		byID[row.FileID] = row
+	}
+	return byID, clean, nil
 }

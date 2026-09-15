@@ -75,9 +75,14 @@ async function submit(): Promise<void> {
       });
       ElMessage.success("工作人员已更新");
     } else {
+      const password = form.password.trim();
+      if (!password) {
+        ElMessage.error("请填写初始密码（6～14 位字母+数字）");
+        return;
+      }
       await api.users.create({
         username: form.username.trim(),
-        password: form.password.trim() || undefined,
+        password,
         name: form.name.trim(),
         phone: form.phone.trim(),
         org_id: form.org_id,
@@ -109,7 +114,7 @@ async function submit(): Promise<void> {
         </ElFormItem>
         <ElFormItem label="所属单位" prop="org_id"><OrgTreeSelect v-model="form.org_id" :orgs="orgs" placeholder="请选择所属单位" :clearable="false" restrict-scope /></ElFormItem>
         <ElFormItem :label="user ? '新密码' : '初始密码'">
-          <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '留空时初始密码与账号一致'" type="password" show-password autocomplete="new-password" maxlength="14" />
+          <ElInput v-model="form.password" :placeholder="user ? '不修改请留空' : '必填，6～14 位字母+数字'" type="password" show-password autocomplete="new-password" maxlength="14" />
         </ElFormItem>
         <ElFormItem label="姓名" prop="name"><ElInput v-model="form.name" maxlength="64" /></ElFormItem>
         <ElFormItem label="手机号"><ElInput v-model="form.phone" maxlength="32" /></ElFormItem>

@@ -1,6 +1,10 @@
 package migrate
 
 import (
+	"errors"
+	"os"
+	"strings"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -15,7 +19,7 @@ func bootstrapSeed(db *gorm.DB) error {
 	if err := SyncSysAPIs(db); err != nil {
 		return err
 	}
-	return seedAdmin(db)
+	return seedAdmin(db, true)
 }
 
 // seedIfEmpty release 模式：仅空库写入种子。
@@ -27,17 +31,37 @@ func seedIfEmpty(db *gorm.DB) error {
 	if n > 0 {
 		return nil
 	}
-	return bootstrapSeed(db)
+	if _, _, err := seedDemoOrgs(db); err != nil {
+		return err
+	}
+	if err := SyncSysAPIs(db); err != nil {
+		return err
+	}
+	return seedAdmin(db, false)
 }
 
-// seedAdmin 写入超级管理员：admin/admin，id 自增为 1，is_super_admin=true。
-func seedAdmin(db *gorm.DB) error {
+func adminSeedPassword(dev bool) (string, error) {
+	if p := strings.TrimSpace(os.Getenv("GBNT_BOOTSTRAP_ADMIN_PASSWORD")); p != "" {
+		return p, nil
+	}
+	if dev {
+		return "admin", nil
+	}
+	return "", errors.New("空库初始化须设置环境变量 GBNT_BOOTSTRAP_ADMIN_PASSWORD")
+}
+
+// seedAdmin 写入超级管理员；开发重建默认 admin/admin，release 空库须用环境变量指定密码。
+func seedAdmin(db *gorm.DB, dev bool) error {
 	var userCount int64
 	_ = db.Model(&model.SysUser{}).Count(&userCount)
 	if userCount > 0 {
 		return nil
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+	plain, err := adminSeedPassword(dev)
+	if err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}

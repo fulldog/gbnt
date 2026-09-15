@@ -28,7 +28,7 @@ func TestExportUsersIncludesTextRoleIDWithDuplicateNames(t *testing.T) {
 			{int64(10), "测试人员", "worker", int64(2), int64(3), int64(0), int64(1), time.Date(2026, 9, 11, 10, 0, 0, 0, time.Local)},
 		}}, userIOOrgStep(), userIORoleStep())
 	svc := SysService{DB: db}
-	raw, err := svc.ExportUsers(0, "")
+	raw, err := svc.ExportUsers(context.Background(), 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestExportUsersWithoutBoundRoleKeepsEmptyRoleColumns(t *testing.T) {
 			{int64(11), "历史人员", "legacy", int64(99)},
 		}}, userIOOrgStep(), userIORoleStep())
 	svc := SysService{DB: db}
-	raw, err := svc.ExportUsers(0, "")
+	raw, err := svc.ExportUsers(context.Background(), 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}

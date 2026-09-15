@@ -1,4 +1,4 @@
-# Woodpecker：main/master 推送或手动触发后，构建并发布 Go API + 管理后台静态包。
+# Woodpecker：main/master 推送或手动触发后，先 go test 再构建并发布 Go API + 管理后台静态包。
 # 小程序不走这套发布（需微信侧合法域名，产物也不放 Nginx root）。
 #
 # Secrets（必填）：deploy_host、deploy_user、ssh_private_key
@@ -26,6 +26,7 @@ steps:
       GOMAXPROCS: "4"
     commands:
       - cd apps/server
+      - go test ./...
       - go build -trimpath -ldflags "-s -w" -o gbnt.service .
       - test -x gbnt.service
 

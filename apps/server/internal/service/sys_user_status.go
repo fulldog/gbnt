@@ -34,6 +34,10 @@ func (s *SysService) UpdateUserStatus(ctx context.Context, id uint64, in UserSta
 		if err := s.requireAssignableRoleIfAuthenticated(ctx, user.RoleID); err != nil {
 			return err
 		}
-		return tx.Model(&user).Update("status", *in.Status).Error
+		if err := tx.Model(&user).Update("status", *in.Status).Error; err != nil {
+			return err
+		}
+		s.invalidateUserInfo(id)
+		return nil
 	})
 }

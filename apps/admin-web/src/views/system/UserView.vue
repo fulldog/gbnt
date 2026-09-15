@@ -135,13 +135,13 @@ async function resetPassword(user: AdminUser): Promise<void> {
   if (!permission.can("web.sys-staff", "edit") || !canManageUser(user) || busyUsers.has(user.id)) return;
   busyUsers.add(user.id);
   try {
-    await ElMessageBox.confirm(`密码将重置为账号“${user.username}”，是否继续？`, "重置密码", {
+    await ElMessageBox.confirm(`将生成新的随机密码，原密码立即失效，是否继续？`, "重置密码", {
       confirmButtonText: "重置",
       cancelButtonText: "取消",
       type: "warning",
     });
-    await api.users.resetPassword(user.id);
-    ElMessage.success("密码已重置");
+    const data = await api.users.resetPassword(user.id);
+    ElMessage.success(`新密码：${data.password}（请立即告知本人）`);
   } catch (error) {
     if (!isCancelled(error)) ElMessage.error(errorMessage(error, "密码重置失败"));
   } finally {

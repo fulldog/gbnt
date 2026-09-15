@@ -123,8 +123,11 @@ func (m *Manager) RemainTTL(c *Claims) time.Duration {
 // Parse 解析 token。
 func (m *Manager) Parse(tokenStr string) (*Claims, error) {
 	t, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New("unexpected signing method")
+		}
 		return m.secret, nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		return nil, err
 	}

@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
 )
@@ -68,7 +67,7 @@ func watermarkFromForm(c *gin.Context) (service.WatermarkInput, error) {
 
 // AttachUploadImages POST /api/attachments/images — 批量直传图片（multipart files/file + 可选 watermark/lat/lng/address）。
 func (d *Deps) AttachUploadImages(c *gin.Context) {
-	d.OpLog.Mark(c, "上传图片", "")
+	d.markOp(c, "上传图片", "")
 	maxMem := d.Cfg.Upload.MaxFileSize
 	if maxMem <= 0 {
 		maxMem = 32 << 20
@@ -93,8 +92,7 @@ func (d *Deps) AttachUploadImages(c *gin.Context) {
 	}
 	list, err := d.Attach.SaveImages(c.Request.Context(), headers, meta)
 	if err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		if failUnauth(c, err) {
 			return
 		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())

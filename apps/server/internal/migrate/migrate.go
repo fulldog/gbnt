@@ -1,8 +1,9 @@
 // Package migrate 数据库结构迁移与种子数据。
-// server.mode=debug|dev 时每次启动仅 DROP 本项目模型表再按模型重建并写入组织、API 目录与 admin 用户；同库其它表不动。release 仅 AutoMigrate + 同步 API + 可选空库种子。
+// debug/dev 且 GBNT_ALLOW_DEV_RESET=1 时每次启动 DROP 本项目模型表再重建；release 仅 AutoMigrate + 同步 API + 可选空库种子。
 package migrate
 
 import (
+	"os"
 	"strings"
 
 	"gorm.io/gorm"
@@ -44,4 +45,9 @@ func IsDevMode(mode string) bool {
 	default:
 		return false
 	}
+}
+
+// AllowDevReset 须显式环境变量，避免生产误配 debug 清空业务表。
+func AllowDevReset() bool {
+	return strings.TrimSpace(os.Getenv("GBNT_ALLOW_DEV_RESET")) == "1"
 }

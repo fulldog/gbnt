@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/service"
@@ -18,6 +19,33 @@ func orgScopeFailure(c *gin.Context, err error) bool {
 		return false
 	}
 	response.Fail(c, 403, response.CodeForbid, err.Error())
+	return true
+}
+
+// failUnauth 将未登录哨兵映射为 401，message 仍为 err.Error()。
+func failUnauth(c *gin.Context, err error) bool {
+	if !errors.Is(err, database.ErrUnauth) {
+		return false
+	}
+	response.Fail(c, 401, response.CodeUnauth, err.Error())
+	return true
+}
+
+// failMiniappSuperAdmin 将超管禁登小程序映射为 403，message 仍为 err.Error()。
+func failMiniappSuperAdmin(c *gin.Context, err error) bool {
+	if !errors.Is(err, service.ErrMiniappSuperAdmin) {
+		return false
+	}
+	response.Fail(c, 403, response.CodeForbid, err.Error())
+	return true
+}
+
+// failNotFound 将记录不存在映射为 404，message 固定为「资源不存在」。
+func failNotFound(c *gin.Context, err error) bool {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return false
+	}
+	response.Fail(c, 404, response.CodeNotFound, "资源不存在")
 	return true
 }
 

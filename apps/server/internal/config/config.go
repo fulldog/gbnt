@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -169,7 +170,45 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	normalizeCaptcha(&c.Captcha)
+	if err := ValidateRuntime(&c); err != nil {
+		return nil, err
+	}
 	return &c, nil
+}
+
+// IsDevMode 是否开发模式（debug 或 dev）；release 及其它取值均按生产约束校验。
+func IsDevMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "debug", "dev":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateRuntime 校验启动后不可带病运行的项：JWT 密钥；release 禁止关闭 RBAC。
+func ValidateRuntime(c *Config) error {
+	if c == nil {
+		return errors.New("配置为空")
+	}
+	secret := strings.TrimSpace(c.JWT.Secret)
+	if secret == "" {
+		return errors.New("jwt.secret 不能为空")
+	}
+	if len(secret) < 16 {
+		return errors.New("jwt.secret 长度至少 16")
+	}
+	dev := IsDevMode(c.Server.Mode)
+	if !dev {
+		lower := strings.ToLower(secret)
+		if strings.Contains(lower, "change-me") || lower == "secret" || lower == "jwt-secret" || lower == "gbnt-dev-secret-change-me" {
+			return errors.New("release 模式禁止使用示例 jwt.secret")
+		}
+		if !c.RBAC.Enabled {
+			return errors.New("release 模式禁止 rbac.enabled=false")
+		}
+	}
+	return nil
 }
 
 func normalizeCORS(c *CORSConfig) {

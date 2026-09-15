@@ -38,14 +38,32 @@ type Meta struct {
 	Address  string
 }
 
-// IsImage 根据 content-type 或扩展名判断是否为图片。
+// IsImage 根据 content-type 或扩展名判断是否为允许的位图（jpeg/png/webp）。
 func IsImage(contentType, fileName string) bool {
-	ct := strings.ToLower(strings.TrimSpace(contentType))
-	if strings.HasPrefix(ct, "image/") {
+	ct := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(contentType, "; charset=utf-8")))
+	if i := strings.Index(ct, ";"); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	switch ct {
+	case "image/jpeg", "image/jpg", "image/png", "image/webp":
 		return true
 	}
 	switch strings.ToLower(filepath.Ext(fileName)) {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+	case ".jpg", ".jpeg", ".png", ".webp":
+		return true
+	}
+	return false
+}
+
+// SniffRasterImage 用文件头判断是否为 jpeg/png/webp，拒绝 SVG 等仅靠 Content-Type 伪装的内容。
+func SniffRasterImage(head []byte) bool {
+	if len(head) >= 3 && head[0] == 0xff && head[1] == 0xd8 && head[2] == 0xff {
+		return true
+	}
+	if len(head) >= 8 && string(head[:8]) == "\x89PNG\r\n\x1a\n" {
+		return true
+	}
+	if len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP" {
 		return true
 	}
 	return false

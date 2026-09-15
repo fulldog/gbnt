@@ -124,6 +124,7 @@ func TestDeleteReportedChecksLockedReporterAndSoftDeletes(t *testing.T) {
 		steps := []testutil.QueryStep{{Kind: "begin"}, {Contains: "FOR UPDATE", Columns: []string{"id", "org_id", "report_user_id"}, Rows: [][]driver.Value{{int64(1), int64(2), reporter}}}}
 		if reporter == 7 {
 			steps = append(steps, testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id"}, Rows: [][]driver.Value{{int64(2)}}},
+				testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`"},
 				testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`", Check: func(query string, _ []driver.NamedValue) {
 					if !strings.Contains(query, "is_delete") {
 						t.Fatal("必须软删除")

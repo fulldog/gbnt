@@ -2,15 +2,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"gbnt/apps/server/internal/cachex"
 	"gbnt/apps/server/internal/config"
@@ -43,12 +48,15 @@ func main() {
 	}
 	defer logger.Sync()
 
-	db, err := database.Open(cfg.MySQL, cfg.Log.SlowSQLMs)
+	db, err := database.Open(cfg.MySQL, cfg.Log.SlowSQLMs, config.IsDevMode(cfg.Server.Mode))
 	if err != nil {
 		logs.Error.Fatal("mysql", zap.Error(err))
 	}
 	if cfg.Migrate.Enabled {
 		dev := migrate.IsDevMode(cfg.Server.Mode)
+		if dev && !migrate.AllowDevReset() {
+			logs.Error.Fatal("dev reset blocked", zap.String("hint", "debug/dev 会 DROP 业务表，须设置 GBNT_ALLOW_DEV_RESET=1"))
+		}
 		if err := migrate.Auto(db, migrate.Options{Seed: cfg.Migrate.Seed, Dev: dev}); err != nil {
 			logs.Error.Fatal("migrate", zap.Error(err))
 		}
@@ -70,7 +78,7 @@ func main() {
 	jm := jwtutil.New(cfg.JWT.Secret, cfg.JWT.ExpireHours, cfg.JWT.RenewBeforeHours)
 	memCache := cachex.New(5*time.Minute, 10*time.Minute)
 	denyList := &jwtutil.DenyList{Store: memCache}
-	authSvc := &service.AuthService{DB: db, JWT: jm, Deny: denyList}
+	authSvc := &service.AuthService{DB: db, JWT: jm, Deny: denyList, Cache: memCache}
 	attachSvc := &service.AttachService{
 		DB:  db,
 		Cfg: cfg.Upload,
@@ -89,7 +97,7 @@ func main() {
 		Auth:    authSvc,
 		Captcha: captchaSvc,
 		Sys:     sysSvc,
-		Issue:   &service.IssueService{DB: db, Attach: attachSvc},
+		Issue:   &service.IssueService{DB: db, Attach: attachSvc, Cache: memCache},
 		Attach:  attachSvc,
 		OpLog:   &service.OpLogService{DB: db},
 		Perm:    permSvc,
@@ -109,6 +117,10 @@ func main() {
 		MaxAge:           cfg.CORS.MaxAge,
 	}))
 	r.Use(middleware.TraceAndTiming())
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(service.WithOrgLookup(c.Request.Context(), memCache))
+		c.Next()
+	})
 	r.Use(middleware.AccessLog())
 	uploadRoot := cfg.Upload.Root
 	if !filepath.IsAbs(uploadRoot) {
@@ -123,15 +135,40 @@ func main() {
 	handler.Register(r, deps)
 	// 未匹配 API 同样经过 JWT/RBAC，再由统一处理器保留 Trace ID 并返回标准 404。
 	r.NoRoute(handler.APINotFound)
-	middleware.OnBeforeAccess(func(c *gin.Context) {
-		deps.OpLog.MarkFromCatalog(c, permSvc)
-	})
-	middleware.OnAfterAccess(func(c *gin.Context, req, resp string) {
-		_ = deps.OpLog.Persist(c, req, resp)
-	})
+	middleware.OnBeforeAccess(deps.MarkOpFromCatalog)
+	middleware.OnAfterAccess(deps.PersistOp)
 
 	logs.Info.Info("server listen", zap.String("addr", cfg.Server.Addr))
-	if err := r.Run(cfg.Server.Addr); err != nil {
+	if err := serveHTTP(r, cfg.Server.Addr, db, logs); err != nil {
 		logs.Error.Fatal("run", zap.Error(err))
+	}
+}
+
+func serveHTTP(engine http.Handler, addr string, db *gorm.DB, logs *logger.Loggers) error {
+	srv := &http.Server{Addr: addr, Handler: engine}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.ListenAndServe()
+	}()
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	case <-stop:
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil && logs != nil && logs.Error != nil {
+			logs.Error.Error("shutdown", zap.Error(err))
+		}
+		if db != nil {
+			if sqlDB, err := db.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
+		}
+		return nil
 	}
 }

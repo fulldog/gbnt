@@ -254,7 +254,7 @@ func (s *IssueService) ListAdmin(ctx context.Context, q IssueQuery) ([]AdminIssu
 
 // GetAdmin 管理端详情读取；仅当前用户组织及下级可见，用户 org_id=0 时全部可见。
 func (s *IssueService) GetAdmin(ctx context.Context, id uint64) (*AdminIssueVO, error) {
-	item, err := s.Get(id)
+	item, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"gbnt/apps/server/internal/service"
 	"io"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"gbnt/apps/server/internal/apperr"
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/logger"
 	"gbnt/apps/server/internal/perm"
@@ -219,7 +219,7 @@ func ForbidAppSuperAdmin() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		response.Fail(c, 403, response.CodeForbid, service.ErrMiniappSuperAdmin.Error())
+		response.Fail(c, 403, response.CodeForbid, apperr.ErrMiniappSuperAdmin.Error())
 		c.Abort()
 	}
 }
@@ -267,23 +267,38 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
-// maskJSON 脱敏 password / token 字段。
+// maskJSON 递归脱敏 password / token 等字段（含嵌套对象与数组）。
 func maskJSON(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+	var v interface{}
+	if err := json.Unmarshal([]byte(raw), &v); err != nil {
 		return raw
 	}
-	for _, k := range []string{"password", "token", "access_token", "old_password", "new_password", "confirm_password"} {
-		if _, ok := m[k]; ok {
-			m[k] = "***"
-		}
-	}
-	b, err := json.Marshal(m)
+	maskSecrets(v)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return raw
 	}
 	return string(b)
+}
+
+func maskSecrets(v interface{}) {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		for k, val := range t {
+			lk := strings.ToLower(k)
+			switch lk {
+			case "password", "token", "access_token", "old_password", "new_password", "confirm_password", "pass_token", "secret":
+				t[k] = "***"
+			default:
+				maskSecrets(val)
+			}
+		}
+	case []interface{}:
+		for _, item := range t {
+			maskSecrets(item)
+		}
+	}
 }

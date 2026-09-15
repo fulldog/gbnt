@@ -19,10 +19,10 @@ type ctxKey string
 
 const TraceKey ctxKey = "trace_id"
 
-// Open 打开 MySQL 并挂载 SQL 日志。
-func Open(cfg config.MySQLConfig, slowMs int) (*gorm.DB, error) {
+// Open 打开 MySQL 并挂载 SQL 日志。verboseSQL 为 false 时只记录错误与慢查询。
+func Open(cfg config.MySQLConfig, slowMs int, verboseSQL bool) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{
-		Logger: newGormLogger(slowMs),
+		Logger: newGormLogger(slowMs, verboseSQL),
 	})
 	if err != nil {
 		return nil, err
@@ -37,6 +37,8 @@ func Open(cfg config.MySQLConfig, slowMs int) (*gorm.DB, error) {
 	if cfg.MaxOpen > 0 {
 		sqlDB.SetMaxOpenConns(cfg.MaxOpen)
 	}
+	// 避免连接被 MySQL wait_timeout 掐死后仍留在池里。
+	sqlDB.SetConnMaxLifetime(time.Hour)
 	RegisterAuditCallbacks(db)
 	return db, nil
 }
@@ -47,14 +49,15 @@ func WithTrace(ctx context.Context, traceID string) context.Context {
 }
 
 type gormLog struct {
-	slow time.Duration
+	slow    time.Duration
+	verbose bool
 }
 
-func newGormLogger(slowMs int) gormlogger.Interface {
+func newGormLogger(slowMs int, verbose bool) gormlogger.Interface {
 	if slowMs <= 0 {
 		slowMs = 200
 	}
-	return &gormLog{slow: time.Duration(slowMs) * time.Millisecond}
+	return &gormLog{slow: time.Duration(slowMs) * time.Millisecond, verbose: verbose}
 }
 
 func (l *gormLog) LogMode(gormlogger.LogLevel) gormlogger.Interface { return l }
@@ -100,10 +103,16 @@ func (l *gormLog) Trace(ctx context.Context, begin time.Time, fc func() (string,
 		}
 		return
 	}
-	if logger.L() != nil {
-		logger.L().SQL.Info("sql", fields...)
-		if elapsed >= l.slow {
-			logger.L().Slow.Warn("slow_sql", fields...)
+	if logger.L() == nil {
+		return
+	}
+	if elapsed >= l.slow {
+		logger.L().Slow.Warn("slow_sql", fields...)
+		if !l.verbose {
+			logger.L().SQL.Warn("slow_sql", fields...)
 		}
+	}
+	if l.verbose {
+		logger.L().SQL.Info("sql", fields...)
 	}
 }

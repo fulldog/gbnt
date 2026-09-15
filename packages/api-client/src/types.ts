@@ -422,7 +422,8 @@ export interface UserListResult {
 
 export interface CreateUserInput {
   username: string;
-  password?: string;
+  /** 新建必填：6～14 位字母+数字。 */
+  password: string;
   name?: string;
   phone?: string;
   org_id?: number;

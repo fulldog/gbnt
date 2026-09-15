@@ -1,10 +1,15 @@
 package service
 
 import (
+	"context"
+	"database/sql/driver"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"gbnt/apps/server/internal/testutil"
 )
 
 func TestSanitizeUploadFileName(t *testing.T) {
@@ -82,5 +87,55 @@ func TestDateRelDir(t *testing.T) {
 	got := dateRelDir(tm)
 	if got != "2026/08/24" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestListByFileIDsUsesSingleInQuery(t *testing.T) {
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "FROM `attachments`",
+		Columns:  []string{"file_id", "status", "storage_path"},
+		Rows: [][]driver.Value{
+			{"b", "success", "/uploads/b.jpg"},
+			{"a", "success", "/uploads/a.jpg"},
+		},
+		Check: func(query string, args []driver.NamedValue) {
+			if !strings.Contains(query, "file_id IN") || strings.Contains(query, "file_id = ?") {
+				t.Errorf("必须一次 IN 查询：%s", query)
+			}
+			if len(args) < 3 || args[len(args)-1].Value != int64(0) {
+				t.Errorf("应带软删条件：%v", args)
+			}
+		},
+	})
+	list, err := (&AttachService{DB: db}).ListByFileIDs(context.Background(), []string{" a ", "b", "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[0].FileID != "a" || list[1].FileID != "b" || list[0].URL != "/uploads/a.jpg" {
+		t.Fatalf("顺序或去重错误：%+v", list)
+	}
+}
+
+func TestLookupExistingSkipsMissingAndUnready(t *testing.T) {
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "file_id IN",
+		Columns:  []string{"file_id", "status", "storage_path"},
+		Rows:     [][]driver.Value{{"ok", "success", "/uploads/ok.jpg"}, {"wait", "pending", "/uploads/wait.jpg"}},
+	})
+	list, err := (&AttachService{DB: db}).lookupExisting(context.Background(), []string{"missing", "ok", "wait"})
+	if err != nil || len(list) != 1 || list[0].FileID != "ok" {
+		t.Fatalf("应跳过缺失与未就绪：%+v %v", list, err)
+	}
+}
+
+func TestListByFileIDsRejectsMissing(t *testing.T) {
+	db := testutil.NewQueryDB(t, testutil.QueryStep{
+		Contains: "file_id IN",
+		Columns:  []string{"file_id", "status", "storage_path"},
+		Rows:     [][]driver.Value{{"a", "success", "/uploads/a.jpg"}},
+	})
+	_, err := (&AttachService{DB: db}).ListByFileIDs(context.Background(), []string{"a", "b"})
+	if err == nil || !strings.Contains(err.Error(), "文件不存在") {
+		t.Fatalf("缺失应失败：%v", err)
 	}
 }

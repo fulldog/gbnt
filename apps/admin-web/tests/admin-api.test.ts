@@ -118,8 +118,8 @@ describe("管理端独立读取契约", () => {
     const row = { id: 2, sort: 0 };
     const { users, request } = setup(row);
     const input = { name: "人员", phone: "", org_id: 3, role_id: 2, sort: 0 };
-    expect(await users.create({ ...input, username: "worker", status: 1 })).toBe(row);
-    expect(request).toHaveBeenLastCalledWith("/api/sys/users", { method: "POST", body: { ...input, username: "worker", status: 1 } });
+    expect(await users.create({ ...input, username: "worker", password: "Passw0rd9", status: 1 })).toBe(row);
+    expect(request).toHaveBeenLastCalledWith("/api/sys/users", { method: "POST", body: { ...input, username: "worker", password: "Passw0rd9", status: 1 } });
     expect(await users.update(2, input)).toBe(row);
     expect(request).toHaveBeenLastCalledWith("/api/sys/users/2", { method: "PUT", body: input });
   });

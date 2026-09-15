@@ -4,34 +4,35 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"gbnt/apps/server/internal/apperr"
+	"gbnt/apps/server/internal/cachex"
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
-	"gbnt/apps/server/internal/perm"
 	"gbnt/apps/server/pkg/jwtutil"
-	"gbnt/apps/server/pkg/response"
 )
 
 // AuthService 鉴权。
 type AuthService struct {
-	DB   *gorm.DB
-	JWT  *jwtutil.Manager
-	Deny *jwtutil.DenyList
+	DB    *gorm.DB
+	JWT   *jwtutil.Manager
+	Deny  *jwtutil.DenyList
+	Cache *cachex.Store
 }
 
-// ErrMiniappSuperAdmin 超级管理员禁止登录小程序。
-var ErrMiniappSuperAdmin = errors.New("超级管理员不能登录小程序")
+// ErrMiniappSuperAdmin 超级管理员禁止登录小程序（与 apperr 同一哨兵，errors.Is 互通）。
+var ErrMiniappSuperAdmin = apperr.ErrMiniappSuperAdmin
 
 // Login 校验账密并签发管理后台 JWT。
 // [PRD] 仅递增 token_ver，踢掉该账号其它管理后台会话；不影响小程序。
-func (s *AuthService) Login(username, password string) (*model.SysUser, string, time.Time, error) {
-	user, err := s.authenticate(username, password)
+func (s *AuthService) Login(ctx context.Context, username, password string) (*model.SysUser, string, time.Time, error) {
+	user, err := s.authenticate(ctx, username, password)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
@@ -39,8 +40,8 @@ func (s *AuthService) Login(username, password string) (*model.SysUser, string, 
 }
 
 // LoginMiniapp 小程序登录：账密通过后拒绝超级管理员；仅递增 app_token_ver，不影响管理后台。
-func (s *AuthService) LoginMiniapp(username, password string) (*model.SysUser, string, time.Time, error) {
-	user, err := s.authenticate(username, password)
+func (s *AuthService) LoginMiniapp(ctx context.Context, username, password string) (*model.SysUser, string, time.Time, error) {
+	user, err := s.authenticate(ctx, username, password)
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
@@ -50,15 +51,15 @@ func (s *AuthService) LoginMiniapp(username, password string) (*model.SysUser, s
 	return s.issueLoginToken(user, jwtutil.ClientApp)
 }
 
-func (s *AuthService) authenticate(username, password string) (*model.SysUser, error) {
+func (s *AuthService) authenticate(ctx context.Context, username, password string) (*model.SysUser, error) {
 	var user model.SysUser
-	if err := s.DB.Where("username = ? AND status = 1", username).First(&user).Error; err != nil {
+	if err := s.DB.WithContext(ctx).Where("username = ? AND status = 1", username).First(&user).Error; err != nil {
 		return nil, errors.New("账号或密码不正确")
 	}
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
 		return nil, errors.New("账号或密码不正确")
 	}
-	if err := s.checkRoleActive(user.RoleID); err != nil {
+	if err := s.checkRoleActive(ctx, user.RoleID); err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -77,6 +78,7 @@ func (s *AuthService) issueLoginToken(user *model.SysUser, client string) (*mode
 	if err != nil {
 		return nil, "", time.Time{}, err
 	}
+	s.invalidateUserInfo(user.ID)
 	return user, token, exp, nil
 }
 
@@ -156,9 +158,13 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uint64, oldPwd,
 	if err != nil {
 		return err
 	}
-	return s.DB.WithContext(ctx).Model(&user).Updates(invalidateAllSessions(map[string]interface{}{
+	if err := s.DB.WithContext(ctx).Model(&user).Updates(invalidateAllSessions(map[string]interface{}{
 		"password": string(hash),
-	})).Error
+	})).Error; err != nil {
+		return err
+	}
+	s.invalidateUserInfo(userID)
+	return nil
 }
 
 // Logout 将当前 token 的 jti 加入黑名单（TTL=剩余有效期）。
@@ -180,18 +186,32 @@ func (s *AuthService) Logout(tokenStr string) error {
 	return nil
 }
 
-func (s *AuthService) checkRoleActive(roleID uint64) error {
+func (s *AuthService) checkRoleActive(ctx context.Context, roleID uint64) error {
 	if roleID == 0 {
 		return nil // 无角色绑定时不校验角色状态
 	}
 	var role model.SysRole
-	if err := s.DB.First(&role, roleID).Error; err != nil {
+	if err := s.DB.WithContext(ctx).First(&role, roleID).Error; err != nil {
 		return errors.New("角色已禁用")
 	}
 	if role.Status != 1 {
 		return errors.New("角色已禁用")
 	}
 	return nil
+}
+
+const userInfoCacheTTL = 30 * time.Second
+
+// InvalidateUserInfoCache 用户停用/改密/登录踢线后立刻丢掉 JWT 热路径缓存。
+func InvalidateUserInfoCache(store *cachex.Store, userID uint64) {
+	if store == nil || userID == 0 {
+		return
+	}
+	store.Delete(fmt.Sprintf("userinfo:%d", userID))
+}
+
+func (s *AuthService) invalidateUserInfo(id uint64) {
+	InvalidateUserInfoCache(s.Cache, id)
 }
 
 // UserInfoFromModel 将 SysUser 转为上下文 UserInfo。
@@ -217,14 +237,30 @@ func (s *AuthService) LoadActiveUserInfo(ctx context.Context, id uint64) (*datab
 	if id == 0 {
 		return nil, database.ErrUnauth
 	}
+	key := fmt.Sprintf("userinfo:%d", id)
+	if s.Cache != nil {
+		if v, ok := s.Cache.Get(key); ok {
+			if info, ok := v.(*database.UserInfo); ok && info != nil {
+				copied := *info
+				return &copied, nil
+			}
+		}
+	}
 	var user model.SysUser
-	if err := s.DB.WithContext(ctx).Where("id = ? AND status = 1", id).First(&user).Error; err != nil {
+	err := s.DB.WithContext(ctx).Model(&model.SysUser{}).
+		Joins("LEFT JOIN sys_roles ON sys_roles.id = sys_users.role_id AND sys_roles.is_delete = 0").
+		Where("sys_users.id = ? AND sys_users.status = 1", id).
+		Where("sys_users.role_id = 0 OR sys_roles.status = 1").
+		First(&user).Error
+	if err != nil {
 		return nil, database.ErrUnauth
 	}
-	if err := s.checkRoleActive(user.RoleID); err != nil {
-		return nil, database.ErrUnauth
+	info := UserInfoFromModel(&user)
+	if s.Cache != nil && info != nil {
+		copied := *info
+		s.Cache.Set(key, &copied, userInfoCacheTTL)
 	}
-	return UserInfoFromModel(&user), nil
+	return info, nil
 }
 
 // GetByID 按 ID 取用户。
@@ -234,102 +270,4 @@ func (s *AuthService) GetByID(id uint64) (*model.SysUser, error) {
 		return nil, err
 	}
 	return &user, nil
-}
-
-// OpLogService 操作日志。
-type OpLogService struct {
-	DB *gorm.DB
-}
-
-const (
-	ctxOpAction = "op_action"
-	ctxOpDetail = "op_detail"
-	maxOpBody   = 16384
-)
-
-// Mark 标记本请求的操作文案；须在业务校验前调用，失败也会落入 OpLog。
-func (s *OpLogService) Mark(c *gin.Context, action, detail string) {
-	if s == nil || c == nil {
-		return
-	}
-	c.Set(ctxOpAction, action)
-	c.Set(ctxOpDetail, detail)
-}
-
-// MarkFromCatalog 按 sys_apis 目录写入动作名；已有 Mark 时不覆盖。
-func (s *OpLogService) MarkFromCatalog(c *gin.Context, permSvc *perm.Service) {
-	if s == nil || c == nil || permSvc == nil {
-		return
-	}
-	if v, ok := c.Get(ctxOpAction); ok {
-		if act, _ := v.(string); strings.TrimSpace(act) != "" {
-			return
-		}
-	}
-	path := c.FullPath()
-	if path == "" {
-		return
-	}
-	api, ok := permSvc.FindAPI(c.Request.Method, path)
-	if !ok || strings.TrimSpace(api.Name) == "" {
-		return
-	}
-	c.Set(ctxOpAction, api.Name)
-}
-
-// Persist 写入操作日志（含脱敏后的请求/响应体）。
-func (s *OpLogService) Persist(c *gin.Context, req, resp string) error {
-	if c == nil || s == nil || s.DB == nil {
-		return nil
-	}
-	action, _ := c.Get(ctxOpAction)
-	detail, _ := c.Get(ctxOpDetail)
-	act, _ := action.(string)
-	det, _ := detail.(string)
-	if act == "" {
-		act = c.Request.Method
-	}
-	uid := uint64(0)
-	uname := ""
-	if u, err := database.UserFromContext(c.Request.Context()); err == nil {
-		uid = u.ID
-		uname = u.Username
-	}
-	tid, _ := c.Get(response.CtxTraceID)
-	traceID, _ := tid.(string)
-	return s.DB.WithContext(c.Request.Context()).Create(&model.OpLog{
-		UserID:   uid,
-		Username: uname,
-		Action:   act,
-		Detail:   det,
-		Path:     c.Request.URL.Path,
-		TraceID:  traceID,
-		IP:       c.ClientIP(),
-		Request:  clipOpBody(req),
-		Response: clipOpBody(resp),
-	}).Error
-}
-
-func clipOpBody(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= maxOpBody {
-		return s
-	}
-	return s[:maxOpBody] + "..."
-}
-
-// List 分页查询。
-func (s *OpLogService) List(keyword string, page, size int) ([]model.OpLog, int64, error) {
-	q := s.DB.Model(&model.OpLog{})
-	if keyword != "" {
-		like := "%" + keyword + "%"
-		q = q.Where("action LIKE ? OR detail LIKE ? OR username LIKE ?", like, like, like)
-	}
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var list []model.OpLog
-	err := q.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&list).Error
-	return list, total, err
 }

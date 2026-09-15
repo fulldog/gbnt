@@ -111,8 +111,8 @@ export function createUsersApi(client: ApiClient) {
       return client.request<null>(`/api/sys/users/${id}`, { method: "DELETE" });
     },
 
-    resetPassword(id: number): Promise<null> {
-      return client.request<null>(`/api/sys/users/${id}/reset-password`, {
+    resetPassword(id: number): Promise<{ password: string }> {
+      return client.request<{ password: string }>(`/api/sys/users/${id}/reset-password`, {
         method: "POST",
       });
     },

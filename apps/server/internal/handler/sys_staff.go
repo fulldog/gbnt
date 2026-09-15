@@ -80,7 +80,7 @@ func (d *Deps) ExportUsers(c *gin.Context) {
 
 // ImportUsers POST /api/sys/users/import — 上传 xlsx 仅新增人员；排序列可选，缺失或空值默认 100。
 func (d *Deps) ImportUsers(c *gin.Context) {
-	d.OpLog.Mark(c, "导入人员", "")
+	d.markOp(c, "导入人员", "")
 	fh, err := c.FormFile("file")
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "请上传 file")
@@ -100,19 +100,19 @@ func (d *Deps) ImportUsers(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "导入人员", "导入 "+itoa(n)+" 条")
+	d.markOp(c, "导入人员", "导入 "+itoa(n)+" 条")
 	response.OK(c, gin.H{"imported": n})
 }
 
 // CreateUser POST /api/sys/users — 新增工作人员；password 空则=账户名；sort 为可选整数，默认 100，越小越靠前。
 func (d *Deps) CreateUser(c *gin.Context) {
-	d.OpLog.Mark(c, "新增用户", "")
+	d.markOp(c, "新增用户", "")
 	var req service.UserInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	d.OpLog.Mark(c, "新增用户", req.Username)
+	d.markOp(c, "新增用户", req.Username)
 	u, err := d.Sys.CreateUser(c.Request.Context(), req)
 	if err != nil {
 		if orgScopeFailure(c, err) {
@@ -126,7 +126,7 @@ func (d *Deps) CreateUser(c *gin.Context) {
 
 // UpdateUser PUT /api/sys/users/:id — 更新工作人员；password 空则不改，sort/status 未传则保留原值。
 func (d *Deps) UpdateUser(c *gin.Context) {
-	d.OpLog.Mark(c, "更新用户", c.Param("id"))
+	d.markOp(c, "更新用户", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -149,7 +149,7 @@ func (d *Deps) UpdateUser(c *gin.Context) {
 
 // UpdateUserStatus PUT /api/sys/users/:id/status — 仅更新工作人员状态；body: status（0/1，必填）；需工作人员修改权限，禁止修改超级管理员，成功返回 data:null。
 func (d *Deps) UpdateUserStatus(c *gin.Context) {
-	d.OpLog.Mark(c, "更新用户状态", c.Param("id"))
+	d.markOp(c, "更新用户状态", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -171,7 +171,7 @@ func (d *Deps) UpdateUserStatus(c *gin.Context) {
 
 // DeleteUser DELETE /api/sys/users/:id — 删除工作人员（软删）。
 func (d *Deps) DeleteUser(c *gin.Context) {
-	d.OpLog.Mark(c, "删除用户", c.Param("id"))
+	d.markOp(c, "删除用户", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -186,19 +186,20 @@ func (d *Deps) DeleteUser(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// ResetUserPassword POST /api/sys/users/:id/reset-password — 重置密码为账户名。
+// ResetUserPassword POST /api/sys/users/:id/reset-password — 重置为随机复杂密码，响应 data.password 仅此一次返回明文。
 func (d *Deps) ResetUserPassword(c *gin.Context) {
-	d.OpLog.Mark(c, "重置密码", "user_id="+c.Param("id"))
+	d.markOp(c, "重置密码", "user_id="+c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
-	if err := d.Sys.ResetPassword(c.Request.Context(), id); err != nil {
+	plain, err := d.Sys.ResetPassword(c.Request.Context(), id)
+	if err != nil {
 		if orgScopeFailure(c, err) {
 			return
 		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	response.OK(c, nil)
+	response.OK(c, gin.H{"password": plain})
 }

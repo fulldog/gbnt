@@ -68,7 +68,7 @@ func (s *IssueService) MiniappIssueViews(ctx context.Context, list []IssueVO) ([
 
 // GetMiniapp 允许读取当前组织范围内的问题；调岗后本人历史上报/指派仍可只读查看。
 func (s *IssueService) GetMiniapp(ctx context.Context, id uint64) (*MiniappIssueVO, error) {
-	item, err := s.Get(id)
+	item, err := s.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -257,5 +257,5 @@ func (s *IssueService) Update(ctx context.Context, id uint64, in IssueUpdateInpu
 	if err != nil {
 		return nil, err
 	}
-	return s.Get(id)
+	return s.Get(ctx, id)
 }

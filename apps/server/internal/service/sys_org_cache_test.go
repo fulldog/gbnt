@@ -75,10 +75,13 @@ func TestCreateOrgClearsOrgListCache(t *testing.T) {
 func TestDeleteOrgClearsOrgListCache(t *testing.T) {
 	db := testutil.NewTransactionDB(t,
 		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id", "type", "sort"}, Rows: [][]driver.Value{{int64(2), "街道", int64(1), "street", int64(1)}}},
-		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "parent_id", "type"}, Rows: [][]driver.Value{{int64(2), int64(1), "street"}}},
+		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id", "type", "sort"}, Rows: [][]driver.Value{{int64(2), "街道", int64(1), "street", int64(1)}}},
 		testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}},
 		testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}},
 		testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}},
+		testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_orgs`"},
+		testutil.QueryStep{Kind: "commit"},
 		testutil.QueryStep{Kind: "begin"},
 		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_orgs`"},
 		testutil.QueryStep{Kind: "commit"},
@@ -101,7 +104,7 @@ func TestFailedDeleteOrgKeepsOrgListCache(t *testing.T) {
 	t.Parallel()
 	db := testutil.NewQueryDB(t,
 		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id", "type", "sort"}, Rows: [][]driver.Value{{int64(1), "根", int64(0), "root", int64(1)}}},
-		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "parent_id", "type"}, Rows: [][]driver.Value{{int64(1), int64(0), "root"}}},
+		testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id", "type", "sort"}, Rows: [][]driver.Value{{int64(1), "根", int64(0), "root", int64(1)}}},
 	)
 	s := &SysService{DB: db, Cache: cachex.New(0, 0)}
 	if _, err := s.ListOrgs(); err != nil {

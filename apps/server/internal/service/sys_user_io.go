@@ -224,8 +224,8 @@ func parseImportCreatedAt(raw string) (time.Time, error) {
 	return t, nil
 }
 
-func (s *SysService) userListQuery(orgID uint64, keyword string) *gorm.DB {
-	q := s.DB.Model(&model.SysUser{})
+func (s *SysService) userListQuery(ctx context.Context, orgID uint64, keyword string) *gorm.DB {
+	q := s.db(ctx).Model(&model.SysUser{})
 	if orgID > 0 {
 		q = q.Where("org_id = ?", orgID)
 	}
@@ -251,8 +251,8 @@ func (s *SysService) visibleUserListQuery(ctx context.Context, orgID uint64, key
 }
 
 // ExportUsers 导出人员xlsx（不分页），排序与列表一致；包含排序值及英文角色ID。
-func (s *SysService) ExportUsers(orgID uint64, keyword string) ([]byte, error) {
-	return s.exportUsers(s.userListQuery(orgID, keyword))
+func (s *SysService) ExportUsers(ctx context.Context, orgID uint64, keyword string) ([]byte, error) {
+	return s.exportUsers(s.userListQuery(ctx, orgID, keyword))
 }
 
 // ExportVisibleUsers 按当前登录用户可见组织范围导出工作人员，显式组织筛选包含其下级。
@@ -430,7 +430,11 @@ func (s *SysService) ImportUsers(ctx context.Context, r io.Reader) (int, error) 
 			return 0, fmt.Errorf("第 %d 行: %w", line, cerr)
 		}
 
-		hash, herr := bcrypt.GenerateFromPassword([]byte(username), bcrypt.DefaultCost)
+		plain, perr := RandomLoginPassword()
+		if perr != nil {
+			return 0, perr
+		}
+		hash, herr := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 		if herr != nil {
 			return 0, herr
 		}

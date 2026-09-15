@@ -8,12 +8,14 @@ mysql:
   max_open: 50
 
 # 数据库迁移控制（启动时）；已有环境需同步修改实际使用的 config.yaml
+# debug/dev 清空表须另设环境变量 GBNT_ALLOW_DEV_RESET=1
+# release 空库种子须设 GBNT_BOOTSTRAP_ADMIN_PASSWORD（勿再用 admin/admin）
 migrate:
   enabled: true   # 启动时执行所有当前模型的 GORM AutoMigrate；上线前备份数据库
-  seed: false     # release 模式下关闭种子初始化；不能阻止 debug/dev 模式清空本项目表并重建种子
+  seed: false     # release 空库才写种子；debug/dev 重建仍会写种子
 
 jwt:
-  secret: "gbnt-dev-secret-change-me"
+  secret: "gbnt-dev-secret-change-me"  # 至少 16 位；release 禁止该示例值，须换成随机密钥
   expire_hours: 72          # access token 有效期
   renew_before_hours: 24    # 剩余有效期低于此时触发滑动续期（响应头 X-New-Token）
 
@@ -51,6 +53,6 @@ rbac:
 # 浏览器跨域（管理后台 Vite 直连本机 API 时需要）
 cors:
   enabled: true
-  allow_origins: []          # 空或含 "*" 允许任意 Origin；生产可写成 ["http://localhost:5173"]
+  allow_origins: ["*"]       # 空或 "*" 允许任意 Origin；也可写成具体地址如 ["https://admin.example.com"]
   allow_credentials: true
   max_age: 86400

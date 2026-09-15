@@ -12,35 +12,25 @@ import (
 	"gbnt/apps/server/internal/testutil"
 )
 
-func statsQuerySteps(t *testing.T, values []int64) []testutil.QueryStep {
+func statsAggregateStep(t *testing.T, values []int64, fail error) testutil.QueryStep {
 	t.Helper()
-	filters := []string{"", "new", "pending", "done", "well", "road", "bridge", "forest", "transformer"}
-	steps := make([]testutil.QueryStep, 0, len(values))
-	for index, value := range values {
-		steps = append(steps, testutil.QueryStep{
-			Contains: "SELECT count(*) FROM `issues`", Columns: []string{"count"}, Rows: [][]driver.Value{{value}},
-			Check: func(query string, args []driver.NamedValue) {
-				// 成功与故障路径均必须保留软删除过滤，不借统计查询扩大可见记录。
-				if !strings.Contains(query, "`issues`.`is_delete` = ?") || len(args) == 0 || args[len(args)-1].Value != int64(0) {
-					t.Errorf("软删除条件缺失：%s %v", query, args)
-				}
-				if index == 0 {
-					if len(args) != 1 {
-						t.Errorf("总量不应叠加状态/类型过滤：%v", args)
-					}
-					return
-				}
-				column := "status"
-				if index >= 4 {
-					column = "type"
-				}
-				if !strings.Contains(query, column+" = ?") || len(args) != 2 || fmt.Sprint(args[0].Value) != filters[index] {
-					t.Errorf("统计条件变化：%s %v", query, args)
-				}
-			},
-		})
+	return testutil.QueryStep{
+		Contains: "FROM `issues`",
+		Columns:  []string{"total", "status_new", "status_pend", "status_done", "well", "road", "bridge", "forest", "transformer"},
+		Rows:     [][]driver.Value{{values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8]}},
+		Err:      fail,
+		Check: func(query string, args []driver.NamedValue) {
+			if !strings.Contains(query, "`issues`.`is_delete` = ?") || len(args) == 0 || args[len(args)-1].Value != int64(0) {
+				t.Errorf("软删除条件缺失：%s %v", query, args)
+			}
+			if !strings.Contains(strings.ToUpper(query), "COUNT(*)") || !strings.Contains(query, "CASE WHEN status") || !strings.Contains(query, "CASE WHEN type") {
+				t.Errorf("应一次聚合状态与类型：%s", query)
+			}
+			if strings.Contains(query, "count(*) FROM `issues`") && strings.Count(strings.ToLower(query), "count(*)") > 1 {
+				t.Errorf("不应拆成多次 COUNT：%s", query)
+			}
+		},
 	}
-	return steps
 }
 
 func TestStatsPreservesCountsRateAndEmptyResult(t *testing.T) {
@@ -52,7 +42,7 @@ func TestStatsPreservesCountsRateAndEmptyResult(t *testing.T) {
 				values = make([]int64, 9)
 				wantRate = 0
 			}
-			db := testutil.NewQueryDB(t, statsQuerySteps(t, values)...)
+			db := testutil.NewQueryDB(t, statsAggregateStep(t, values, nil))
 			stats, err := (&IssueService{DB: db}).Stats(context.Background())
 			if err != nil {
 				t.Fatal(err)
@@ -69,18 +59,10 @@ func TestStatsPreservesCountsRateAndEmptyResult(t *testing.T) {
 }
 
 func TestStatsEveryCountFailureStopsWithoutPartialData(t *testing.T) {
-	labels := []string{"total", "new", "pending", "done", "well", "road", "bridge", "forest", "transformer"}
-	for index, label := range labels {
-		t.Run(label, func(t *testing.T) {
-			wantErr := errors.New("统计查询失败：" + label)
-			values := []int64{10, 2, 3, 5, 4, 3, 1, 1, 1}
-			steps := statsQuerySteps(t, values[:index+1])
-			steps[index].Err = wantErr
-			db := testutil.NewQueryDB(t, steps...)
-			stats, err := (&IssueService{DB: db}).Stats(context.Background())
-			if !errors.Is(err, wantErr) || stats != nil {
-				t.Fatalf("不能吞错或返回部分统计：stats=%+v err=%v", stats, err)
-			}
-		})
+	wantErr := errors.New("统计查询失败")
+	db := testutil.NewQueryDB(t, statsAggregateStep(t, []int64{10, 2, 3, 5, 4, 3, 1, 1, 1}, wantErr))
+	stats, err := (&IssueService{DB: db}).Stats(context.Background())
+	if !errors.Is(err, wantErr) || stats != nil {
+		t.Fatalf("不能吞错或返回部分统计：stats=%+v err=%v", stats, err)
 	}
 }

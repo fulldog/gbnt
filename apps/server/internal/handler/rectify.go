@@ -6,7 +6,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/service"
 	"gbnt/apps/server/pkg/response"
 )
@@ -77,13 +76,13 @@ func (d *Deps) GetIssue(c *gin.Context) {
 
 // CreateIssue POST /api/issues — 新增排查；org_id + QuizBool 推导 needs_rectify/status；整改人固定允许为 0。
 func (d *Deps) CreateIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "上报问题", "")
+	d.markOp(c, "上报问题", "")
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	d.OpLog.Mark(c, "上报问题", req.Type)
+	d.markOp(c, "上报问题", req.Type)
 	// [PRD] 管理端新增不选整改人，允许 assignee_user=0；导入仍走 Create 且不置此标记。
 	req.AllowUnassignedAssignee = true
 	item, err := d.Issue.Create(c.Request.Context(), req)
@@ -97,13 +96,13 @@ func (d *Deps) CreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "上报问题", item.Type+" · "+item.Code)
+	d.markOp(c, "上报问题", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
 // UpdateIssue PUT /api/issues/:id — 更新问题；省略字段保持原值，完整校验类型表单，保留整改历史。
 func (d *Deps) UpdateIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "更新问题", c.Param("id"))
+	d.markOp(c, "更新问题", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -129,13 +128,16 @@ func (d *Deps) UpdateIssue(c *gin.Context) {
 
 // DeleteIssue DELETE /api/issues/:id — 删除问题（软删）。
 func (d *Deps) DeleteIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "删除问题", c.Param("id"))
+	d.markOp(c, "删除问题", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
 	if err := d.Issue.Delete(c.Request.Context(), id); err != nil {
 		if orgScopeFailure(c, err) {
+			return
+		}
+		if failNotFound(c, err) {
 			return
 		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
@@ -146,7 +148,7 @@ func (d *Deps) DeleteIssue(c *gin.Context) {
 
 // RectifyIssue POST /api/issues/:id/rectify — 整改闭环；body 见 RectifyInput。
 func (d *Deps) RectifyIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "提交整改", c.Param("id"))
+	d.markOp(c, "提交整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -161,8 +163,7 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 		if orgScopeFailure(c, err) {
 			return
 		}
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		if failUnauth(c, err) {
 			return
 		}
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
@@ -173,7 +174,7 @@ func (d *Deps) RectifyIssue(c *gin.Context) {
 
 // ReRectifyIssue POST /api/issues/:id/re-rectify — 重新整改（done → pending）。
 func (d *Deps) ReRectifyIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "重新整改", c.Param("id"))
+	d.markOp(c, "重新整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -186,13 +187,13 @@ func (d *Deps) ReRectifyIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "重新整改", item.Type+" · "+item.Code)
+	d.markOp(c, "重新整改", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
 // ReassignIssue POST /api/issues/:id/reassign — 重新指派整改人；body: {assignee_user}。
 func (d *Deps) ReassignIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "重新指派整改人", c.Param("id"))
+	d.markOp(c, "重新指派整改人", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -214,13 +215,13 @@ func (d *Deps) ReassignIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "重新指派整改人", item.Type+" · "+item.Code)
+	d.markOp(c, "重新指派整改人", item.Type+" · "+item.Code)
 	response.OK(c, item)
 }
 
 // ImportIssues POST /api/issues/import — 批量导入 {rows:IssueInput[]}。
 func (d *Deps) ImportIssues(c *gin.Context) {
-	d.OpLog.Mark(c, "批量导入", "")
+	d.markOp(c, "批量导入", "")
 	var req service.ImportIssuesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
@@ -238,6 +239,6 @@ func (d *Deps) ImportIssues(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "批量导入", "导入 "+itoa(n)+" 条")
+	d.markOp(c, "批量导入", "导入 "+itoa(n)+" 条")
 	response.OK(c, gin.H{"imported": n})
 }

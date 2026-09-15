@@ -55,7 +55,7 @@ func TestFeedbackMySQLConcurrentCompletionAndReporterDeletion(t *testing.T) {
 	if records != 3 {
 		t.Fatalf("历史被删除或并发重复写入: %d", records)
 	}
-	item, err := s.Get(1)
+	item, err := s.Get(ctx, 1)
 	if err != nil || item.Status != "done" {
 		t.Fatalf("整单未完成: %+v %v", item, err)
 	}

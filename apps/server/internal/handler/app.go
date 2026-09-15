@@ -68,19 +68,23 @@ func RegisterApp(r *gin.Engine, d *Deps) {
 
 // AppDeleteIssue 小程序本人删除上报；禁止通过姓名匹配或管理权限代替归属校验。
 func (d *Deps) AppDeleteIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序删除上报", c.Param("id"))
+	d.markOp(c, "小程序删除上报", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
 	if err := d.Issue.DeleteReported(c.Request.Context(), id); err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
-		} else if errors.Is(err, service.ErrIssueReporterOnly) || errors.Is(err, service.ErrOrgScopeForbidden) {
-			response.Fail(c, 403, response.CodeForbid, err.Error())
-		} else {
-			response.Fail(c, 400, response.CodeBadReq, err.Error())
+		if failUnauth(c, err) {
+			return
 		}
+		if failNotFound(c, err) {
+			return
+		}
+		if errors.Is(err, service.ErrIssueReporterOnly) || errors.Is(err, service.ErrOrgScopeForbidden) {
+			response.Fail(c, 403, response.CodeForbid, err.Error())
+			return
+		}
+		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
 	response.OK(c, nil)
@@ -88,7 +92,7 @@ func (d *Deps) AppDeleteIssue(c *gin.Context) {
 
 // AppSubmitFeedback 小程序整单整改；仅 assignee_user 为 0 或当前用户时可改；必传说明、照片和当前轮次。
 func (d *Deps) AppSubmitFeedback(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序整改反馈", c.Param("id"))
+	d.markOp(c, "小程序整改反馈", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -100,20 +104,21 @@ func (d *Deps) AppSubmitFeedback(c *gin.Context) {
 	}
 	item, err := d.Issue.SubmitFeedback(c.Request.Context(), id, req)
 	if err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
-		} else if !orgScopeFailure(c, err) {
+		if failUnauth(c, err) {
+			return
+		}
+		if !orgScopeFailure(c, err) {
 			response.Fail(c, 400, response.CodeBadReq, err.Error())
 		}
 		return
 	}
-	d.OpLog.Mark(c, "小程序整改反馈", item.Type+" · "+item.Code)
+	d.markOp(c, "小程序整改反馈", item.Type+" · "+item.Code)
 	d.appIssuePayload(c, item)
 }
 
 // AppSliderStart 开始滑动验证。
 func (d *Deps) AppSliderStart(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序滑动验证开始", "")
+	d.markOp(c, "小程序滑动验证开始", "")
 	if d.Captcha == nil {
 		response.Fail(c, 500, response.CodeServer, "验证码服务未初始化")
 		return
@@ -128,7 +133,7 @@ func (d *Deps) AppSliderStart(c *gin.Context) {
 
 // AppSliderFinish 完成滑动，换取一次性 pass_token。
 func (d *Deps) AppSliderFinish(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序滑动验证完成", "")
+	d.markOp(c, "小程序滑动验证完成", "")
 	var req struct {
 		SliderID   string `json:"slider_id" binding:"required"`   // 滑动会话 ID
 		DurationMs int64  `json:"duration_ms" binding:"required"` // 滑动耗时毫秒，须在配置区间内
@@ -159,13 +164,13 @@ type AppLoginReq struct {
 
 // AppLogin 小程序登录：账密 + pass_token。[PRD] 超级管理员禁止登录小程序。
 func (d *Deps) AppLogin(c *gin.Context) {
-	d.OpLog.Mark(c, "登录", "")
+	d.markOp(c, "登录", "")
 	var req AppLoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	d.OpLog.Mark(c, "登录", req.Username)
+	d.markOp(c, "登录", req.Username)
 	// 协议校验先于一次性滑动令牌消费，未同意时不得创建登录会话。
 	if !req.Agreed {
 		response.Fail(c, 400, response.CodeBadReq, "请先阅读并同意用户协议与隐私政策")
@@ -177,10 +182,9 @@ func (d *Deps) AppLogin(c *gin.Context) {
 			return
 		}
 	}
-	user, token, exp, err := d.Auth.LoginMiniapp(req.Username, req.Password)
+	user, token, exp, err := d.Auth.LoginMiniapp(c.Request.Context(), req.Username, req.Password)
 	if err != nil {
-		if errors.Is(err, service.ErrMiniappSuperAdmin) {
-			response.Fail(c, 403, response.CodeForbid, err.Error())
+		if failMiniappSuperAdmin(c, err) {
 			return
 		}
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
@@ -255,8 +259,7 @@ func (d *Deps) AppListTodos(c *gin.Context) {
 	}
 	list, total, err := d.Issue.ListTodos(c.Request.Context(), q)
 	if err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		if failUnauth(c, err) {
 			return
 		}
 		if orgScopeFailure(c, err) {
@@ -346,13 +349,13 @@ func (d *Deps) AppGetIssue(c *gin.Context) {
 
 // AppCreateIssue 小程序上报（按 quiz 推导 new/done）。
 func (d *Deps) AppCreateIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序上报", "")
+	d.markOp(c, "小程序上报", "")
 	var req service.IssueInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, 400, response.CodeBadReq, "参数错误")
 		return
 	}
-	d.OpLog.Mark(c, "小程序上报", req.Type)
+	d.markOp(c, "小程序上报", req.Type)
 	user, err := userFromCtx(c)
 	if err != nil {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
@@ -373,13 +376,13 @@ func (d *Deps) AppCreateIssue(c *gin.Context) {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
 	}
-	d.OpLog.Mark(c, "小程序上报", item.Type+" · "+item.Code)
+	d.markOp(c, "小程序上报", item.Type+" · "+item.Code)
 	d.appIssuePayload(c, item)
 }
 
 // AppRectifyIssue 小程序页内提交整改。
 func (d *Deps) AppRectifyIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序整改", c.Param("id"))
+	d.markOp(c, "小程序整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
@@ -391,8 +394,7 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 	}
 	item, err := d.Issue.Rectify(c.Request.Context(), id, req, true)
 	if err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		if failUnauth(c, err) {
 			return
 		}
 		if !orgScopeFailure(c, err) {
@@ -400,21 +402,20 @@ func (d *Deps) AppRectifyIssue(c *gin.Context) {
 		}
 		return
 	}
-	d.OpLog.Mark(c, "小程序整改", item.Type+" · "+item.Code)
+	d.markOp(c, "小程序整改", item.Type+" · "+item.Code)
 	d.appIssuePayload(c, item)
 }
 
 // AppReRectifyIssue 小程序重新整改（done → pending）。
 func (d *Deps) AppReRectifyIssue(c *gin.Context) {
-	d.OpLog.Mark(c, "小程序重新整改", c.Param("id"))
+	d.markOp(c, "小程序重新整改", c.Param("id"))
 	id, ok := parseID(c)
 	if !ok {
 		return
 	}
 	item, err := d.Issue.ReRectify(c.Request.Context(), id, true)
 	if err != nil {
-		if errors.Is(err, database.ErrUnauth) {
-			response.Fail(c, 401, response.CodeUnauth, err.Error())
+		if failUnauth(c, err) {
 			return
 		}
 		if !orgScopeFailure(c, err) {
@@ -422,7 +423,7 @@ func (d *Deps) AppReRectifyIssue(c *gin.Context) {
 		}
 		return
 	}
-	d.OpLog.Mark(c, "小程序重新整改", item.Type+" · "+item.Code)
+	d.markOp(c, "小程序重新整改", item.Type+" · "+item.Code)
 	d.appIssuePayload(c, item)
 }
 
@@ -433,7 +434,7 @@ func (d *Deps) AppMineStats(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	stats, err := d.Issue.MineStats(user.ID)
+	stats, err := d.Issue.MineStats(c.Request.Context(), user.ID)
 	if err != nil {
 		response.Fail(c, 500, response.CodeServer, err.Error())
 		return
@@ -451,7 +452,7 @@ func (d *Deps) AppMineIssues(c *gin.Context) {
 		response.Fail(c, 401, response.CodeUnauth, err.Error())
 		return
 	}
-	list, total, err := d.Issue.ListMine(scope, user.ID, page, size)
+	list, total, err := d.Issue.ListMine(c.Request.Context(), scope, user.ID, page, size)
 	if err != nil {
 		response.Fail(c, 400, response.CodeBadReq, err.Error())
 		return
