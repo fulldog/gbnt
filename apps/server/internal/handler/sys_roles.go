@@ -50,7 +50,7 @@ func (d *Deps) CreateRole(c *gin.Context) {
 	response.OK(c, r)
 }
 
-// UpdateRole PUT /api/sys/roles/:id — 数字id定位，部分更新备注/状态及原子保存权限；忽略改号。
+// UpdateRole PUT /api/sys/roles/:id — 数字id定位，部分更新名称/备注/状态及原子保存权限；名称不可与其他未删除角色重复；忽略改号。
 func (d *Deps) UpdateRole(c *gin.Context) {
 	d.markOp(c, "更新角色", c.Param("id"))
 	id, ok := parseID(c)

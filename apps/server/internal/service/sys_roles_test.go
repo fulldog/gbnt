@@ -211,6 +211,44 @@ func TestCreateRoleRejectsEmptyName(t *testing.T) {
 	}
 }
 
+func TestRoleRenameRejectsDuplicateName(t *testing.T) {
+	name := "巡查员"
+	db := testutil.NewTransactionDB(t,
+		testutil.QueryStep{Kind: "begin"},
+		roleRecordStep(),
+		testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(1)}}},
+		testutil.QueryStep{Kind: "rollback"},
+	)
+	if _, err := (&SysService{DB: db}).UpdateRole(context.Background(), 7, UpdateRoleInput{Name: &name}); err == nil || !strings.Contains(err.Error(), "角色名称已存在") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestRoleRenameUpdatesNameWhenAvailable(t *testing.T) {
+	name := "  新名称  "
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleRecordStep(), roleNameAvailableStep(),
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `sys_roles`", Check: func(_ string, args []driver.NamedValue) {
+			for _, arg := range args {
+				if arg.Value == "新名称" {
+					return
+				}
+			}
+			t.Errorf("改名未整理空白: %v", args)
+		}}, testutil.QueryStep{Kind: "commit"})
+	role, err := (&SysService{DB: db}).UpdateRole(context.Background(), 7, UpdateRoleInput{Name: &name})
+	if err != nil || role == nil || role.Name != "新名称" {
+		t.Fatalf("%+v %v", role, err)
+	}
+}
+
+func TestRoleRenameRejectsEmptyName(t *testing.T) {
+	name := "  "
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleRecordStep(), testutil.QueryStep{Kind: "rollback"})
+	if _, err := (&SysService{DB: db}).UpdateRole(context.Background(), 7, UpdateRoleInput{Name: &name}); err == nil || !strings.Contains(err.Error(), "角色名称须为") {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestRoleIdOneIsOrdinary(t *testing.T) {
 	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"},
 		testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id", "name", "desc", "status", "code"}, Rows: [][]driver.Value{{int64(1), "历史角色", "备注", int64(1), "role-1"}}},

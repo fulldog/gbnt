@@ -23,7 +23,7 @@ export function createRolesApi(client: ApiClient) {
       });
     },
 
-    /** 路径仍使用内部数字id；备注及api_ids在同一事务内保存，忽略改号。 */
+    /** 路径仍使用内部数字id；名称、备注及api_ids在同一事务内保存；名称不可与其他未删除角色重复；忽略改号。 */
     update(id: number, input: UpdateRoleInput): Promise<SysRole> {
       return client.request<SysRole, UpdateRoleInput>(`/api/sys/roles/${id}`, {
         method: "PUT",

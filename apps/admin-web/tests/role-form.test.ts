@@ -110,12 +110,12 @@ describe("统一角色弹窗", () => {
     expect(wrapper.findAllComponents(ElInput).find((input) => input.props("type") === "textarea")?.props("autosize")).toEqual({ minRows: 1, maxRows: 3 });
     expect(wrapper.findAll(".role-auth .permission-matrix")).toHaveLength(1);
     expect(button(wrapper, "取消").exists()).toBe(true);
+    expect(roleNameInput(wrapper).element).toHaveProperty("disabled", false);
+    expect(wrapper.text()).toContain("未删除角色中名称不可重复");
     if (role) {
-      expect(roleNameInput(wrapper).element).toHaveProperty("disabled", true);
       expect(roleNameInput(wrapper).element.value).toBe(role.name);
       expect(button(wrapper).attributes("disabled")).toBeUndefined();
     } else {
-      expect(roleNameInput(wrapper).element).toHaveProperty("disabled", false);
       expect(roleNameInput(wrapper).element.value).toBe("");
       expect(button(wrapper).attributes("disabled")).toBeDefined();
       await typeRoleName(wrapper);
@@ -147,21 +147,30 @@ describe("统一角色弹窗", () => {
     expect(wrapper.emitted("saved")).toEqual([[sysRole(9, "自定义角色"), true]]);
     expect(wrapper.props("modelValue")).toBe(false);
   });
-  it("修改保持历史名称、半选与目录外权限；失败后可原样重试", async () => {
+  it("修改可改名称，保留半选与目录外权限；失败后可原样重试", async () => {
     const wrapper = form(sysRole());
     await flushPromises();
+    await typeRoleName(wrapper, "新名称");
     await wrapper.get("textarea").setValue("新备注");
     roles.update.mockRejectedValueOnce(new Error("授权保存失败"));
     await button(wrapper).trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("授权保存失败");
     expect(wrapper.props("modelValue")).toBe(true);
-    expect(roleNameInput(wrapper).element.value).toBe("历史角色");
+    expect(roleNameInput(wrapper).element.value).toBe("新名称");
     expect(wrapper.getComponent(PermissionMatrix).props("modelValue")).toEqual([3, 999]);
     expect(wrapper.get("textarea").element.value).toBe("新备注");
     await button(wrapper).trigger("click");
     await flushPromises();
-    expect(roles.update).toHaveBeenNthCalledWith(2, 7, { desc: "新备注", api_ids: [3, 999] });
+    expect(roles.update).toHaveBeenNthCalledWith(2, 7, { name: "新名称", desc: "新备注", api_ids: [3, 999] });
+  });
+  it("修改时清空名称不可保存", async () => {
+    const wrapper = form(sysRole());
+    await flushPromises();
+    await typeRoleName(wrapper, "   ");
+    expect(wrapper.text()).toContain("请填写角色名称");
+    expect(button(wrapper).attributes("disabled")).toBeDefined();
+    expect(roles.update).not.toHaveBeenCalled();
   });
   it("显式取消全部权限可保存，且不隐式恢复默认权限", async () => {
     const wrapper = form();
@@ -236,12 +245,12 @@ describe("角色正式API契约", () => {
     const request = vi.fn<(path: string, options?: ApiRequestOptions) => Promise<unknown>>().mockResolvedValue(sysRole());
     const api = createRolesApi({ request: request as ApiClient["request"], raw: vi.fn() });
     await api.create({ name: "巡查员", desc: "备注", api_ids: [3] });
-    await api.update(7, { desc: "新备注", api_ids: [] });
+    await api.update(7, { name: "新名称", desc: "新备注", api_ids: [] });
     await api.update(7, { status: 0 });
     await api.updatePermissions(7, { api_ids: [3] });
     expect(request.mock.calls).toEqual([
       ["/api/sys/roles", { method: "POST", body: { name: "巡查员", desc: "备注", api_ids: [3] } }],
-      ["/api/sys/roles/7", { method: "PUT", body: { desc: "新备注", api_ids: [] } }],
+      ["/api/sys/roles/7", { method: "PUT", body: { name: "新名称", desc: "新备注", api_ids: [] } }],
       ["/api/sys/roles/7", { method: "PUT", body: { status: 0 } }],
       ["/api/sys/roles/7/apis", { method: "PUT", body: { api_ids: [3] } }],
     ]);

@@ -475,9 +475,11 @@ export interface CreateRoleInput {
   api_ids: number[];
 }
 
-/** 只更新传入字段；api_ids 未传保持原权限，空数组表示清空。 */
+/** 只更新传入字段；名称与其他未删除角色不可重复；api_ids 未传保持原权限，空数组表示清空。 */
 export interface UpdateRoleInput {
+  /** 忽略；英文标识创建后不可改。 */
   code?: string;
+  /** 选填改名；1～64 字，未删除角色中不可与其他角色重复；省略保持原名。 */
   name?: string;
   desc?: string;
   status?: 0 | 1;

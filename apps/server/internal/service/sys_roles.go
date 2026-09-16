@@ -28,7 +28,7 @@ type CreateRoleInput struct {
 // UpdateRoleInput 部分更新角色；未传字段保持不变，权限空数组表示清空。
 type UpdateRoleInput struct {
 	Code   *string  `json:"code"`    // 忽略；英文标识创建后不可改
-	Name   *string  `json:"name"`    // 兼容旧客户端改名；新页面不提交，修改授权不重命名
+	Name   *string  `json:"name"`    // 选填改名；1～64字，未删除角色中不可与其他角色重复；省略保持原名
 	Desc   *string  `json:"desc"`    // 选填备注；空字符串表示清空，最多255字
 	Status *int     `json:"status"`  // 选填状态，1启用、0停用
 	APIIDs []uint64 `json:"api_ids"` // 选填权限；省略保持不变，空数组清空全部授权
@@ -231,7 +231,7 @@ func (s *SysService) CreateRole(ctx context.Context, in CreateRoleInput) (*model
 	return role, nil
 }
 
-// UpdateRole 事务内部分更新角色和授权；授权变化不触发职责重命名。
+// UpdateRole 事务内部分更新角色和授权；传 name 时校验未删除角色中不可重复，授权变化不自动改名。
 func (s *SysService) UpdateRole(ctx context.Context, id uint64, in UpdateRoleInput) (*model.SysRole, error) {
 	if in.Status != nil && *in.Status != 0 && *in.Status != 1 {
 		return nil, errors.New("角色状态只能为0或1")

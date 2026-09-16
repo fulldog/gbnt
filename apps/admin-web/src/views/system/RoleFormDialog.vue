@@ -27,7 +27,7 @@ let disposed = false;
 const hasAdminLogin = computed(() => catalog.value.some((item) => item.module === "web.auth" && item.action === "login" && selected.value.includes(item.id)));
 const validationError = computed(() => {
   const roleName = name.value.trim();
-  if (!role && !roleName) return "请填写角色名称";
+  if (!roleName) return "请填写角色名称";
   if ([...roleName].length > 64) return "角色名称须为1～64字";
   if ([...desc.value.trim()].length > 255) return "角色备注不能超过255字";
   return "";
@@ -71,12 +71,10 @@ async function save(): Promise<void> {
   if (!canSave.value) return;
   const request = sequence;
   const editing = role;
-  const input = editing
-    ? { desc: desc.value.trim(), api_ids: [...selected.value] }
-    : { name: name.value.trim(), desc: desc.value.trim(), api_ids: [...selected.value] };
   submitting.value = true;
   saveError.value = "";
   try {
+    const input = { name: name.value.trim(), desc: desc.value.trim(), api_ids: [...selected.value] };
     const saved = editing ? await api.roles.update(editing.id, input) : await api.roles.create(input);
     if (disposed || request !== sequence) return;
     ElMessage.success(editing ? "角色已修改" : "角色已新增");
@@ -106,8 +104,8 @@ onScopeDispose(() => { disposed = true; sequence += 1; });
     <div @submit.prevent="save">
     <ElForm class="role-form" label-position="right" label-width="98px">
       <ElFormItem label="角色名称">
-        <ElInput v-model="name" maxlength="64" show-word-limit placeholder="请输入角色名称" :disabled="Boolean(role) || submitting" />
-        <p v-if="role" class="role-form-hint">创建时填写，修改权限后保持不变</p>
+        <ElInput v-model="name" maxlength="64" show-word-limit placeholder="请输入角色名称" :disabled="submitting" />
+        <p class="role-form-hint">未删除角色中名称不可重复</p>
       </ElFormItem>
       <ElFormItem label="角色备注">
         <ElInput v-model="desc" type="textarea" :rows="1" :autosize="{ minRows: 1, maxRows: 3 }" maxlength="255" show-word-limit placeholder="填写角色职责或权限备注" :disabled="submitting" />
