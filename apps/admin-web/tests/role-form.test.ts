@@ -27,6 +27,12 @@ function form(role: ReturnType<typeof sysRole> | null = null) {
   return wrapper;
 }
 function button(wrapper: VueWrapper, label = "保存") { return wrapper.findAll("button").find((item) => item.text() === label)!; }
+function roleNameInput(wrapper: VueWrapper) {
+  return wrapper.findAll("input").find((item) => item.attributes("placeholder") === "请输入角色名称")!;
+}
+async function typeRoleName(wrapper: VueWrapper, value = "巡查员") {
+  await roleNameInput(wrapper).setValue(value);
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });
@@ -104,29 +110,41 @@ describe("统一角色弹窗", () => {
     expect(wrapper.findAllComponents(ElInput).find((input) => input.props("type") === "textarea")?.props("autosize")).toEqual({ minRows: 1, maxRows: 3 });
     expect(wrapper.findAll(".role-auth .permission-matrix")).toHaveLength(1);
     expect(button(wrapper, "取消").exists()).toBe(true);
-    expect(button(wrapper).attributes("disabled")).toBeUndefined();
+    if (role) {
+      expect(roleNameInput(wrapper).element).toHaveProperty("disabled", true);
+      expect(roleNameInput(wrapper).element.value).toBe(role.name);
+      expect(button(wrapper).attributes("disabled")).toBeUndefined();
+    } else {
+      expect(roleNameInput(wrapper).element).toHaveProperty("disabled", false);
+      expect(roleNameInput(wrapper).element.value).toBe("");
+      expect(button(wrapper).attributes("disabled")).toBeDefined();
+      await typeRoleName(wrapper);
+      expect(button(wrapper).attributes("disabled")).toBeUndefined();
+    }
   });
 
-  it("新增默认基础权限，按职责预览并仅发送一次组合请求", async () => {
+  it("新增须填写名称，不按职责自动命名，并仅发送一次组合请求", async () => {
     const wrapper = form();
     expect(button(wrapper).attributes("disabled")).toBeDefined();
     await flushPromises();
     const matrix = wrapper.getComponent(PermissionMatrix);
     expect(matrix.props("modelValue")).toEqual([1, 2]);
-    expect(wrapper.get(".role-name-preview").text()).toBe("工作台查看员");
-    expect(button(wrapper).attributes("disabled")).toBeUndefined();
+    expect(roleNameInput(wrapper).element.value).toBe("");
+    expect(wrapper.text()).toContain("请填写角色名称");
+    expect(button(wrapper).attributes("disabled")).toBeDefined();
     matrix.vm.$emit("update:modelValue", [1, 2, 3, 5]);
     await wrapper.get("textarea").setValue("  维护组织与人员  ");
-    expect(wrapper.get(".role-name-preview").text()).toBe("系统配置员");
+    await typeRoleName(wrapper, "  自定义角色  ");
+    expect(button(wrapper).attributes("disabled")).toBeUndefined();
     const pending = deferred<ReturnType<typeof sysRole>>();
     roles.create.mockReturnValueOnce(pending.promise);
     await button(wrapper).trigger("click");
     await button(wrapper).trigger("click");
     expect(roles.create).toHaveBeenCalledTimes(1);
-    expect(roles.create).toHaveBeenCalledWith({ desc: "维护组织与人员", api_ids: [1, 2, 3, 5] });
-    pending.resolve(sysRole(9, "系统配置员"));
+    expect(roles.create).toHaveBeenCalledWith({ name: "自定义角色", desc: "维护组织与人员", api_ids: [1, 2, 3, 5] });
+    pending.resolve(sysRole(9, "自定义角色"));
     await flushPromises();
-    expect(wrapper.emitted("saved")).toEqual([[sysRole(9, "系统配置员"), true]]);
+    expect(wrapper.emitted("saved")).toEqual([[sysRole(9, "自定义角色"), true]]);
     expect(wrapper.props("modelValue")).toBe(false);
   });
   it("修改保持历史名称、半选与目录外权限；失败后可原样重试", async () => {
@@ -138,7 +156,7 @@ describe("统一角色弹窗", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("授权保存失败");
     expect(wrapper.props("modelValue")).toBe(true);
-    expect(wrapper.get(".role-name-preview").text()).toBe("历史角色");
+    expect(roleNameInput(wrapper).element.value).toBe("历史角色");
     expect(wrapper.getComponent(PermissionMatrix).props("modelValue")).toEqual([3, 999]);
     expect(wrapper.get("textarea").element.value).toBe("新备注");
     await button(wrapper).trigger("click");
@@ -150,10 +168,10 @@ describe("统一角色弹窗", () => {
     await flushPromises();
     wrapper.getComponent(PermissionMatrix).vm.$emit("update:modelValue", []);
     await flushPromises();
-    expect(wrapper.get(".role-name-preview").text()).toBe("未分配职责");
+    await typeRoleName(wrapper);
     expect(wrapper.text()).toContain("不能登录管理后台");
     await button(wrapper).trigger("click");
-    expect(roles.create).toHaveBeenCalledWith({ desc: "", api_ids: [] });
+    expect(roles.create).toHaveBeenCalledWith({ name: "巡查员", desc: "", api_ids: [] });
   });
   it("加载失败禁用保存并可重试，切换角色不接收旧请求结果", async () => {
     roles.listApis.mockRejectedValueOnce(new Error("目录加载失败"));
@@ -171,7 +189,7 @@ describe("统一角色弹窗", () => {
     pending.resolve({ api_ids: [3] });
     await flushPromises();
     expect(wrapper.getComponent(PermissionMatrix).props("modelValue")).toEqual([6]);
-    expect(wrapper.get(".role-name-preview").text()).toBe("另一角色");
+    expect(roleNameInput(wrapper).element.value).toBe("另一角色");
   });
   it("旧后端缺少元数据时禁止组合保存，取消不产生角色", async () => {
     roles.listApis.mockResolvedValue(roleCatalog.map((api) => ({ ...api, duty: undefined })));
@@ -217,12 +235,12 @@ describe("角色正式API契约", () => {
   it("组合创建、修改、状态更新及旧独立授权保持准确URL和请求体", async () => {
     const request = vi.fn<(path: string, options?: ApiRequestOptions) => Promise<unknown>>().mockResolvedValue(sysRole());
     const api = createRolesApi({ request: request as ApiClient["request"], raw: vi.fn() });
-    await api.create({ desc: "备注", api_ids: [3] });
+    await api.create({ name: "巡查员", desc: "备注", api_ids: [3] });
     await api.update(7, { desc: "新备注", api_ids: [] });
     await api.update(7, { status: 0 });
     await api.updatePermissions(7, { api_ids: [3] });
     expect(request.mock.calls).toEqual([
-      ["/api/sys/roles", { method: "POST", body: { desc: "备注", api_ids: [3] } }],
+      ["/api/sys/roles", { method: "POST", body: { name: "巡查员", desc: "备注", api_ids: [3] } }],
       ["/api/sys/roles/7", { method: "PUT", body: { desc: "新备注", api_ids: [] } }],
       ["/api/sys/roles/7", { method: "PUT", body: { status: 0 } }],
       ["/api/sys/roles/7/apis", { method: "PUT", body: { api_ids: [3] } }],

@@ -13,9 +13,9 @@ import (
 
 func TestRoleCreateIgnoresClientCodeAndGeneratesIdentity(t *testing.T) {
 	code := " Test_Config "
-	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"},
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleNameAvailableStep(),
 		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 37, Check: func(_ string, args []driver.NamedValue) {
-			if args[0].Value != "未分配职责" {
+			if args[0].Value != "巡查员" {
 				t.Errorf("名称异常: %v", args)
 			}
 			var ident string
@@ -29,8 +29,8 @@ func TestRoleCreateIgnoresClientCodeAndGeneratesIdentity(t *testing.T) {
 			}
 		}}, testutil.QueryStep{Kind: "commit"})
 	svc := SysService{DB: db}
-	role, err := svc.CreateRole(context.Background(), CreateRoleInput{Code: &code, APIIDs: []uint64{}})
-	if err != nil || role.ID != 37 || role.Code == nil || !strings.HasPrefix(*role.Code, "role-") || *role.Code == "test_config" || role.Name != "未分配职责" {
+	role, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "巡查员", Code: &code, APIIDs: []uint64{}})
+	if err != nil || role.ID != 37 || role.Code == nil || !strings.HasPrefix(*role.Code, "role-") || *role.Code == "test_config" || role.Name != "巡查员" {
 		t.Fatalf("%+v %v", role, err)
 	}
 }
@@ -45,9 +45,9 @@ func TestRoleCodeClientValuesAreIgnored(t *testing.T) {
 }
 
 func TestDuplicateGeneratedRoleCodeRollsBackCreate(t *testing.T) {
-	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", Err: &mysql.MySQLError{Number: 1062}}, testutil.QueryStep{Kind: "rollback"})
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleNameAvailableStep(), testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", Err: &mysql.MySQLError{Number: 1062}}, testutil.QueryStep{Kind: "rollback"})
 	svc := SysService{DB: db}
-	if _, err := svc.CreateRole(context.Background(), CreateRoleInput{APIIDs: []uint64{}}); err == nil || !strings.Contains(err.Error(), "角色ID已存在") {
+	if _, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "巡查员", APIIDs: []uint64{}}); err == nil || !strings.Contains(err.Error(), "角色ID已存在") {
 		t.Fatal(err)
 	}
 }

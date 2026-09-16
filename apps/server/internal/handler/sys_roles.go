@@ -31,7 +31,7 @@ func (d *Deps) ListRoles(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// CreateRole POST /api/sys/roles — 服务端生成英文标识，传api_ids时自动命名并原子保存权限。
+// CreateRole POST /api/sys/roles — 名称由用户填写且不可与已有角色重复；服务端生成英文标识，传api_ids时原子保存权限。
 func (d *Deps) CreateRole(c *gin.Context) {
 	d.markOp(c, "新增角色", "")
 	var req service.CreateRoleInput

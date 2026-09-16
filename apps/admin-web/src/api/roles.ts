@@ -15,7 +15,7 @@ export function createRolesApi(client: ApiClient) {
       return client.request<SysRole[]>("/api/sys/roles");
     },
 
-    /** 提交备注和权限并自动命名；英文标识由服务端生成。 */
+    /** 提交名称、备注和权限；名称必填且不可重复，英文标识由服务端生成。 */
     create(input: CreateRoleInput | RoleInput): Promise<SysRole> {
       return client.request<SysRole, CreateRoleInput | RoleInput>("/api/sys/roles", {
         method: "POST",

@@ -65,6 +65,7 @@ func TestRoleHTTPContractIgnoresClientCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := testutil.NewTransactionDB(t,
 		testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}},
 		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 37},
 		testutil.QueryStep{Kind: "commit"},
 		testutil.QueryStep{Kind: "begin"},
@@ -79,7 +80,7 @@ func TestRoleHTTPContractIgnoresClientCode(t *testing.T) {
 	d.registerSysRoles(r.Group("/api"))
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/sys/roles", strings.NewReader(`{"code":" Test ","api_ids":[]}`))
+	req := httptest.NewRequest("POST", "/api/sys/roles", strings.NewReader(`{"name":"巡查员","code":" Test ","api_ids":[]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	var created struct {

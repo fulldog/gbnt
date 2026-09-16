@@ -16,10 +16,10 @@ import (
 	"gbnt/apps/server/internal/rolecode"
 )
 
-// CreateRoleInput 创建角色；传 api_ids 时按职责自动命名并原子保存授权。
+// CreateRoleInput 创建角色；名称由用户填写，传 api_ids 时原子保存授权。
 type CreateRoleInput struct {
 	Code   *string  `json:"code"`    // 忽略客户端传入；服务端生成独立英文标识
-	Name   string   `json:"name"`    // 旧客户端必填名称；传 api_ids 时忽略，使用自动名称
+	Name   string   `json:"name"`    // 角色名称，必填 1～64 字；未删除角色中不可重复
 	Desc   string   `json:"desc"`    // 角色备注，可空，最多255字
 	Status int      `json:"status"`  // 兼容旧请求的0/1；新建始终默认启用
 	APIIDs []uint64 `json:"api_ids"` // 选填；省略为旧创建流程，空数组为无职责角色
@@ -120,6 +120,22 @@ func validateRoleText(name, desc string) error {
 	return nil
 }
 
+// ensureRoleNameAvailable 校验未删除角色中名称唯一；excludeID 为编辑时排除自身。
+func ensureRoleNameAvailable(tx *gorm.DB, name string, excludeID uint64) error {
+	q := tx.Model(&model.SysRole{}).Where("name = ?", name)
+	if excludeID > 0 {
+		q = q.Where("id <> ?", excludeID)
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return errors.New("角色名称已存在")
+	}
+	return nil
+}
+
 // validateRoleAPIs 校验新增授权；历史目录外/停用关联仅允许原样保留。
 func validateRoleAPIs(tx *gorm.DB, requested, previous []uint64) ([]uint64, []model.SysAPI, error) {
 	ids := make([]uint64, 0, len(requested))
@@ -178,7 +194,7 @@ func insertRoleAPIs(tx *gorm.DB, id uint64, ids []uint64) error {
 	return tx.Create(&rows).Error
 }
 
-// CreateRole 原子创建角色及授权；兼容省略api_ids的旧客户端。
+// CreateRole 原子创建角色及授权；名称由调用方填写，兼容省略api_ids的旧客户端。
 func (s *SysService) CreateRole(ctx context.Context, in CreateRoleInput) (*model.SysRole, error) {
 	if in.Status != 0 && in.Status != 1 {
 		return nil, errors.New("角色状态只能为0或1")
@@ -187,21 +203,19 @@ func (s *SysService) CreateRole(ctx context.Context, in CreateRoleInput) (*model
 	code := "role-" + uuid.NewString()
 	role := &model.SysRole{Name: strings.TrimSpace(in.Name), Desc: strings.TrimSpace(in.Desc), Status: 1, Code: &code}
 	err := s.db(ctx).Transaction(func(tx *gorm.DB) error {
-		var ids []uint64
-		if in.APIIDs != nil {
-			var selected []model.SysAPI
-			var err error
-			ids, selected, err = validateRoleAPIs(tx, in.APIIDs, nil)
-			if err != nil {
-				return err
-			}
-			role.Name, err = roleNameForAPIs(selected)
-			if err != nil {
-				return err
-			}
-		}
 		if err := validateRoleText(role.Name, role.Desc); err != nil {
 			return err
+		}
+		if err := ensureRoleNameAvailable(tx, role.Name, 0); err != nil {
+			return err
+		}
+		var ids []uint64
+		if in.APIIDs != nil {
+			var err error
+			ids, _, err = validateRoleAPIs(tx, in.APIIDs, nil)
+			if err != nil {
+				return err
+			}
 		}
 		if err := tx.Create(role).Error; err != nil {
 			return err
@@ -246,6 +260,11 @@ func (s *SysService) UpdateRole(ctx context.Context, id uint64, in UpdateRoleInp
 		}
 		if err := validateRoleText(role.Name, role.Desc); err != nil {
 			return err
+		}
+		if in.Name != nil {
+			if err := ensureRoleNameAvailable(tx, role.Name, id); err != nil {
+				return err
+			}
 		}
 		if in.APIIDs != nil {
 			var previous []uint64

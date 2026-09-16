@@ -45,6 +45,10 @@ func roleCatalogStep() testutil.QueryStep {
 	return testutil.QueryStep{Contains: "FROM `sys_apis`", Columns: []string{"id", "module", "enabled", "is_rbac"}, Rows: [][]driver.Value{{int64(10), "web.sys-org", true, true}}}
 }
 
+func roleNameAvailableStep() testutil.QueryStep {
+	return testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(0)}}}
+}
+
 func roleRecordStep() testutil.QueryStep {
 	return testutil.QueryStep{Contains: "FOR UPDATE", Columns: []string{"id", "name", "desc", "status", "code"}, Rows: [][]driver.Value{{int64(7), "原职责名称", "原备注", int64(1), "original-code"}}}
 }
@@ -63,38 +67,39 @@ func TestCreateRoleAndGrantsShareTransaction(t *testing.T) {
 				end = "rollback"
 			}
 			db := testutil.NewTransactionDB(t,
-				testutil.QueryStep{Kind: "begin"}, roleCatalogStep(),
+				testutil.QueryStep{Kind: "begin"}, roleNameAvailableStep(), roleCatalogStep(),
 				testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 7, Check: func(_ string, args []driver.NamedValue) {
-					if args[0].Value != "系统配置员" || args[1].Value != "职责备注" {
-						t.Errorf("未使用自动名称或未整理备注: %v", args)
+					if args[0].Value != "巡查员" || args[1].Value != "职责备注" {
+						t.Errorf("未保留用户填写的名称或未整理备注: %v", args)
 					}
 				}}, grant, testutil.QueryStep{Kind: end},
 			)
 			svc := SysService{DB: db}
-			role, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "不应采用", Desc: " 职责备注 ", APIIDs: []uint64{10, 10}})
+			role, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "巡查员", Desc: " 职责备注 ", APIIDs: []uint64{10, 10}})
 			if fail {
 				if err == nil || role != nil {
 					t.Fatalf("失败仍返回成功: %+v %v", role, err)
 				}
 				return
 			}
-			if err != nil || role.ID != 7 || role.Status != 1 || role.Name != "系统配置员" {
+			if err != nil || role.ID != 7 || role.Status != 1 || role.Name != "巡查员" {
 				t.Fatalf("%+v %v", role, err)
 			}
 		})
 	}
 }
 
-func TestRoleCreateMissingAndEmptyPermissionsDiffer(t *testing.T) {
-	for _, tc := range []struct {
-		ids  []uint64
-		want string
-	}{{nil, "旧角色名称"}, {[]uint64{}, "未分配职责"}} {
-		t.Run(tc.want, func(t *testing.T) {
-			db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 8}, testutil.QueryStep{Kind: "commit"})
+func TestRoleCreateKeepsSubmittedNameForMissingAndEmptyPermissions(t *testing.T) {
+	for _, ids := range [][]uint64{nil, {}} {
+		label := "省略权限"
+		if ids != nil {
+			label = "空权限"
+		}
+		t.Run(label, func(t *testing.T) {
+			db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleNameAvailableStep(), testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `sys_roles`", InsertID: 8}, testutil.QueryStep{Kind: "commit"})
 			svc := SysService{DB: db}
-			role, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "旧角色名称", APIIDs: tc.ids})
-			if err != nil || role.Name != tc.want || role.Code == nil || !strings.HasPrefix(*role.Code, "role-") {
+			role, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "旧角色名称", APIIDs: ids})
+			if err != nil || role.Name != "旧角色名称" || role.Code == nil || !strings.HasPrefix(*role.Code, "role-") {
 				t.Fatalf("%+v %v", role, err)
 			}
 		})
@@ -179,12 +184,30 @@ func TestNewInvalidRolePermissionsAreRejected(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			step := roleCatalogStep()
 			step.Rows = tc.rows
-			db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, step, testutil.QueryStep{Kind: "rollback"})
+			db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, roleNameAvailableStep(), step, testutil.QueryStep{Kind: "rollback"})
 			svc := SysService{DB: db}
-			if _, err := svc.CreateRole(context.Background(), CreateRoleInput{APIIDs: []uint64{10}}); err == nil {
+			if _, err := svc.CreateRole(context.Background(), CreateRoleInput{Name: "巡查员", APIIDs: []uint64{10}}); err == nil {
 				t.Fatal("无效授权应拒绝")
 			}
 		})
+	}
+}
+
+func TestCreateRoleRejectsDuplicateName(t *testing.T) {
+	db := testutil.NewTransactionDB(t,
+		testutil.QueryStep{Kind: "begin"},
+		testutil.QueryStep{Contains: "count(*)", Columns: []string{"count"}, Rows: [][]driver.Value{{int64(1)}}},
+		testutil.QueryStep{Kind: "rollback"},
+	)
+	if _, err := (&SysService{DB: db}).CreateRole(context.Background(), CreateRoleInput{Name: "巡查员"}); err == nil || !strings.Contains(err.Error(), "角色名称已存在") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestCreateRoleRejectsEmptyName(t *testing.T) {
+	db := testutil.NewTransactionDB(t, testutil.QueryStep{Kind: "begin"}, testutil.QueryStep{Kind: "rollback"})
+	if _, err := (&SysService{DB: db}).CreateRole(context.Background(), CreateRoleInput{APIIDs: []uint64{}}); err == nil || !strings.Contains(err.Error(), "角色名称须为") {
+		t.Fatalf("%v", err)
 	}
 }
 

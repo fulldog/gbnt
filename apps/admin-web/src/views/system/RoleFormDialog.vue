@@ -6,13 +6,14 @@ import { useAdminApi } from "@/api/runtime";
 import AsyncError from "@/components/AsyncError.vue";
 import PermissionMatrix from "@/components/PermissionMatrix.vue";
 import { errorMessage } from "@/utils/error";
-import { defaultRolePermissions, grantableRoleApis, previewRoleName } from "@/utils/role-permissions";
+import { defaultRolePermissions, grantableRoleApis } from "@/utils/role-permissions";
 import "@/styles/role-form-dialog.css";
 
 const visible = defineModel<boolean>({ required: true });
 const { role = null } = defineProps<{ role?: SysRole | null }>();
 const emit = defineEmits<{ saved: [role: SysRole, created: boolean] }>();
 const api = useAdminApi();
+const name = shallowRef("");
 const desc = shallowRef("");
 const catalog = shallowRef<SysApi[]>([]);
 const selected = shallowRef<number[]>([]);
@@ -23,10 +24,14 @@ const loadError = shallowRef("");
 const saveError = shallowRef("");
 let sequence = 0;
 let disposed = false;
-const preview = computed(() => previewRoleName(catalog.value, selected.value));
-const name = computed(() => role?.name ?? (ready.value ? preview.value.name : ""));
 const hasAdminLogin = computed(() => catalog.value.some((item) => item.module === "web.auth" && item.action === "login" && selected.value.includes(item.id)));
-const validationError = computed(() => [...desc.value.trim()].length > 255 ? "角色备注不能超过255字" : !role ? preview.value.error : "");
+const validationError = computed(() => {
+  const roleName = name.value.trim();
+  if (!role && !roleName) return "请填写角色名称";
+  if ([...roleName].length > 64) return "角色名称须为1～64字";
+  if ([...desc.value.trim()].length > 255) return "角色备注不能超过255字";
+  return "";
+});
 const canSave = computed(() => ready.value && !loading.value && !submitting.value && !validationError.value);
 
 async function load(): Promise<void> {
@@ -66,7 +71,9 @@ async function save(): Promise<void> {
   if (!canSave.value) return;
   const request = sequence;
   const editing = role;
-  const input = { desc: desc.value.trim(), api_ids: [...selected.value] };
+  const input = editing
+    ? { desc: desc.value.trim(), api_ids: [...selected.value] }
+    : { name: name.value.trim(), desc: desc.value.trim(), api_ids: [...selected.value] };
   submitting.value = true;
   saveError.value = "";
   try {
@@ -85,6 +92,7 @@ async function save(): Promise<void> {
 watch([visible, () => role?.id], ([open]) => {
   sequence += 1;
   if (!open) return;
+  name.value = role?.name ?? "";
   desc.value = role?.desc ?? "";
   saveError.value = "";
   submitting.value = false;
@@ -98,7 +106,8 @@ onScopeDispose(() => { disposed = true; sequence += 1; });
     <div @submit.prevent="save">
     <ElForm class="role-form" label-position="right" label-width="98px">
       <ElFormItem label="角色名称">
-        <p class="role-form-hint role-name-line">角色名称：<span class="role-name-preview">{{ name || (loading ? '正在加载职责…' : '根据授权职责自动生成') }}</span>（{{ role ? '创建时生成，修改权限后保持不变' : '根据授权职责自动生成' }}）</p>
+        <ElInput v-model="name" maxlength="64" show-word-limit placeholder="请输入角色名称" :disabled="Boolean(role) || submitting" />
+        <p v-if="role" class="role-form-hint">创建时填写，修改权限后保持不变</p>
       </ElFormItem>
       <ElFormItem label="角色备注">
         <ElInput v-model="desc" type="textarea" :rows="1" :autosize="{ minRows: 1, maxRows: 3 }" maxlength="255" show-word-limit placeholder="填写角色职责或权限备注" :disabled="submitting" />

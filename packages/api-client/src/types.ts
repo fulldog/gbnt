@@ -465,8 +465,10 @@ export interface RoleInput {
   status: number;
 }
 
-/** 一次创建角色和授权；名称由后端生成，角色默认启用。 */
+/** 一次创建角色和授权；名称必填且不可与已有角色重复，角色默认启用。 */
 export interface CreateRoleInput {
+  /** 角色名称，1～64 字，未删除角色中不可重复。 */
+  name: string;
   /** 可选；服务端忽略并自行生成英文标识。 */
   code?: string;
   desc: string;
