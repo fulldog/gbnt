@@ -190,6 +190,21 @@ type Attachment struct {
 
 func (Attachment) TableName() string { return "attachments" }
 
+// OrgHandover 组织在某一建设年份的设施移交数量，按组织与年份唯一。
+type OrgHandover struct {
+	OrgID               uint64 `gorm:"uniqueIndex:uk_org_handover_org_year;not null;comment:落点组织ID 对应sys_orgs.id" json:"org_id"` // 落点组织，与台账 row_key 的组织一致
+	ProjectYear         int    `gorm:"uniqueIndex:uk_org_handover_org_year;not null;comment:建设年份 2020-2023" json:"project_year"` // 建设年份，仅 2020–2023
+	WellHandover        int64  `gorm:"not null;default:0;comment:机井移交数量" json:"well_handover"`                                   // 机井移交数量，非负整数，0 合法
+	BridgeHandover      int64  `gorm:"not null;default:0;comment:桥涵闸移交数量" json:"bridge_handover"`                                // 桥、涵、闸移交数量，非负整数
+	RoadHandover        int64  `gorm:"not null;default:0;comment:道路移交数量" json:"road_handover"`                                   // 道路移交数量，非负整数，不是千米长度
+	ForestHandover      int64  `gorm:"not null;default:0;comment:独立林网移交株数" json:"forest_handover"`                               // 独立林网移交株数，非负整数
+	TransformerHandover int64  `gorm:"not null;default:0;comment:变压器移交数量" json:"transformer_handover"`                           // 变压器移交数量，非负整数
+	Remark              string `gorm:"size:255;not null;default:'';comment:备注" json:"remark"`                                    // 备注，可空字符串
+	Base
+}
+
+func (OrgHandover) TableName() string { return "org_handovers" }
+
 // TableComments 表名 → 表注释（迁移时 ALTER TABLE COMMENT）。
 func TableComments() map[string]string {
 	return map[string]string{
@@ -203,5 +218,6 @@ func TableComments() map[string]string {
 		"issue_rectify_records": "问题整改记录",
 		"op_logs":               "操作日志",
 		"attachments":           "附件文件主表",
+		"org_handovers":         "组织移交数量",
 	}
 }

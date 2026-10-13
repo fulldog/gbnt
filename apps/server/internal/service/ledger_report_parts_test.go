@@ -118,32 +118,36 @@ type goldenLedgerResult struct {
 
 func loadGoldenLedger(t *testing.T, issues []model.Issue, orgs []model.SysOrg, q LedgerReportQuery) goldenLedgerResult {
 	t.Helper()
-	newService := func(step testutil.QueryStep) *IssueService {
-		return &IssueService{DB: testutil.NewQueryDB(t, goldenOrgStep(orgs), step)}
+	newService := func(step testutil.QueryStep, withHandover bool) *IssueService {
+		steps := []testutil.QueryStep{goldenOrgStep(orgs), step}
+		if withHandover {
+			steps = append(steps, emptyHandoverStep())
+		}
+		return &IssueService{DB: testutil.NewQueryDB(t, steps...)}
 	}
 	ctx := context.Background()
-	sb, err := newService(ledgerBaseStep(t, issues, true)).LedgerStreetRows(ctx, q)
+	sb, err := newService(ledgerBaseStep(t, issues, true), false).LedgerStreetRows(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ss, err := newService(reportIssueStep(issues...)).LedgerStreetStatistics(ctx, q)
+	ss, err := newService(reportIssueStep(issues...), true).LedgerStreetStatistics(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	vb, err := newService(ledgerBaseStep(t, issues, false)).LedgerSurveyRows(ctx, q)
+	vb, err := newService(ledgerBaseStep(t, issues, false), false).LedgerSurveyRows(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	vs, err := newService(reportIssueStep(issues...)).LedgerSurveyStatistics(ctx, q)
+	vs, err := newService(reportIssueStep(issues...), false).LedgerSurveyStatistics(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 兼容对比只是第二条证据；下面各用例另外写死人工预期。
-	oldStreet, err := newService(reportIssueStep(issues...)).LedgerStreetReport(ctx, q)
+	oldStreet, err := newService(reportIssueStep(issues...), true).LedgerStreetReport(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldSurvey, err := newService(reportIssueStep(issues...)).LedgerSurveyReport(ctx, q)
+	oldSurvey, err := newService(reportIssueStep(issues...), false).LedgerSurveyReport(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +346,20 @@ func TestLedgerPartsUseSameBoundFiltersAndConstantQueryCount(t *testing.T) {
 					t.Fatal("不得静默截断整表")
 				}
 			}
-			s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), step)}
+			steps := []testutil.QueryStep{reportOrgStep(), step}
+			if mode == "street-statistics" {
+				handover := emptyHandoverStep()
+				handover.Check = func(sql string, _ []driver.NamedValue) {
+					if strings.Contains(sql, "created_at") {
+						t.Fatal("移交数量不按上报日期过滤")
+					}
+					if !strings.Contains(sql, "org_id IN") || !strings.Contains(sql, "is_delete") {
+						t.Fatalf("移交数量须按组织范围和软删除过滤：%s", sql)
+					}
+				}
+				steps = append(steps, handover)
+			}
+			s := &IssueService{DB: testutil.NewQueryDB(t, steps...)}
 			var err error
 			switch mode {
 			case "street-rows":

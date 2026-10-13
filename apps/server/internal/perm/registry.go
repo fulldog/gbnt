@@ -47,6 +47,7 @@ var Registry = joinEntries(
 		apisRectify,
 		apisLedgerStreet,
 		apisLedgerSurvey,
+		apisLedgerHandover,
 		apisSysOrg,
 		apisSysStaff,
 		apisSysRoles,

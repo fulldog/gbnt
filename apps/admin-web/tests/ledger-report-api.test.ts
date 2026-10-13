@@ -10,7 +10,7 @@ const location = {
 const streetRow = {
   ...location, project_year: 2023, well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
   well_report_count: 1, bridge_report_count: 0, transformer_report_count: 0, road_tree_survive: 10,
-  road_km: 1.75, forest_handover: 100, forest_existing: 0, transformer_handover: null, transformer_existing: null, signer: null, phone: null,
+  road_km: 1.75, road_handover: null, forest_handover: 100, forest_existing: 0, transformer_handover: null, transformer_existing: null, signer: null, phone: null,
 };
 const surveyRow = {
   ...location, survey_done: null, well_inspected: null, well_normal: null, well_problem_count: 2, well_rectified_count: 1,

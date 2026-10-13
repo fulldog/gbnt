@@ -22,6 +22,7 @@ func projectModels() []any {
 		&model.IssueRectifyRecord{},
 		&model.OpLog{},
 		&model.Attachment{},
+		&model.OrgHandover{},
 	}
 }
 

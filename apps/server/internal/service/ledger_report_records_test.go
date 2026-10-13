@@ -71,7 +71,7 @@ func TestStreetReportedCountsReflectRecordChanges(t *testing.T) {
 					t.Errorf("统计只读取未删除主记录，不按状态过滤或关联多条整改明细：%s", query)
 				}
 			}
-			svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), step)}
+			svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), step, emptyHandoverStep())}
 			result, err := svc.LedgerStreetStatistics(context.Background(), LedgerReportQuery{})
 			if err != nil || len(result.Rows) != 1 {
 				t.Fatalf("统计行错误：%+v %v", result, err)
@@ -99,7 +99,7 @@ func TestStreetRoadTreesPreserveUnknownAndZero(t *testing.T) {
 				{OrgID: 4, Type: "forest", TypeExt: `{"handover_count":10,"existing_count":8}`},
 				{OrgID: 4, Type: "well"},
 			}
-			svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(issues...))}
+			svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(issues...), emptyHandoverStep())}
 			result, err := svc.LedgerStreetReport(context.Background(), LedgerReportQuery{})
 			if err != nil {
 				t.Fatal(err)
@@ -111,7 +111,7 @@ func TestStreetRoadTreesPreserveUnknownAndZero(t *testing.T) {
 		})
 	}
 	for _, typ := range []string{"road", "forest"} {
-		svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(model.Issue{OrgID: 4, Type: typ, TypeExt: `{"length":0,"tree_survive":0,"existing_count":0,"handover_count":0}`}))}
+		svc := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(model.Issue{OrgID: 4, Type: typ, TypeExt: `{"length":0,"tree_survive":0,"existing_count":0,"handover_count":0}`}), emptyHandoverStep())}
 		result, err := svc.LedgerStreetStatistics(context.Background(), LedgerReportQuery{})
 		if err != nil {
 			t.Fatal(err)

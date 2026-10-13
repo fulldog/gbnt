@@ -57,7 +57,7 @@ func roleDutyForModule(module string) *RoleDuty {
 		return &RoleDuty{Key: "workbench", Label: "工作台", Sort: 1}
 	case "web.rectify":
 		return &RoleDuty{Key: "rectify", Label: "专项整改", RoleName: "专项整改员", Sort: 2}
-	case "web.ledger-street", "web.ledger-survey":
+	case "web.ledger-street", "web.ledger-survey", "web.ledger-handover":
 		return &RoleDuty{Key: "ledger", Label: "汇总管理", RoleName: "汇总管理员", Sort: 3}
 	case "web.sys-org", "web.sys-staff", "web.sys-roles", "web.sys-logs":
 		return &RoleDuty{Key: "system", Label: "系统配置", RoleName: "系统配置员", Sort: 4}

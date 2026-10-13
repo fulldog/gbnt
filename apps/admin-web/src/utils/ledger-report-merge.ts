@@ -26,9 +26,9 @@ export function mergeLedgerParts<B extends KeyedRow, S extends KeyedRow, R>(
   if (!sameQuery(expectedQuery, base.query) || !sameQuery(expectedQuery, statistics.query)) {
     throw new Error("报表筛选条件不一致，请重新查询");
   }
-  const baseIndex = indexRows(base.rows);
+  indexRows(base.rows);
   const statisticsIndex = indexRows(statistics.rows);
-  if (baseIndex.size !== statisticsIndex.size || [...baseIndex.keys()].some((key) => !statisticsIndex.has(key))) {
+  if (base.rows.some((row) => !statisticsIndex.has(row.row_key))) {
     throw new Error("报表基础行与统计行不匹配，请重新查询");
   }
   return {
@@ -55,7 +55,7 @@ export function composeStreetRow(base: StreetBaseRow, statistics: StreetStatisti
     road_tree_survive: statistics.road_tree_survive,
     well_handover: statistics.well_handover, well_existing: statistics.well_existing,
     bridge_handover: statistics.bridge_handover, bridge_existing: statistics.bridge_existing,
-    road_km: statistics.road_km,
+    road_km: statistics.road_km, road_handover: statistics.road_handover,
     forest_handover: statistics.forest_handover, forest_existing: statistics.forest_existing,
     transformer_handover: statistics.transformer_handover, transformer_existing: statistics.transformer_existing,
   };

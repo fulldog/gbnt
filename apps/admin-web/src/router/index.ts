@@ -50,6 +50,12 @@ export const router = createRouter({
           meta: { title: "街道排查汇总", module: "web.ledger-survey" },
         },
         {
+          path: "ledger/handover",
+          name: "ledger-handover",
+          component: () => import("@/views/ledger/HandoverView.vue"),
+          meta: { title: "移交数量管理", module: "web.ledger-handover" },
+        },
+        {
           path: "system/orgs",
           name: "system-orgs",
           component: () => import("@/views/system/OrgView.vue"),

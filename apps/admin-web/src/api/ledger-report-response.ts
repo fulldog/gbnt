@@ -75,17 +75,22 @@ export function normalizeStreetReport(value: unknown): StreetLedgerReportResult 
   const result = normalizeMetadata(value);
   return { ...result, rows: result.rows.map((value): StreetLedgerReportRow => {
     const row = responseRecord(value, "街道台账报表行");
-    requireUncollected(row, ["well_handover", "well_existing", "bridge_handover", "bridge_existing", "transformer_handover", "transformer_existing", "signer", "phone"]);
+    requireUncollected(row, ["well_existing", "bridge_existing", "transformer_existing", "signer", "phone"]);
     return {
       ...normalizeLocation(row),
       ...normalizeStreetCounts(row),
       project_year: nullableNumber(row.project_year, "项目年度", true),
-      well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
+      well_handover: nullableNumber(row.well_handover, "机井移交数量", true),
+      well_existing: null,
+      bridge_handover: nullableNumber(row.bridge_handover, "桥涵闸移交数量", true),
+      bridge_existing: null,
       road_km: nullableNumber(row.road_km, "道路千米数"),
+      road_handover: nullableNumber(row.road_handover, "道路移交数量", true),
       road_tree_survive: nullableNumber(row.road_tree_survive, "道路附属树木存活数"),
       forest_handover: nullableNumber(row.forest_handover, "林网移交株数"),
       forest_existing: nullableNumber(row.forest_existing, "林网现有株数"),
-      transformer_handover: null, transformer_existing: null, signer: null, phone: null,
+      transformer_handover: nullableNumber(row.transformer_handover, "变压器移交数量", true),
+      transformer_existing: null, signer: null, phone: null,
     };
   }) };
 }
@@ -158,16 +163,21 @@ export function normalizeSurveyRowsPart(value: unknown): LedgerPart<SurveyBaseRo
 
 export function normalizeStreetStatisticsPart(value: unknown): LedgerPart<StreetStatisticsRow> {
   return normalizePart(value, (row) => {
-    requireUncollected(row, ["well_handover", "well_existing", "bridge_handover", "bridge_existing", "transformer_handover", "transformer_existing"]);
+    requireUncollected(row, ["well_existing", "bridge_existing", "transformer_existing"]);
     return {
       row_key: rowKey(row), source_record_count: responseInteger(row.source_record_count, "来源记录数"),
       ...normalizeStreetCounts(row),
-      well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
+      well_handover: nullableNumber(row.well_handover, "机井移交数量", true),
+      well_existing: null,
+      bridge_handover: nullableNumber(row.bridge_handover, "桥涵闸移交数量", true),
+      bridge_existing: null,
       road_km: nullableNumber(row.road_km, "道路千米数"),
+      road_handover: nullableNumber(row.road_handover, "道路移交数量", true),
       road_tree_survive: nullableNumber(row.road_tree_survive, "道路附属树木存活数"),
       forest_handover: nullableNumber(row.forest_handover, "林网移交株数"),
       forest_existing: nullableNumber(row.forest_existing, "林网现有株数"),
-      transformer_handover: null, transformer_existing: null,
+      transformer_handover: nullableNumber(row.transformer_handover, "变压器移交数量", true),
+      transformer_existing: null,
     };
   });
 }

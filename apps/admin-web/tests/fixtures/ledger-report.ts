@@ -19,7 +19,7 @@ export function streetReportRow(overrides: Partial<StreetLedgerReportRow> = {}):
     ...location, project_year: 2023,
     well_report_count: 2, bridge_report_count: 1, transformer_report_count: 1, road_tree_survive: 10,
     well_handover: null, well_existing: null, bridge_handover: null, bridge_existing: null,
-    road_km: 1.25, forest_handover: 10, forest_existing: 8, transformer_handover: null, transformer_existing: null,
+    road_km: 1.25, road_handover: null, forest_handover: 10, forest_existing: 8, transformer_handover: null, transformer_existing: null,
     signer: null, phone: null, ...overrides,
   };
 }

@@ -27,6 +27,7 @@ export const navigation: readonly NavigationItem[] = [
     children: [
       { title: "街道台账", path: "/ledger/street", module: "web.ledger-street", icon: Document },
       { title: "街道排查汇总", path: "/ledger/survey", module: "web.ledger-survey", icon: DataAnalysis },
+      { title: "移交数量管理", path: "/ledger/handover", module: "web.ledger-handover", icon: List },
     ],
   },
   {

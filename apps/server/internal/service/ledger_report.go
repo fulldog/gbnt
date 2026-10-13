@@ -49,14 +49,15 @@ type StreetLedgerReportRow struct {
 	BridgeReportCount      int64    `json:"bridge_report_count"`      // 桥涵闸上报记录数，包含全部整改状态；无该类型为 0
 	TransformerReportCount int64    `json:"transformer_report_count"` // 变压器上报记录数，包含全部整改状态；无该类型为 0
 	RoadTreeSurvive        *float64 `json:"road_tree_survive"`        // 道路附属树木存活数（棵）合计；无道路或任一值无效为 null，不与独立林网相加
-	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量；未建立资产基表，固定 null
+	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量；移交表有记录时为该数量，未录入为 null
 	WellExisting           *int64   `json:"well_existing"`            // 机井现有数量；不能用排查记录条数冒充，固定 null
-	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量；未采集，固定 null
+	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量；移交表有记录时为该数量，未录入为 null
 	BridgeExisting         *int64   `json:"bridge_existing"`          // 桥涵闸现有数量；未采集，固定 null
 	RoadKM                 *float64 `json:"road_km"`                  // 道路上报记录 length 千米合计；没有道路或含缺失/无效长度时为 null
-	ForestHandover         *float64 `json:"forest_handover"`          // 林网上报记录 handover_count 株数合计；无记录或含缺失值为 null
+	RoadHandover           *int64   `json:"road_handover"`            // 道路移交数量；移交表有记录时为该数量，未录入为 null，不是千米
+	ForestHandover         *float64 `json:"forest_handover"`          // 林网移交株数；有移交记录时用表内数量，否则为上报 handover_count 合计
 	ForestExisting         *float64 `json:"forest_existing"`          // 林网上报记录 existing_count 株数合计；无记录或含缺失值为 null
-	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量；未采集，固定 null
+	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量；移交表有记录时为该数量，未录入为 null
 	TransformerExisting    *int64   `json:"transformer_existing"`     // 变压器现有数量；未采集，固定 null
 	Signer                 *string  `json:"signer"`                   // 村级报表负责人签字/盖章；未采集，不能挪用单条排查签名
 	Phone                  *string  `json:"phone"`                    // 村级报表负责人电话；未指定，不能任选一名上报人
@@ -208,6 +209,11 @@ func groupLedgerReport(issues []model.Issue, orgs map[uint64]model.SysOrg, withY
 	for _, group := range groups {
 		result = append(result, *group)
 	}
+	sortReportGroups(result)
+	return result
+}
+
+func sortReportGroups(result []reportGroup) {
 	id := func(value *uint64) uint64 {
 		if value == nil {
 			return 0
@@ -224,7 +230,6 @@ func groupLedgerReport(issues []model.Issue, orgs map[uint64]model.SysOrg, withY
 		}
 		return a.location.OrgID < b.location.OrgID
 	})
-	return result
 }
 
 func sumReportedMetric(issues []model.Issue, typ, field string) *float64 {
@@ -260,11 +265,29 @@ func (s *IssueService) LedgerStreetReport(ctx context.Context, query LedgerRepor
 	if err != nil {
 		return nil, err
 	}
+	groups := groupLedgerReport(issues, orgs, true)
+	for _, group := range groups {
+		if err := validateLedgerGroup(group); err != nil {
+			return nil, err
+		}
+	}
+	handovers, err := s.loadStreetHandoverIndex(ctx, query, orgs)
+	if err != nil {
+		return nil, err
+	}
+	groups, err = appendHandoverGroups(groups, handovers, orgs)
+	if err != nil {
+		return nil, err
+	}
 	result := &StreetLedgerReportResult{StreetOrgID: query.StreetOrgID, Rows: []StreetLedgerReportRow{}, Notes: append(
 		[]string{"自然村、村级报表签字和电话尚未采集。"}, streetLedgerStatisticsNotes()...),
 	}
-	for _, group := range groupLedgerReport(issues, orgs, true) {
-		result.Rows = append(result.Rows, composeStreetLedgerRow(buildStreetBaseRow(group), buildStreetStatisticsRow(group)))
+	for _, group := range groups {
+		stats := buildStreetStatisticsRow(group)
+		if handover, ok := handovers[group.location.RowKey]; ok {
+			applyStreetHandover(&stats, &handover)
+		}
+		result.Rows = append(result.Rows, composeStreetLedgerRow(buildStreetBaseRow(group), stats))
 	}
 	return result, nil
 }

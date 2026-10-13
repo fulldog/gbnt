@@ -46,7 +46,11 @@ func TestLedgerPartsHTTPEmptyFailureAndAppliedQuery(t *testing.T) {
 	for _, path := range ledgerPartPaths {
 		for _, raw := range []string{"", "street_org_id=&date_from=&date_to=", "street_org_id=003&date_from=2026-09-01&date_to=2026-09-05"} {
 			t.Run(path+"?"+raw, func(t *testing.T) {
-				db := testutil.NewQueryDB(t, testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "type"}, Rows: [][]driver.Value{{int64(3), "street"}}}, testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"org_id"}})
+				steps := []testutil.QueryStep{{Contains: "FROM `sys_orgs`", Columns: []string{"id", "type"}, Rows: [][]driver.Value{{int64(3), "street"}}}, {Contains: "FROM `issues`", Columns: []string{"org_id"}}}
+				if strings.Contains(path, "/street/statistics") {
+					steps = append(steps, testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}})
+				}
+				db := testutil.NewQueryDB(t, steps...)
 				r := newLedgerTestRouter(&Deps{Issue: &service.IssueService{DB: db}})
 				w := httptest.NewRecorder()
 				r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path+"?"+raw, nil))
@@ -131,6 +135,9 @@ func TestLedgerPartsAndOptionsKeepIndependentModulePermissions(t *testing.T) {
 					steps := []testutil.QueryStep{{Contains: "FROM `sys_orgs`", Columns: []string{"id"}}}
 					if !strings.Contains(path, "/options/") {
 						steps = append(steps, testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"org_id"}})
+						if strings.Contains(path, "/street/statistics") {
+							steps = append(steps, testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}})
+						}
 					}
 					db := testutil.NewQueryDB(t, steps...)
 					d.Issue = &service.IssueService{DB: db}
@@ -169,7 +176,11 @@ func TestLedgerReportHTTPEmptyAndFailures(t *testing.T) {
 				if fail {
 					step.Err = errors.New("database error detail")
 				}
-				db := testutil.NewQueryDB(t, testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id"}}, step)
+				steps := []testutil.QueryStep{{Contains: "FROM `sys_orgs`", Columns: []string{"id"}}, step}
+				if strings.Contains(path, "/street/") && !fail {
+					steps = append(steps, testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}})
+				}
+				db := testutil.NewQueryDB(t, steps...)
 				d := &Deps{Issue: &service.IssueService{DB: db}}
 				r := gin.New()
 				d.registerLedgerStreet(r.Group("/api"))

@@ -59,7 +59,7 @@ func demoOrgTree() []demoOrgNode {
 	appendDistrict("蒋官屯街道", []demoArea{
 		{name: "中心社区", villages: []string{"周吴海村", "姜韩村", "王行村", "张灿光村", "固均店村"}},
 		{name: "南部管区", villages: []string{"前屯村", "后屯村"}},
-		{name: "东南部管区", villages: []string{"冯庄村", "四合村", "颜老村", "大刀高村", "贺海村", "任庄村", "李海村", "盛庄村"}},
+		{name: "东南部管区", villages: []string{"冯庄村", "四合村", "颜老村", "大刀高村", "贺海村", "任庄村", "季海村", "盛庄村"}},
 		{name: "东部管区", villages: []string{"桑海村", "前张村", "后张村", "代庄村", "华严村", "侯庄村", "李庄村", "周庄村", "王洪木村"}},
 		{name: "北部管区", villages: []string{"大孟营村", "孟庄村", "前铺村", "后铺村"}},
 	})

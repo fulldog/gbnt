@@ -66,14 +66,15 @@ type StreetLedgerStatisticsRow struct {
 	BridgeReportCount      int64    `json:"bridge_report_count"`      // 桥涵闸已上报条数，含全部整改状态；无该类型为 0
 	TransformerReportCount int64    `json:"transformer_report_count"` // 变压器已上报条数，含全部整改状态；无该类型为 0
 	RoadTreeSurvive        *float64 `json:"road_tree_survive"`        // 道路附属树木存活数（棵）合计；无道路或任一值无效为 null，不合并独立林网
-	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量未采集，固定 null
+	WellHandover           *int64   `json:"well_handover"`            // 机井移交数量；移交表有记录时为该数量，未录入为 null
 	WellExisting           *int64   `json:"well_existing"`            // 机井现有数量无资产基线，固定 null
-	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量未采集，固定 null
+	BridgeHandover         *int64   `json:"bridge_handover"`          // 桥涵闸移交数量；移交表有记录时为该数量，未录入为 null
 	BridgeExisting         *int64   `json:"bridge_existing"`          // 桥涵闸现有数量未采集，固定 null
 	RoadKM                 *float64 `json:"road_km"`                  // 道路上报 length 千米合计；无道路或存在无效值为 null
-	ForestHandover         *float64 `json:"forest_handover"`          // 林网上报移交株数合计；无林网或存在无效值为 null
+	RoadHandover           *int64   `json:"road_handover"`            // 道路移交数量；移交表有记录时为该数量，未录入为 null
+	ForestHandover         *float64 `json:"forest_handover"`          // 林网移交株数；有移交记录时用表内数量，否则为上报合计
 	ForestExisting         *float64 `json:"forest_existing"`          // 林网上报现有株数合计；无林网或存在无效值为 null
-	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量未采集，固定 null
+	TransformerHandover    *int64   `json:"transformer_handover"`     // 变压器移交数量；移交表有记录时为该数量，未录入为 null
 	TransformerExisting    *int64   `json:"transformer_existing"`     // 变压器现有数量未采集，固定 null
 }
 
@@ -145,10 +146,10 @@ func appliedLedgerQuery(q LedgerReportQuery) LedgerAppliedQuery {
 	return LedgerAppliedQuery{StreetOrgID: q.StreetOrgID, DateFrom: q.DateFrom, DateTo: q.DateTo}
 }
 
-// loadLedgerPartGroups 基础路径只取去重分组列，统计路径批量加载；每次至多两次 SQL，不逐行查组织。
-func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQuery, withYear, statistics bool) ([]reportGroup, error) {
+// loadLedgerPartGroups 基础路径只取去重分组列，统计路径批量加载。街道统计并入移交数量；基础行和排查汇总不查移交表。
+func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQuery, withYear, statistics bool) ([]reportGroup, map[string]model.OrgHandover, error) {
 	if err := validateLedgerSplitQuery(q); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var issues []model.Issue
 	var orgs map[uint64]model.SysOrg
@@ -158,7 +159,7 @@ func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQ
 	} else {
 		db, byID, sourceErr := s.ledgerReportSource(ctx, q)
 		if sourceErr != nil {
-			return nil, sourceErr
+			return nil, nil, sourceErr
 		}
 		orgs = byID
 		columns := []string{"org_id"}
@@ -168,15 +169,27 @@ func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQ
 		err = db.Distinct(columns).Find(&issues).Error
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	groups := groupLedgerReport(issues, orgs, withYear)
 	for _, group := range groups {
 		if err := validateLedgerGroup(group); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return groups, nil
+	// 基础行只反映上报分组。移交数量并集仅进入街道统计，避免改动 /rows 的行集合。
+	if !withYear || !statistics {
+		return groups, nil, nil
+	}
+	handovers, err := s.loadStreetHandoverIndex(ctx, q, orgs)
+	if err != nil {
+		return nil, nil, err
+	}
+	groups, err = appendHandoverGroups(groups, handovers, orgs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return groups, handovers, nil
 }
 
 func validateLedgerGroup(group reportGroup) error {
@@ -230,8 +243,8 @@ func buildStreetStatisticsRow(group reportGroup) StreetLedgerStatisticsRow {
 func streetLedgerStatisticsNotes() []string {
 	return []string{
 		"已上报数量按当前筛选内的记录条数统计，包含待整改、整改中和已整改；未按设施去重，不代表现有设施总量。",
-		"道路长度、附属树木存活数及独立林网株数均为上报字段合计；道路树木与独立林网分别统计，不相加为树木总数。",
-		"机井、桥涵闸、变压器的移交数量及现有设施总量尚未采集；已上报数量无记录时为 0，不能代替移交数量。",
+		"道路长度、附属树木存活数及独立林网现有株数为上报字段合计；道路树木与独立林网分别统计，不相加为树木总数。",
+		"机井、桥涵闸、变压器移交数量来自移交表，未录入为 —；已上报数量无记录时为 0，不能代替移交数量。有移交记录时，独立林网移交株数用表内数量，否则用上报合计。",
 		"— 表示数量未采集、无对应类型记录或该指标存在缺失/无效值，不代表 0；已填报的 0 正常保留。",
 	}
 }
@@ -251,7 +264,7 @@ func composeLedgerLocation(base LedgerBaseLocation, statistics LedgerStatisticId
 func composeStreetLedgerRow(base StreetLedgerBaseRow, stats StreetLedgerStatisticsRow) StreetLedgerReportRow {
 	return StreetLedgerReportRow{LedgerReportLocation: composeLedgerLocation(base.LedgerBaseLocation, stats.LedgerStatisticIdentity), ProjectYear: base.ProjectYear, Signer: base.Signer, Phone: base.Phone,
 		WellReportCount: stats.WellReportCount, BridgeReportCount: stats.BridgeReportCount, TransformerReportCount: stats.TransformerReportCount, RoadTreeSurvive: stats.RoadTreeSurvive,
-		WellHandover: stats.WellHandover, WellExisting: stats.WellExisting, BridgeHandover: stats.BridgeHandover, BridgeExisting: stats.BridgeExisting, RoadKM: stats.RoadKM, ForestHandover: stats.ForestHandover, ForestExisting: stats.ForestExisting, TransformerHandover: stats.TransformerHandover, TransformerExisting: stats.TransformerExisting}
+		WellHandover: stats.WellHandover, WellExisting: stats.WellExisting, BridgeHandover: stats.BridgeHandover, BridgeExisting: stats.BridgeExisting, RoadKM: stats.RoadKM, RoadHandover: stats.RoadHandover, ForestHandover: stats.ForestHandover, ForestExisting: stats.ForestExisting, TransformerHandover: stats.TransformerHandover, TransformerExisting: stats.TransformerExisting}
 }
 
 func composeSurveyLedgerRow(base SurveyLedgerBaseRow, stats SurveyLedgerStatisticsRow) SurveyLedgerReportRow {
@@ -260,9 +273,9 @@ func composeSurveyLedgerRow(base SurveyLedgerBaseRow, stats SurveyLedgerStatisti
 		BridgeInspected: stats.BridgeInspected, BridgeProblemCount: stats.BridgeProblemCount, BridgeRectifiedCount: stats.BridgeRectifiedCount, RoadInspected: stats.RoadInspected, RoadProblemCount: stats.RoadProblemCount, RoadRectifiedCount: stats.RoadRectifiedCount}
 }
 
-// LedgerStreetRows 返回按建设年份、街道及落点组织排序的基础行，并带上沿祖先解析的区；不加载业务 JSON。
+// LedgerStreetRows 返回按建设年份、街道及落点组织排序的上报基础行，并带上沿祖先解析的区；不加载业务 JSON，也不并入仅有移交数量的分组。
 func (s *IssueService) LedgerStreetRows(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[StreetLedgerBaseRow], error) {
-	groups, err := s.loadLedgerPartGroups(ctx, q, true, false)
+	groups, _, err := s.loadLedgerPartGroups(ctx, q, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +291,7 @@ func (s *IssueService) LedgerStreetRows(ctx context.Context, q LedgerReportQuery
 
 // LedgerStreetStatistics 批量计算台账记录指标，缺失值保持 null，不替代资产基线。
 func (s *IssueService) LedgerStreetStatistics(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[StreetLedgerStatisticsRow], error) {
-	groups, err := s.loadLedgerPartGroups(ctx, q, true, true)
+	groups, handovers, err := s.loadLedgerPartGroups(ctx, q, true, true)
 	if err != nil {
 		return nil, err
 	}
@@ -287,14 +300,18 @@ func (s *IssueService) LedgerStreetStatistics(ctx context.Context, q LedgerRepor
 		Notes: streetLedgerStatisticsNotes(),
 	}
 	for _, group := range groups {
-		result.Rows = append(result.Rows, buildStreetStatisticsRow(group))
+		row := buildStreetStatisticsRow(group)
+		if handover, ok := handovers[group.location.RowKey]; ok {
+			applyStreetHandover(&row, &handover)
+		}
+		result.Rows = append(result.Rows, row)
 	}
 	return result, nil
 }
 
 // LedgerSurveyRows 跨建设年份生成组织基础行，不为没有记录的组织生成虚构零行。
 func (s *IssueService) LedgerSurveyRows(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[SurveyLedgerBaseRow], error) {
-	groups, err := s.loadLedgerPartGroups(ctx, q, false, false)
+	groups, _, err := s.loadLedgerPartGroups(ctx, q, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +327,7 @@ func (s *IssueService) LedgerSurveyRows(ctx context.Context, q LedgerReportQuery
 
 // LedgerSurveyStatistics 按组织计算当前问题及整改记录，正常直接完成不计为整改。
 func (s *IssueService) LedgerSurveyStatistics(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[SurveyLedgerStatisticsRow], error) {
-	groups, err := s.loadLedgerPartGroups(ctx, q, false, true)
+	groups, _, err := s.loadLedgerPartGroups(ctx, q, false, true)
 	if err != nil {
 		return nil, err
 	}

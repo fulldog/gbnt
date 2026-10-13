@@ -24,14 +24,19 @@ export interface StreetLedgerReportRow extends LedgerReportLocation {
   transformer_report_count: number;
   /** 道路附属树木存活数（棵）合计；无道路或存在无效值为 null，独立于林网株数。 */
   road_tree_survive: number | null;
-  well_handover: null;
+  /** 机井移交数量；移交表未录入为 null，0 表示已录入 0。 */
+  well_handover: number | null;
   well_existing: null;
-  bridge_handover: null;
+  /** 桥涵闸移交数量；移交表未录入为 null。 */
+  bridge_handover: number | null;
   bridge_existing: null;
   road_km: number | null;
+  /** 道路移交数量；台账表头不展示，未录入为 null。 */
+  road_handover: number | null;
   forest_handover: number | null;
   forest_existing: number | null;
-  transformer_handover: null;
+  /** 变压器移交数量；移交表未录入为 null。 */
+  transformer_handover: number | null;
   transformer_existing: null;
   signer: null;
   phone: null;
@@ -93,7 +98,7 @@ export type SurveyBaseRow = LedgerBaseLocation & Pick<SurveyLedgerReportRow, "co
 
 export type StreetStatisticsRow = Pick<StreetLedgerReportRow,
   "row_key" | "source_record_count" | "well_report_count" | "bridge_report_count" | "transformer_report_count" | "road_tree_survive" | "well_handover" | "well_existing"
-  | "bridge_handover" | "bridge_existing" | "road_km" | "forest_handover"
+  | "bridge_handover" | "bridge_existing" | "road_km" | "road_handover" | "forest_handover"
   | "forest_existing" | "transformer_handover" | "transformer_existing">;
 export type SurveyStatisticsRow = Pick<SurveyLedgerReportRow,
   "row_key" | "source_record_count" | "survey_done" | "well_inspected" | "well_normal"

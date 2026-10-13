@@ -2,6 +2,7 @@ import { createAdminAttachmentsApi } from "./attachments";
 import { createAuthApi } from "./auth";
 import { createAdminApiClient } from "./client";
 import type { AdminApiClientConfig } from "./client";
+import { createHandoversApi } from "./handovers";
 import { createHealthApi } from "./health";
 import { createIssuesApi } from "./issues";
 import { createLedgerApi } from "./ledger";
@@ -22,6 +23,7 @@ export function createAdminApi(config: AdminApiClientConfig) {
     workbench: createWorkbenchApi(client),
     issues: createIssuesApi(client),
     ledger: createLedgerApi(client),
+    handovers: createHandoversApi(client),
     orgs: createOrgsApi(client),
     users: createUsersApi(client),
     roles: createRolesApi(client),
@@ -35,6 +37,7 @@ export type * from "./types";
 export * from "./attachments";
 export * from "./auth";
 export * from "./client";
+export * from "./handovers";
 export * from "./health";
 export * from "./issues";
 export * from "./ledger";

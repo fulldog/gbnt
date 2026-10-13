@@ -37,14 +37,19 @@ describe("报表分拆关联", () => {
     expect(surveyRow.contact_name).toBeNull();
   });
 
-  it.each(["缺行", "额外行", "等量错键", "仅基础为空", "仅统计为空"])("%s 必须失败而不是补零", (kind) => {
+  it.each(["缺行", "等量错键", "仅统计为空"])("%s 必须失败而不是补零", (kind) => {
     const { base, statistics } = goldenStreetParts();
     if (kind === "缺行") statistics.rows.pop();
-    if (kind === "额外行") statistics.rows.push({ ...statistics.rows[0]!, row_key: "2025:4" });
     if (kind === "等量错键") statistics.rows[1]!.row_key = "2025:4";
-    if (kind === "仅基础为空") base.rows = [];
     if (kind === "仅统计为空") statistics.rows = [];
     expect(() => mergeLedgerParts(goldenQuery, base, statistics, composeStreetRow)).toThrow("不匹配");
+  });
+
+  it("统计多出的移交分组不补进基础行", () => {
+    const { base, statistics } = goldenStreetParts();
+    statistics.rows.push({ ...statistics.rows[0]!, row_key: "2025:4", source_record_count: 0, well_report_count: 0, road_km: null, forest_handover: 6, road_tree_survive: null, forest_existing: null });
+    const result = mergeLedgerParts(goldenQuery, base, statistics, composeStreetRow);
+    expect(result.rows.map((row) => row.row_key)).toEqual(["2023:4", "2024:4"]);
   });
 
   it.each(["基础重复", "统计重复", "基础空键", "统计空键"])("%s 不允许 Map 覆盖", (kind) => {

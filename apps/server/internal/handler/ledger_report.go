@@ -51,7 +51,7 @@ func ledgerSplitQuery(c *gin.Context) (service.LedgerReportQuery, bool) {
 	return query, true
 }
 
-// LedgerStreetRows GET /api/ledger/street/rows — 台账基础行，沿用本页 view 权限。
+// LedgerStreetRows GET /api/ledger/street/rows — 上报基础行，不并入移交数量，沿用本页 view 权限。
 func (d *Deps) LedgerStreetRows(c *gin.Context) {
 	query, ok := ledgerSplitQuery(c)
 	if !ok {

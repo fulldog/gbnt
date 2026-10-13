@@ -2,7 +2,7 @@ import type { RoleDuty, SysApi } from "@gbnt/api-client";
 
 const moduleLabels: Record<string, string> = {
   "web.auth": "允许登录管理后台", "web.workbench": "工作台", "web.rectify": "专项整改",
-  "web.ledger-street": "街道台账", "web.ledger-survey": "街道排查汇总",
+  "web.ledger-street": "街道台账", "web.ledger-survey": "街道排查汇总", "web.ledger-handover": "移交数量管理",
   "web.sys-org": "组织架构", "web.sys-staff": "工作人员", "web.sys-roles": "角色权限", "web.sys-logs": "操作日志",
 };
 const actionLabels: Record<string, string> = { view: "查", create: "增", edit: "改", delete: "删", import: "导入", export: "导出", login: "登录" };

@@ -30,6 +30,10 @@ func reportOrgStep() testutil.QueryStep {
 	return testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "parent_id", "name", "type"}, Rows: rows}
 }
 
+func emptyHandoverStep() testutil.QueryStep {
+	return testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}}
+}
+
 func reportIssueStep(issues ...model.Issue) testutil.QueryStep {
 	rows := [][]driver.Value{}
 	for _, issue := range issues {
@@ -47,7 +51,7 @@ func TestStreetReportGroupsAndPreservesUncollectedValues(t *testing.T) {
 		{OrgID: 5, ProjectYear: 2020, Type: "road", TypeExt: `{"length":2}`},
 		{OrgID: 999, ProjectYear: 0, Type: "well", TypeExt: `{}`},
 	}
-	s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(issues...))}
+	s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep(issues...), emptyHandoverStep())}
 	result, err := s.LedgerStreetReport(context.Background(), LedgerReportQuery{})
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +179,7 @@ func TestLedgerReportFiltersAndErrors(t *testing.T) {
 			t.Errorf("结束日应为次日北京时间零点排他边界：%v", boundaries[1])
 		}
 	}
-	s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), step)}
+	s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), step, emptyHandoverStep())}
 	result, err := s.LedgerStreetReport(context.Background(), LedgerReportQuery{StreetOrgID: 3, DateFrom: "2026-09-01", DateTo: "2026-09-05"})
 	if err != nil || result.Rows == nil || len(result.Rows) != 0 || result.StreetOrgID != 3 {
 		t.Fatalf("空报表：%+v %v", result, err)

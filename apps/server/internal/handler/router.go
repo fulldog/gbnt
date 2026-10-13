@@ -35,6 +35,7 @@ func Register(r *gin.Engine, d *Deps) {
 	d.registerRectify(api)
 	d.registerLedgerStreet(api)
 	d.registerLedgerSurvey(api)
+	d.registerLedgerHandover(api)
 	d.registerSysOrg(api)
 	d.registerSysStaff(api)
 	d.registerSysRoles(api)
