@@ -4,6 +4,8 @@ const location = {
   row_key: "2023:3",
   org_id: 3,
   org_name: "北城社区",
+  district_org_id: 1,
+  district_name: "北城区",
   street_org_id: 2,
   street_name: "北城街道",
   village_org_id: 3,

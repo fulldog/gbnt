@@ -9,16 +9,17 @@ export function ledgerCell(value: string | number | boolean | null | undefined):
   return String(value);
 }
 
-/** 仅合并连续且属于同一上级分组的行，未知行政区不得跨组织合并。 */
+/** 仅合并连续且属于同一上级分组的行。街道=district，新村/社区=street，自然村=village；未知行政区不得跨组织合并。 */
 export function streetRowSpans(rows: readonly StreetLedgerReportRow[]) {
-  const spans = rows.map(() => ({ year: 0, street: 0, village: 0 }));
+  const spans = rows.map(() => ({ year: 0, district: 0, street: 0, village: 0 }));
   const keys = rows.map((row) => {
     const year = String(row.project_year ?? "unknown");
-    const street = `${year}:${row.street_org_id ?? `unknown-${row.org_id}`}`;
+    const district = `${year}:${row.district_org_id ?? `unknown-${row.org_id}`}`;
+    const street = `${district}:${row.street_org_id ?? `unknown-${row.org_id}`}`;
     const village = `${street}:${row.village_org_id ?? `unknown-${row.org_id}`}`;
-    return { year, street, village };
+    return { year, district, street, village };
   });
-  for (const field of ["year", "street", "village"] as const) {
+  for (const field of ["year", "district", "street", "village"] as const) {
     let start = 0;
     while (start < rows.length) {
       let end = start + 1;

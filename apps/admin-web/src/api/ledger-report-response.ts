@@ -36,6 +36,8 @@ function normalizeBaseLocation(row: Record<string, unknown>): LedgerBaseLocation
     row_key: rowKey(row),
     org_id: responseInteger(row.org_id, "落点组织 ID"),
     org_name: nullableText(row.org_name, "落点组织"),
+    district_org_id: nullableNumber(row.district_org_id, "区 ID", true),
+    district_name: nullableText(row.district_name, "区名称"),
     street_org_id: nullableNumber(row.street_org_id, "街道 ID", true),
     street_name: nullableText(row.street_name, "街道名称"),
     village_org_id: nullableNumber(row.village_org_id, "村级组织 ID", true),

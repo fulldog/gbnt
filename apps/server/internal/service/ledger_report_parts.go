@@ -34,10 +34,12 @@ type LedgerBaseLocation struct {
 	RowKey         string  `json:"row_key"`         // 同页同轮查询内的唯一关联键，前端不能按名称关联
 	OrgID          uint64  `json:"org_id"`          // 实际落点组织，关联缺失仍保留；历史 0 兼容
 	OrgName        *string `json:"org_name"`        // 落点组织名称；缺失为 null
-	StreetOrgID    *uint64 `json:"street_org_id"`   // 沿祖先解析街道 ID；未知为 null
-	StreetName     *string `json:"street_name"`     // 街道名称；未知为 null
-	VillageOrgID   *uint64 `json:"village_org_id"`  // 沿祖先解析村/社区 ID；未知为 null
-	VillageName    *string `json:"village_name"`    // 村/社区名称；未知为 null
+	DistrictOrgID  *uint64 `json:"district_org_id"` // 台账「街道」列。沿祖先解析的区 ID；落点本身为区时取自身；未知为 null
+	DistrictName   *string `json:"district_name"`   // 台账「街道」列名称；无法解析为 null
+	StreetOrgID    *uint64 `json:"street_org_id"`   // 台账「新村/社区」列。沿祖先解析的街道组织 ID；未知为 null
+	StreetName     *string `json:"street_name"`     // 台账「新村/社区」列名称；未知为 null
+	VillageOrgID   *uint64 `json:"village_org_id"`  // 台账「自然村」列。沿祖先解析的村组织 ID；未知为 null
+	VillageName    *string `json:"village_name"`    // 台账「自然村」列名称；未知为 null
 	NaturalVillage *string `json:"natural_village"` // 未采集自然村层级，固定 null
 }
 
@@ -179,7 +181,7 @@ func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQ
 
 func validateLedgerGroup(group reportGroup) error {
 	location := group.location
-	if location.OrgID > maxLedgerSafeInteger || (location.StreetOrgID != nil && *location.StreetOrgID > maxLedgerSafeInteger) || (location.VillageOrgID != nil && *location.VillageOrgID > maxLedgerSafeInteger) || group.year < 0 || uint64(group.year) > maxLedgerSafeInteger || location.SourceRecordCount < 0 || uint64(location.SourceRecordCount) > maxLedgerSafeInteger {
+	if location.OrgID > maxLedgerSafeInteger || (location.DistrictOrgID != nil && *location.DistrictOrgID > maxLedgerSafeInteger) || (location.StreetOrgID != nil && *location.StreetOrgID > maxLedgerSafeInteger) || (location.VillageOrgID != nil && *location.VillageOrgID > maxLedgerSafeInteger) || group.year < 0 || uint64(group.year) > maxLedgerSafeInteger || location.SourceRecordCount < 0 || uint64(location.SourceRecordCount) > maxLedgerSafeInteger {
 		// 存量异常是服务端数据错误，不归为用户参数 400，也不截断或舍入 ID。
 		return fmt.Errorf("报表存量数据超出安全整数范围，row_key=%s", location.RowKey)
 	}
@@ -187,7 +189,7 @@ func validateLedgerGroup(group reportGroup) error {
 }
 
 func baseLedgerLocation(location LedgerReportLocation) LedgerBaseLocation {
-	return LedgerBaseLocation{RowKey: location.RowKey, OrgID: location.OrgID, OrgName: location.OrgName, StreetOrgID: location.StreetOrgID, StreetName: location.StreetName, VillageOrgID: location.VillageOrgID, VillageName: location.VillageName, NaturalVillage: location.NaturalVillage}
+	return LedgerBaseLocation{RowKey: location.RowKey, OrgID: location.OrgID, OrgName: location.OrgName, DistrictOrgID: location.DistrictOrgID, DistrictName: location.DistrictName, StreetOrgID: location.StreetOrgID, StreetName: location.StreetName, VillageOrgID: location.VillageOrgID, VillageName: location.VillageName, NaturalVillage: location.NaturalVillage}
 }
 
 func buildStreetBaseRow(group reportGroup) StreetLedgerBaseRow {
@@ -243,7 +245,7 @@ func buildSurveyStatisticsRow(group reportGroup) SurveyLedgerStatisticsRow {
 }
 
 func composeLedgerLocation(base LedgerBaseLocation, statistics LedgerStatisticIdentity) LedgerReportLocation {
-	return LedgerReportLocation{RowKey: base.RowKey, OrgID: base.OrgID, OrgName: base.OrgName, StreetOrgID: base.StreetOrgID, StreetName: base.StreetName, VillageOrgID: base.VillageOrgID, VillageName: base.VillageName, NaturalVillage: base.NaturalVillage, SourceRecordCount: statistics.SourceRecordCount}
+	return LedgerReportLocation{RowKey: base.RowKey, OrgID: base.OrgID, OrgName: base.OrgName, DistrictOrgID: base.DistrictOrgID, DistrictName: base.DistrictName, StreetOrgID: base.StreetOrgID, StreetName: base.StreetName, VillageOrgID: base.VillageOrgID, VillageName: base.VillageName, NaturalVillage: base.NaturalVillage, SourceRecordCount: statistics.SourceRecordCount}
 }
 
 func composeStreetLedgerRow(base StreetLedgerBaseRow, stats StreetLedgerStatisticsRow) StreetLedgerReportRow {
@@ -258,7 +260,7 @@ func composeSurveyLedgerRow(base SurveyLedgerBaseRow, stats SurveyLedgerStatisti
 		BridgeInspected: stats.BridgeInspected, BridgeProblemCount: stats.BridgeProblemCount, BridgeRectifiedCount: stats.BridgeRectifiedCount, RoadInspected: stats.RoadInspected, RoadProblemCount: stats.RoadProblemCount, RoadRectifiedCount: stats.RoadRectifiedCount}
 }
 
-// LedgerStreetRows 返回按建设年份、街道及落点组织排序的基础行，不加载业务 JSON。
+// LedgerStreetRows 返回按建设年份、街道及落点组织排序的基础行，并带上沿祖先解析的区；不加载业务 JSON。
 func (s *IssueService) LedgerStreetRows(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[StreetLedgerBaseRow], error) {
 	groups, err := s.loadLedgerPartGroups(ctx, q, true, false)
 	if err != nil {

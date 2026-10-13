@@ -81,13 +81,13 @@ describe("Excel 式台账结构", () => {
       expect(sheet.getCell("A1").value).toBe(title);
       const bodyValues = (row: number) => Array.from({ length: columns }, (_, column) => sheet.getCell(row, column + 1).value);
       if (columns === 17) {
-        expect(bodyValues(5)).toEqual(["1", "2023", "测试街道", "测试新村", "—", "—", "3", "—", "0", "1.75", "30", "100", "0", "—", "0", "—", "—"]);
-        expect(bodyValues(6)).toEqual(["2", "2024", "测试街道", "测试新村", "—", "—", "0", "—", "0", "2", "0", "—", "—", "—", "0", "—", "—"]);
+        expect(bodyValues(5)).toEqual(["1", "2023", "蒋官屯街道", "测试街道", "测试新村", "—", "3", "—", "0", "1.75", "30", "100", "0", "—", "0", "—", "—"]);
+        expect(bodyValues(6)).toEqual(["2", "2024", "蒋官屯街道", "测试街道", "测试新村", "—", "0", "—", "0", "2", "0", "—", "—", "—", "0", "—", "—"]);
         expect(sheet.getCell("G4").value).toBe("已上报数量\n（条）");
         expect(sheet.getCell("K4").value).toBe("附属树木存活数\n（棵）");
         expect(sheet.getCell("L3").value).toBe("独立林网");
       } else {
-        expect(bodyValues(6)).toEqual(["测试街道", "测试新村", "—", "—", "—", "—", "2", "—", "0", "—", "0", "2", "1", "0", "0", "0", "0", "—", "—", "—", "—", "—"]);
+        expect(bodyValues(6)).toEqual(["蒋官屯街道", "测试街道", "测试新村", "—", "—", "—", "2", "—", "0", "—", "0", "2", "1", "0", "0", "0", "0", "—", "—", "—", "—", "—"]);
         expect(sheet.model.merges).toContain("S6:U6");
         expect(sheet.getCell("V6").value).toBe("—");
       }
@@ -116,9 +116,12 @@ describe("Excel 式台账结构", () => {
     verifyGrid(wrapper.get("table").element, 17);
     const sheet = await readSpreadsheet(wrapper.get("table").element);
     expect(sheet.columnCount).toBe(17);
-    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:Q1", "A2:A4", "F2:Q2", "F3:G3", "J3:K3", "B5:B6", "C5:C6", "D5:D6", "A8:Q8"]));
+    expect(sheet.model.merges).toEqual(expect.arrayContaining(["A1:Q1", "A2:A4", "F2:Q2", "F3:G3", "J3:K3", "B5:B6", "C5:C6", "D5:D6", "E5:E6", "A8:Q8"]));
     expect(sheet.getCell("B6").master.address).toBe("B5");
-    expect(sheet.getCell("E6").value).toBe("—");
+    expect(sheet.getCell("C5").value).toBe("北城区");
+    expect(sheet.getCell("D5").value).toBe("北城街道");
+    expect(sheet.getCell("E5").value).toBe("北城社区");
+    expect(sheet.getCell("E6").master.address).toBe("E5");
     expect(sheet.getCell("J6").value).toBe("1.25");
     expect(sheet.getCell("Q6").value).toBe("—");
     expect(sheet.getCell("B7").value).toBe("2024");
@@ -163,14 +166,16 @@ describe("Excel 式台账结构", () => {
     expect(ledgerCell(0)).toBe("0");
   });
 
-  it("未知街道/新村按所属组织隔离，年份切换不跨组合并", () => {
+  it("同一年内已知街道合并，未知新村和自然村按落点隔离", () => {
     const rows = [
       streetReportRow({ street_org_id: null, village_org_id: null }),
       streetReportRow({ row_key: "2023:4", org_id: 4, street_org_id: null, village_org_id: null }),
       streetReportRow({ row_key: "2024:3", project_year: 2024 }),
     ];
     expect(streetRowSpans(rows)).toEqual([
-      { year: 2, street: 1, village: 1 }, { year: 0, street: 1, village: 1 }, { year: 1, street: 1, village: 1 },
+      { year: 2, district: 2, street: 1, village: 1 },
+      { year: 0, district: 0, street: 1, village: 1 },
+      { year: 1, district: 1, street: 1, village: 1 },
     ]);
   });
 

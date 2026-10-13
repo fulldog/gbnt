@@ -31,10 +31,12 @@ type LedgerReportLocation struct {
 	RowKey            string  `json:"row_key"`             // 稳定行键，由年度及落点组织组成
 	OrgID             uint64  `json:"org_id"`              // 实际落点组织 ID；关联删除后仍保留
 	OrgName           *string `json:"org_name"`            // 落点组织名称；关联缺失为 null
-	StreetOrgID       *uint64 `json:"street_org_id"`       // 沿组织树解析的街道 ID；缺失为 null
-	StreetName        *string `json:"street_name"`         // 街道名称；无法解析为 null
-	VillageOrgID      *uint64 `json:"village_org_id"`      // 沿组织树解析的村 ID；缺失为 null
-	VillageName       *string `json:"village_name"`        // 村/社区名称；无法解析为 null
+	DistrictOrgID     *uint64 `json:"district_org_id"`     // 台账「街道」列。沿祖先解析的区 ID；落点本身为区时取自身；未知为 null
+	DistrictName      *string `json:"district_name"`       // 台账「街道」列名称；无法解析为 null
+	StreetOrgID       *uint64 `json:"street_org_id"`       // 台账「新村/社区」列。沿组织树解析的街道组织 ID；缺失为 null
+	StreetName        *string `json:"street_name"`         // 台账「新村/社区」列名称；无法解析为 null
+	VillageOrgID      *uint64 `json:"village_org_id"`      // 台账「自然村」列。沿组织树解析的村组织 ID；缺失为 null
+	VillageName       *string `json:"village_name"`        // 台账「自然村」列名称；无法解析为 null
 	NaturalVillage    *string `json:"natural_village"`     // 当前没有自然村字段，固定 null，不从地址猜测
 	SourceRecordCount int64   `json:"source_record_count"` // 当前筛选下的上报记录条数，不是去重设施数量
 }
@@ -165,6 +167,9 @@ func ledgerReportLocation(orgID uint64, orgs map[uint64]model.SysOrg) LedgerRepo
 		org, exists := orgs[current]
 		if !exists {
 			break
+		}
+		if org.Type == model.OrgTypeDistrict && location.DistrictOrgID == nil {
+			location.DistrictOrgID, location.DistrictName = &org.ID, &org.Name
 		}
 		if org.Type == model.OrgTypeStreet && location.StreetOrgID == nil {
 			location.StreetOrgID, location.StreetName = &org.ID, &org.Name

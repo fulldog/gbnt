@@ -59,13 +59,13 @@ func TestStreetReportGroupsAndPreservesUncollectedValues(t *testing.T) {
 	if row.RoadKM == nil || *row.RoadKM != 1.75 || row.ForestHandover == nil || *row.ForestHandover != 100 || row.ForestExisting == nil || *row.ForestExisting != 0 {
 		t.Fatalf("已采集字段未正确汇总：%+v", row)
 	}
-	if *row.StreetName != "测试街道" || *row.VillageName != "测试新村" || row.SourceRecordCount != 4 {
+	if *row.StreetName != "测试街道" || *row.VillageName != "测试新村" || row.DistrictOrgID != nil || row.DistrictName != nil || row.SourceRecordCount != 4 {
 		t.Fatalf("组织及来源条数：%+v", row)
 	}
 	if row.WellExisting != nil || row.WellHandover != nil || row.Signer != nil || row.NaturalVillage != nil {
 		t.Fatal("未采集量不得拿记录数补齐")
 	}
-	if result.Rows[0].OrgName != nil || result.Rows[0].StreetName != nil || result.Rows[0].ProjectYear != nil {
+	if result.Rows[0].OrgName != nil || result.Rows[0].StreetName != nil || result.Rows[0].DistrictName != nil || result.Rows[0].ProjectYear != nil {
 		t.Fatal("缺失字段应保持 null")
 	}
 	encoded, _ := json.Marshal(row)

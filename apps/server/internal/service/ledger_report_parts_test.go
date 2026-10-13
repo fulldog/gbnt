@@ -232,7 +232,7 @@ func TestLedgerPartsGoldenDataAndLegacyCompatibility(t *testing.T) {
 		result := loadGoldenLedger(t, issues, reportTestOrgs(), all)
 		base, stats := result.streetBase.Rows[0], result.streetStats.Rows[0]
 		survey := result.surveyStats.Rows[0]
-		if base.RowKey != "0:999" || base.ProjectYear != nil || base.OrgName != nil || base.StreetOrgID != nil || stats.SourceRecordCount != 1 || stats.RoadKM != nil || survey.RowKey != "0:999" || *survey.WellProblemCount != 1 || *survey.WellRectifiedCount != 0 {
+		if base.RowKey != "0:999" || base.ProjectYear != nil || base.OrgName != nil || base.DistrictOrgID != nil || base.DistrictName != nil || base.StreetOrgID != nil || stats.SourceRecordCount != 1 || stats.RoadKM != nil || survey.RowKey != "0:999" || *survey.WellProblemCount != 1 || *survey.WellRectifiedCount != 0 {
 			t.Fatal("缺失关联记录不得被 inner join 丢失或补造")
 		}
 	})
@@ -273,10 +273,43 @@ func TestLedgerPartsRejectUnsafeStoredDataAndServiceArguments(t *testing.T) {
 		}
 	}
 	bad := uint64(maxLedgerSafeInteger + 1)
-	for _, group := range []reportGroup{{year: -1}, {year: int(maxLedgerSafeInteger + 1)}, {location: LedgerReportLocation{StreetOrgID: &bad}}, {location: LedgerReportLocation{VillageOrgID: &bad}}, {location: LedgerReportLocation{SourceRecordCount: int64(maxLedgerSafeInteger + 1)}}} {
+	for _, group := range []reportGroup{{year: -1}, {year: int(maxLedgerSafeInteger + 1)}, {location: LedgerReportLocation{DistrictOrgID: &bad}}, {location: LedgerReportLocation{StreetOrgID: &bad}}, {location: LedgerReportLocation{VillageOrgID: &bad}}, {location: LedgerReportLocation{SourceRecordCount: int64(maxLedgerSafeInteger + 1)}}} {
 		if validateLedgerGroup(group) == nil {
 			t.Fatalf("应拒绝存量数值：%+v", group)
 		}
+	}
+}
+
+func TestLedgerStreetRowsResolvesDistrict(t *testing.T) {
+	districtName := "蒋官屯街道"
+	orgs := []model.SysOrg{
+		{Base: model.Base{ID: 1}, Type: model.OrgTypeRoot, Name: "平台"},
+		{Base: model.Base{ID: 2}, ParentID: 1, Type: model.OrgTypeDistrict, Name: districtName},
+		{Base: model.Base{ID: 3}, ParentID: 2, Type: model.OrgTypeStreet, Name: "中心社区"},
+		{Base: model.Base{ID: 4}, ParentID: 3, Type: model.OrgTypeVillage, Name: "周吴海村"},
+	}
+	issues := []model.Issue{{OrgID: 4, ProjectYear: 2023, Type: "well"}}
+	rows := loadGoldenLedger(t, issues, orgs, LedgerReportQuery{}).streetBase.Rows
+	if len(rows) != 1 || rows[0].DistrictOrgID == nil || *rows[0].DistrictOrgID != 2 || rows[0].DistrictName == nil || *rows[0].DistrictName != districtName {
+		t.Fatalf("村级落点应带回上级区：%+v", rows)
+	}
+	if rows[0].StreetOrgID == nil || *rows[0].StreetOrgID != 3 || rows[0].VillageOrgID == nil || *rows[0].VillageOrgID != 4 {
+		t.Fatalf("区不应替代街道或村：%+v", rows[0])
+	}
+	encoded, _ := json.Marshal(rows[0])
+	for _, fragment := range []string{`"district_org_id":2`, `"district_name":"蒋官屯街道"`} {
+		if !strings.Contains(string(encoded), fragment) {
+			t.Fatalf("街道基础行缺少区字段：%s", encoded)
+		}
+	}
+
+	self := []model.SysOrg{
+		{Base: model.Base{ID: 1}, Type: model.OrgTypeRoot, Name: "平台"},
+		{Base: model.Base{ID: 2}, ParentID: 1, Type: model.OrgTypeDistrict, Name: districtName},
+	}
+	direct := loadGoldenLedger(t, []model.Issue{{OrgID: 2, ProjectYear: 2023, Type: "well"}}, self, LedgerReportQuery{}).streetBase.Rows
+	if len(direct) != 1 || direct[0].DistrictOrgID == nil || *direct[0].DistrictOrgID != 2 || direct[0].StreetOrgID != nil || direct[0].VillageOrgID != nil {
+		t.Fatalf("落点本身为区时应取自身且不编造下级：%+v", direct)
 	}
 }
 

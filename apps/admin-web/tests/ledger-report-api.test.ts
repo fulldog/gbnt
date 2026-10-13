@@ -4,7 +4,7 @@ import { createLedgerApi } from "@/api/ledger";
 import { allLedgerQuery, goldenStreetParts, goldenSurveyParts } from "./fixtures/ledger-report-parts";
 
 const location = {
-  row_key: "2023:4", org_id: 4, org_name: "新村", street_org_id: 3, street_name: "街道",
+  row_key: "2023:4", org_id: 4, org_name: "新村", district_org_id: 2, district_name: "蒋官屯街道", street_org_id: 3, street_name: "街道",
   village_org_id: 4, village_name: "新村", natural_village: null, source_record_count: 4,
 };
 const streetRow = {
@@ -165,7 +165,7 @@ describe("四个拆分报表 GET 契约", () => {
 
   it("安全整数及固定 null、问题整改关系不能放宽", async () => {
     const street = goldenStreetParts();
-    for (const change of [{ org_id: Number.MAX_SAFE_INTEGER + 1 }, { project_year: 0 }, { natural_village: "猜测村" }, { signer: "任取上报人" }]) {
+    for (const change of [{ org_id: Number.MAX_SAFE_INTEGER + 1 }, { project_year: 0 }, { natural_village: "猜测村" }, { signer: "任取上报人" }, { district_org_id: -1 }, { district_name: 1 }]) {
       await expect(setup({ ...street.base, rows: [{ ...street.base.rows[0], ...change }] }).ledger.getStreetRows()).rejects.toThrow();
     }
     for (const change of [{ source_record_count: "6" }, { source_record_count: Number.MAX_SAFE_INTEGER + 1 }, { well_existing: 0 }]) {

@@ -6,7 +6,7 @@ import type {
 export const allLedgerQuery: LedgerAppliedQuery = { street_org_id: 0, date_from: "", date_to: "" };
 export const goldenQuery: LedgerAppliedQuery = { street_org_id: 3, date_from: "2026-09-01", date_to: "2026-09-05" };
 const goldenLocation = {
-  org_id: 4, org_name: "测试新村", street_org_id: 3, street_name: "测试街道",
+  org_id: 4, org_name: "测试新村", district_org_id: 2, district_name: "蒋官屯街道", street_org_id: 3, street_name: "测试街道",
   village_org_id: 4, village_name: "测试新村", natural_village: null,
 };
 
@@ -48,9 +48,9 @@ export function streetParts(rows: StreetLedgerReportRow[], query = allLedgerQuer
   const baseRows: StreetBaseRow[] = [];
   const statisticsRows: StreetStatisticsRow[] = [];
   for (const row of rows) {
-    const { row_key, org_id, org_name, street_org_id, street_name, village_org_id, village_name, natural_village,
+    const { row_key, org_id, org_name, district_org_id, district_name, street_org_id, street_name, village_org_id, village_name, natural_village,
       project_year, signer, phone, ...metrics } = row;
-    baseRows.push({ row_key, org_id, org_name, street_org_id, street_name, village_org_id, village_name, natural_village, project_year, signer, phone });
+    baseRows.push({ row_key, org_id, org_name, district_org_id, district_name, street_org_id, street_name, village_org_id, village_name, natural_village, project_year, signer, phone });
     statisticsRows.push({ row_key, ...metrics });
   }
   return { base: { query: { ...query }, rows: baseRows, notes: [...notes] }, statistics: { query: { ...query }, rows: statisticsRows, notes: [] } };
@@ -60,9 +60,9 @@ export function surveyParts(rows: SurveyLedgerReportRow[], query = allLedgerQuer
   const baseRows: SurveyBaseRow[] = [];
   const statisticsRows: SurveyStatisticsRow[] = [];
   for (const row of rows) {
-    const { row_key, org_id, org_name, street_org_id, street_name, village_org_id, village_name, natural_village,
+    const { row_key, org_id, org_name, district_org_id, district_name, street_org_id, street_name, village_org_id, village_name, natural_village,
       contact_name, contact_phone, leader_sign, ...metrics } = row;
-    baseRows.push({ row_key, org_id, org_name, street_org_id, street_name, village_org_id, village_name, natural_village, contact_name, contact_phone, leader_sign });
+    baseRows.push({ row_key, org_id, org_name, district_org_id, district_name, street_org_id, street_name, village_org_id, village_name, natural_village, contact_name, contact_phone, leader_sign });
     statisticsRows.push({ row_key, ...metrics });
   }
   return { base: { query: { ...query }, rows: baseRows, notes: [...notes] }, statistics: { query: { ...query }, rows: statisticsRows, notes: [] } };

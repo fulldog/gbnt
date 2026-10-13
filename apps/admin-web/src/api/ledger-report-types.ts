@@ -3,8 +3,13 @@ export interface LedgerReportLocation {
   row_key: string;
   org_id: number;
   org_name: string | null;
+  /** 台账「街道」列。沿祖先解析的区；落点本身为区时为自身，无法解析为 null。 */
+  district_org_id: number | null;
+  district_name: string | null;
+  /** 台账「新村/社区」列。 */
   street_org_id: number | null;
   street_name: string | null;
+  /** 台账「自然村」列。 */
   village_org_id: number | null;
   village_name: string | null;
   natural_village: null;

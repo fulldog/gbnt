@@ -43,6 +43,7 @@ export function mergeLedgerParts<B extends KeyedRow, S extends KeyedRow, R>(
 export function composeStreetRow(base: StreetBaseRow, statistics: StreetStatisticsRow): StreetLedgerReportRow {
   return {
     row_key: base.row_key, org_id: base.org_id, org_name: base.org_name,
+    district_org_id: base.district_org_id, district_name: base.district_name,
     street_org_id: base.street_org_id, street_name: base.street_name,
     village_org_id: base.village_org_id, village_name: base.village_name,
     natural_village: base.natural_village, project_year: base.project_year,
@@ -63,6 +64,7 @@ export function composeStreetRow(base: StreetBaseRow, statistics: StreetStatisti
 export function composeSurveyRow(base: SurveyBaseRow, statistics: SurveyStatisticsRow): SurveyLedgerReportRow {
   return {
     row_key: base.row_key, org_id: base.org_id, org_name: base.org_name,
+    district_org_id: base.district_org_id, district_name: base.district_name,
     street_org_id: base.street_org_id, street_name: base.street_name,
     village_org_id: base.village_org_id, village_name: base.village_name,
     natural_village: base.natural_village,

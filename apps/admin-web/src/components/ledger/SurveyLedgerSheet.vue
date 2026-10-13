@@ -4,7 +4,7 @@ import { ledgerCell, SURVEY_COLUMN_WIDTHS } from "@/utils/ledger-sheet";
 import "./ledger-sheet.css";
 
 const { rows, title, emptyText = "当前筛选条件下暂无排查汇总数据" } = defineProps<{ rows: SurveyLedgerReportRow[]; title: string; emptyText?: string }>();
-const stickyFields = ["street_name", "village_name", "natural_village", "survey_done"] as const;
+const stickyFields = ["district_name", "street_name", "village_name", "survey_done"] as const;
 const stickyOffsets = [0, 140, 280, 380];
 const quantityFields = ["well_inspected", "well_normal", "well_problem_count", "bridge_inspected", "bridge_problem_count", "road_inspected", "road_problem_count", "well_problem_count", "well_rectified_count", "bridge_problem_count", "bridge_rectified_count", "road_problem_count", "road_rectified_count"] as const;
 </script>

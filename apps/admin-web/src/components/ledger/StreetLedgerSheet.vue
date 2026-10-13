@@ -34,9 +34,9 @@ const quantityFields = ["well_handover", "well_report_count", "bridge_handover",
       <tr v-for="(row, index) in rows" :key="row.row_key">
         <td>{{ index + 1 }}</td>
         <td v-if="spans[index]!.year" :rowspan="spans[index]!.year">{{ ledgerCell(row.project_year) }}</td>
+        <td v-if="spans[index]!.district" :rowspan="spans[index]!.district">{{ ledgerCell(row.district_name) }}</td>
         <td v-if="spans[index]!.street" :rowspan="spans[index]!.street">{{ ledgerCell(row.street_name) }}</td>
-        <td v-if="spans[index]!.village" :rowspan="spans[index]!.village">{{ ledgerCell(row.village_name) }}</td>
-        <td :title="row.natural_village == null ? '自然村尚未采集' : undefined">{{ ledgerCell(row.natural_village) }}</td>
+        <td v-if="spans[index]!.village" :rowspan="spans[index]!.village" :class="{ 'ledger-missing': row.village_name == null }" :title="row.village_name == null ? '自然村无法解析' : undefined">{{ ledgerCell(row.village_name) }}</td>
         <td v-for="field in quantityFields" :key="field" :class="{ 'ledger-missing': row[field] == null }" :title="row[field] == null ? '未采集、无对应记录或数据不完整' : undefined">{{ ledgerCell(row[field]) }}</td>
       </tr>
       <tr v-if="!rows.length" class="ledger-empty"><td :colspan="columnCount">{{ emptyText }}</td></tr>
