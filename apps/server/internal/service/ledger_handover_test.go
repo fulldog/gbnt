@@ -60,11 +60,11 @@ func TestStreetLedgerUnionsHandoverWithoutReplacingReportedCounts(t *testing.T) 
 	if both.WellReportCount != 1 || both.SourceRecordCount != 2 || both.ForestExisting == nil || *both.ForestExisting != 9 || both.WellHandover == nil || *both.WellHandover != 13 || both.BridgeHandover == nil || *both.BridgeHandover != 8 || both.RoadHandover == nil || *both.RoadHandover != 2 || both.TransformerHandover == nil || *both.TransformerHandover != 1 || both.ForestHandover == nil || *both.ForestHandover != 50 || both.WellExisting != nil {
 		t.Fatalf("上报条数应保留，林网移交株数应被移交表覆盖：%+v", both)
 	}
-	rows, err := (&IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), ledgerBaseStep(t, issues, true))}).LedgerStreetRows(context.Background(), query)
+	rows, err := (&IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), ledgerBaseStep(t, issues, true), handover)}).LedgerStreetRows(context.Background(), query)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rows.Rows) != 1 || rows.Rows[0].RowKey != "2023:4" {
-		t.Fatalf("基础行不应并入仅有移交数量的分组：%+v", rows.Rows)
+	if len(rows.Rows) != len(stats.Rows) || rows.Rows[0].RowKey != stats.Rows[0].RowKey || rows.Rows[1].RowKey != stats.Rows[1].RowKey || rows.Rows[0].ProjectYear == nil || *rows.Rows[0].ProjectYear != 2021 {
+		t.Fatalf("基础行应并入仅有移交数量的组织：%+v", rows.Rows)
 	}
 }

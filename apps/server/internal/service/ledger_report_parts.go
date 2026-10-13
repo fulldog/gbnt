@@ -146,7 +146,7 @@ func appliedLedgerQuery(q LedgerReportQuery) LedgerAppliedQuery {
 	return LedgerAppliedQuery{StreetOrgID: q.StreetOrgID, DateFrom: q.DateFrom, DateTo: q.DateTo}
 }
 
-// loadLedgerPartGroups 基础路径只取去重分组列，统计路径批量加载。街道统计并入移交数量；基础行和排查汇总不查移交表。
+// loadLedgerPartGroups 基础路径只取去重分组列，统计路径批量加载。街道基础行和街道统计都并入移交表组织；排查汇总不查移交表。
 func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQuery, withYear, statistics bool) ([]reportGroup, map[string]model.OrgHandover, error) {
 	if err := validateLedgerSplitQuery(q); err != nil {
 		return nil, nil, err
@@ -177,8 +177,8 @@ func (s *IssueService) loadLedgerPartGroups(ctx context.Context, q LedgerReportQ
 			return nil, nil, err
 		}
 	}
-	// 基础行只反映上报分组。移交数量并集仅进入街道统计，避免改动 /rows 的行集合。
-	if !withYear || !statistics {
+	// 街道台账按建设年份和组织取上报分组与移交表的并集。排查汇总没有建设年份，不查移交表。
+	if !withYear {
 		return groups, nil, nil
 	}
 	handovers, err := s.loadStreetHandoverIndex(ctx, q, orgs)
@@ -273,7 +273,7 @@ func composeSurveyLedgerRow(base SurveyLedgerBaseRow, stats SurveyLedgerStatisti
 		BridgeInspected: stats.BridgeInspected, BridgeProblemCount: stats.BridgeProblemCount, BridgeRectifiedCount: stats.BridgeRectifiedCount, RoadInspected: stats.RoadInspected, RoadProblemCount: stats.RoadProblemCount, RoadRectifiedCount: stats.RoadRectifiedCount}
 }
 
-// LedgerStreetRows 返回按建设年份、街道及落点组织排序的上报基础行，并带上沿祖先解析的区；不加载业务 JSON，也不并入仅有移交数量的分组。
+// LedgerStreetRows 返回按建设年份、街道及落点组织排序的基础行，并带上沿祖先解析的区。行集合是上报分组与移交表组织的并集；不加载业务 JSON，移交数量本身由统计接口回填。
 func (s *IssueService) LedgerStreetRows(ctx context.Context, q LedgerReportQuery) (*LedgerPartResult[StreetLedgerBaseRow], error) {
 	groups, _, err := s.loadLedgerPartGroups(ctx, q, true, false)
 	if err != nil {

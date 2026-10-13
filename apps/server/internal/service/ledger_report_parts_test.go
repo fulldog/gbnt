@@ -126,7 +126,7 @@ func loadGoldenLedger(t *testing.T, issues []model.Issue, orgs []model.SysOrg, q
 		return &IssueService{DB: testutil.NewQueryDB(t, steps...)}
 	}
 	ctx := context.Background()
-	sb, err := newService(ledgerBaseStep(t, issues, true), false).LedgerStreetRows(ctx, q)
+	sb, err := newService(ledgerBaseStep(t, issues, true), true).LedgerStreetRows(ctx, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,11 @@ func TestLedgerPartsRejectUnsafeStoredDataAndServiceArguments(t *testing.T) {
 		}
 	}
 	for _, orgID := range []uint64{0, 999, maxLedgerSafeInteger, maxLedgerSafeInteger + 1} {
-		s := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), ledgerBaseStep(t, []model.Issue{{OrgID: orgID}}, true))}
+		steps := []testutil.QueryStep{reportOrgStep(), ledgerBaseStep(t, []model.Issue{{OrgID: orgID}}, true)}
+		if orgID <= maxLedgerSafeInteger {
+			steps = append(steps, emptyHandoverStep())
+		}
+		s := &IssueService{DB: testutil.NewQueryDB(t, steps...)}
 		result, err := s.LedgerStreetRows(ctx, LedgerReportQuery{})
 		if orgID > maxLedgerSafeInteger {
 			if err == nil || result != nil || errors.Is(err, ErrLedgerReportArgument) {
@@ -347,7 +351,7 @@ func TestLedgerPartsUseSameBoundFiltersAndConstantQueryCount(t *testing.T) {
 				}
 			}
 			steps := []testutil.QueryStep{reportOrgStep(), step}
-			if mode == "street-statistics" {
+			if strings.HasPrefix(mode, "street") {
 				handover := emptyHandoverStep()
 				handover.Check = func(sql string, _ []driver.NamedValue) {
 					if strings.Contains(sql, "created_at") {

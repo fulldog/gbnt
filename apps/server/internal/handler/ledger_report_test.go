@@ -47,7 +47,7 @@ func TestLedgerPartsHTTPEmptyFailureAndAppliedQuery(t *testing.T) {
 		for _, raw := range []string{"", "street_org_id=&date_from=&date_to=", "street_org_id=003&date_from=2026-09-01&date_to=2026-09-05"} {
 			t.Run(path+"?"+raw, func(t *testing.T) {
 				steps := []testutil.QueryStep{{Contains: "FROM `sys_orgs`", Columns: []string{"id", "type"}, Rows: [][]driver.Value{{int64(3), "street"}}}, {Contains: "FROM `issues`", Columns: []string{"org_id"}}}
-				if strings.Contains(path, "/street/statistics") {
+				if strings.Contains(path, "/street/") {
 					steps = append(steps, testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}})
 				}
 				db := testutil.NewQueryDB(t, steps...)
@@ -135,7 +135,7 @@ func TestLedgerPartsAndOptionsKeepIndependentModulePermissions(t *testing.T) {
 					steps := []testutil.QueryStep{{Contains: "FROM `sys_orgs`", Columns: []string{"id"}}}
 					if !strings.Contains(path, "/options/") {
 						steps = append(steps, testutil.QueryStep{Contains: "FROM `issues`", Columns: []string{"org_id"}})
-						if strings.Contains(path, "/street/statistics") {
+						if strings.Contains(path, "/street/") && !strings.Contains(path, "/options/") {
 							steps = append(steps, testutil.QueryStep{Contains: "FROM `org_handovers`", Columns: []string{"id"}})
 						}
 					}

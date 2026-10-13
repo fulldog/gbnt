@@ -54,9 +54,9 @@ func main() {
 	}
 	if cfg.Migrate.Enabled {
 		dev := migrate.IsDevMode(cfg.Server.Mode)
-		//if dev && !migrate.AllowDevReset() {
-		//	logs.Error.Fatal("dev reset blocked", zap.String("hint", "debug/dev 会 DROP 业务表，须设置 GBNT_ALLOW_DEV_RESET=1"))
-		//}
+		if dev && !migrate.AllowDevReset() {
+			logs.Error.Fatal("dev reset blocked", zap.String("hint", "debug/dev 会 DROP 业务表，须设置 GBNT_ALLOW_DEV_RESET=1"))
+		}
 		if err := migrate.Auto(db, migrate.Options{Seed: cfg.Migrate.Seed, Dev: dev}); err != nil {
 			logs.Error.Fatal("migrate", zap.Error(err))
 		}
