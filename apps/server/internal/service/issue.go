@@ -778,6 +778,18 @@ func (s *IssueService) rectifyPrepared(ctx context.Context, id uint64, expectedR
 		if err := rectifyGate(item.Status, true); err != nil {
 			return err
 		}
+		if item.Type == string(model.IssueTypeWell) {
+			next, changed, err := ensureWellOutletCasingExt(item.TypeExt)
+			if err != nil {
+				return err
+			}
+			if changed {
+				if err := tx.Model(&model.Issue{}).Where("id = ?", id).Update("type_ext", next).Error; err != nil {
+					return err
+				}
+				item.TypeExt = next
+			}
+		}
 		var hist []model.IssueRectifyRecord
 		if err := tx.Where("issue_id = ? AND round = ?", id, item.RectifyRound).Find(&hist).Error; err != nil {
 			return err

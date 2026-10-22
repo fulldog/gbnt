@@ -26,15 +26,43 @@ func TestAdminAndAppDetailHTTPIncludeNames(t *testing.T) {
 			name, path = "管理端", "/api/issues/1"
 		}
 		t.Run(name, func(t *testing.T) {
+			issueCols := []string{"id", "issue_key", "type", "type_ext", "report_user_id", "org_id"}
+			issueRow := [][]driver.Value{{int64(1), "ISS-1", "well", `{"checklist":[]}`, int64(4), int64(3)}}
 			steps := []testutil.QueryStep{
-				{Contains: "FROM `issues`", Columns: []string{"id", "issue_key", "type", "type_ext", "report_user_id", "org_id"}, Rows: [][]driver.Value{{int64(1), "ISS-1", "well", `{"checklist":[]}`, int64(4), int64(3)}}},
+				{Contains: "FROM `issues`", Columns: issueCols, Rows: issueRow},
 				{Contains: "FROM `issue_rectify_records`", Columns: []string{"id"}},
+			}
+			if !admin {
+				steps = append(steps,
+					testutil.QueryStep{Kind: "begin"},
+					testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`", Check: func(query string, args []driver.NamedValue) {
+						blob := query
+						for _, arg := range args {
+							switch value := arg.Value.(type) {
+							case string:
+								blob += value
+							case []byte:
+								blob += string(value)
+							}
+						}
+						if !strings.Contains(blob, "outlet_casing_damaged") {
+							t.Fatalf("小程序详情未补排查项 A：%s", blob)
+						}
+					}},
+					testutil.QueryStep{Kind: "commit"},
+					testutil.QueryStep{Contains: "FROM `issues`", Columns: issueCols, Rows: [][]driver.Value{{int64(1), "ISS-1", "well", `{"checklist":[{"type":"outlet_casing_damaged","value":false,"mustImg":false,"files":[]}]}`, int64(4), int64(3)}}},
+					testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id"}},
+				)
 			}
 			steps = append(steps,
 				testutil.QueryStep{Contains: "FROM `sys_users`", Columns: []string{"id", "name", "username"}, Rows: [][]driver.Value{{int64(4), "用户", "user"}}},
 				testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "name", "parent_id"}, Rows: [][]driver.Value{{int64(3), "街道", int64(0)}}},
 			)
-			db := testutil.NewQueryDB(t, steps...)
+			open := testutil.NewQueryDB
+			if !admin {
+				open = testutil.NewTransactionDB
+			}
+			db := open(t, steps...)
 			d := &Deps{Issue: &service.IssueService{DB: db}}
 			r := gin.New()
 			d.registerRectify(r.Group("/api"))
@@ -56,6 +84,9 @@ func TestAdminAndAppDetailHTTPIncludeNames(t *testing.T) {
 			}
 			if string(body.Data["rectify_records"]) != "[]" || !strings.Contains(string(body.Data["type_ext"]), "checklist") {
 				t.Fatalf("基础契约变化：%s", w.Body.String())
+			}
+			if !admin && !strings.Contains(string(body.Data["type_ext"]), "outlet_casing_damaged") {
+				t.Fatalf("小程序详情未返回补上的排查项 A：%s", w.Body.String())
 			}
 			if string(body.Data["report_user_name"]) != `"用户"` || string(body.Data["assignee_user_name"]) != "null" || string(body.Data["org_path"]) != `"街道"` {
 				t.Fatalf("名称丢失：%s", w.Body.String())

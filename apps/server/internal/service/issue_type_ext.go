@@ -27,13 +27,16 @@ type quizSpec struct {
 }
 
 var (
-	wellChecklistSpecs = []quizSpec{
+	// outletCasingQuizSpec 机井排查项 A。负向题：value=true 表示出水口或护筒损坏，需要整改。
+	outletCasingQuizSpec = quizSpec{model.QuizOutletCasingDamaged, "出水口或护筒是否损坏", true}
+	wellChecklistSpecs   = []quizSpec{
 		{model.QuizWaterOut, "机井是否出水", false},
 		{model.QuizPipeOk, "管道是否按要求连接", false},
 		{model.QuizWiringOk, "走线是否规范", false},
 		{model.QuizBoxOk, "配电箱是否完好", false},
 		{model.QuizCoverOk, "井台、井盖是否完整", false},
 		{model.QuizTransformerOk, "变压器是否完好", false},
+		outletCasingQuizSpec,
 	}
 	roadChecklistSpecs = []quizSpec{
 		{model.QuizHasShoulder, "是否有路肩", false},
@@ -182,11 +185,123 @@ func checklistSpecsFor(typ string) []quizSpec {
 	}
 }
 
-// neededQuizTypes 从 type_ext.checklist 取出判定为需整改的 QuizType（不含出水口/护筒损坏等非题项）。
+func specsWithout(specs []quizSpec, skip model.QuizType) []quizSpec {
+	out := make([]quizSpec, 0, len(specs))
+	for _, sp := range specs {
+		if sp.Type != skip {
+			out = append(out, sp)
+		}
+	}
+	return out
+}
+
+func appendOutletCasingSpec(specs []quizSpec) []quizSpec {
+	for _, sp := range specs {
+		if sp.Type == model.QuizOutletCasingDamaged {
+			return specs
+		}
+	}
+	out := make([]quizSpec, len(specs), len(specs)+1)
+	copy(out, specs)
+	return append(out, outletCasingQuizSpec)
+}
+
+func splitOutletCasingQuiz(list []QuizBool) (rest []QuizBool, preserved *QuizBool) {
+	rest = make([]QuizBool, 0, len(list))
+	for i := range list {
+		if list[i].Type != model.QuizOutletCasingDamaged {
+			rest = append(rest, list[i])
+			continue
+		}
+		copied := list[i]
+		copied.Photos = nil
+		preserved = &copied
+	}
+	return rest, preserved
+}
+
+func outletCasingDamageDesc(outlet, casing *int) string {
+	parts := make([]string, 0, 2)
+	if outlet != nil && *outlet > 0 {
+		parts = append(parts, fmt.Sprintf("出水口损坏 %d 个", *outlet))
+	}
+	if casing != nil && *casing > 0 {
+		parts = append(parts, fmt.Sprintf("护筒损坏 %d 个", *casing))
+	}
+	return strings.Join(parts, "，")
+}
+
+func synthesizeOutletCasingQuiz(outlet, casing *int) QuizBool {
+	damaged := (outlet != nil && *outlet > 0) || (casing != nil && *casing > 0)
+	item := QuizBool{Type: model.QuizOutletCasingDamaged, Value: damaged, MustImg: false, Files: []string{}}
+	if damaged {
+		item.Desc = outletCasingDamageDesc(outlet, casing)
+	}
+	return item
+}
+
+func appendWellOutletCasing(list []QuizBool, preserved *QuizBool, outlet, casing *int) ([]QuizBool, bool) {
+	item := synthesizeOutletCasingQuiz(outlet, casing)
+	if preserved != nil {
+		item = *preserved
+		if item.Files == nil {
+			item.Files = []string{}
+		}
+		item.Photos = nil
+	}
+	return append(list, item), quizIndicatesIssue(&item, true)
+}
+
+// ensureWellOutletCasingExt 在机井清单缺少「出水口或护筒是否损坏」时补上该项。
+// 已有该题则原样返回；只改 checklist，其它扩展字段保持不变。
+func ensureWellOutletCasingExt(raw string) (string, bool, error) {
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil || doc == nil {
+		return "", false, errors.New("type_ext 格式无效")
+	}
+	var list []QuizBool
+	if len(doc["checklist"]) > 0 {
+		if err := json.Unmarshal(doc["checklist"], &list); err != nil {
+			return "", false, errors.New("排查清单格式无效")
+		}
+	}
+	for i := range list {
+		if list[i].Type == model.QuizOutletCasingDamaged {
+			return raw, false, nil
+		}
+	}
+	var outlet, casing *int
+	if len(doc["outlet_damaged"]) > 0 {
+		_ = json.Unmarshal(doc["outlet_damaged"], &outlet)
+	}
+	if len(doc["casing_damaged"]) > 0 {
+		_ = json.Unmarshal(doc["casing_damaged"], &casing)
+	}
+	for i := range list {
+		list[i].Photos = nil
+	}
+	list = append(list, synthesizeOutletCasingQuiz(outlet, casing))
+	encoded, err := json.Marshal(list)
+	if err != nil {
+		return "", false, err
+	}
+	doc["checklist"] = encoded
+	next, err := json.Marshal(doc)
+	if err != nil {
+		return "", false, err
+	}
+	return string(next), true, nil
+}
+
+// neededQuizTypes 从 type_ext.checklist 取出判定为需整改的 QuizType。
+// 机井无论表单版本都纳入「出水口或护筒是否损坏」；仅 value 判定为异常时才需要整改。
 func neededQuizTypes(issueType, typeExt string) []model.QuizType {
 	specs := checklistSpecsFor(issueType)
 	if issueExtVersion(json.RawMessage(typeExt)) == 2 {
 		specs = formChecklistSpecsFor(issueType)
+	}
+	if model.IssueType(issueType) == model.IssueTypeWell {
+		specs = appendOutletCasingSpec(specs)
 	}
 	neg := make(map[model.QuizType]bool, len(specs))
 	for _, sp := range specs {
@@ -303,11 +418,21 @@ func (s *IssueService) normalizeWellExt(ctx context.Context, raw json.RawMessage
 	if !ext.BuildKind.Valid() {
 		return "", false, errors.New("请选择新建/配套")
 	}
-	list, needs, err := s.bindChecklist(ctx, ext.Checklist, wellChecklistSpecs)
+	rest, preserved := splitOutletCasingQuiz(ext.Checklist)
+	list, needs, err := s.bindChecklist(ctx, rest, specsWithout(wellChecklistSpecs, model.QuizOutletCasingDamaged))
 	if err != nil {
 		return "", false, err
 	}
-	ext.Checklist = list
+	if preserved != nil && len(preserved.Files) > 0 && s.Attach != nil {
+		clean, ensErr := s.Attach.EnsureFiles(ctx, preserved.Files)
+		if ensErr != nil {
+			return "", false, fmt.Errorf("%s照片: %w", outletCasingQuizSpec.Label, ensErr)
+		}
+		preserved.Files = clean
+	}
+	var indicates bool
+	ext.Checklist, indicates = appendWellOutletCasing(list, preserved, ext.OutletDamaged, ext.CasingDamaged)
+	needs = needs || indicates
 	if err := requireIntGE0(ext.OutletTotal, "出水口总数"); err != nil {
 		return "", false, err
 	}

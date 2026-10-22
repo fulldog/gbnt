@@ -82,6 +82,25 @@ func (s *IssueService) normalizeIssueFormExt(ctx context.Context, typ string, ra
 	if json.Unmarshal(data["checklist"], &list) != nil {
 		return "", false, errors.New("排查清单格式无效")
 	}
+	// 排查项 A 由服务端按损坏数量补齐，不计入新版五题的长度校验。
+	var preservedOutlet *QuizBool
+	if model.IssueType(typ) == model.IssueTypeWell {
+		filtered := make([]QuizBool, 0, len(list))
+		keptAnswers := answers[:0]
+		for i := range list {
+			if list[i].Type == model.QuizOutletCasingDamaged {
+				copied := list[i]
+				copied.Photos = nil
+				preservedOutlet = &copied
+				continue
+			}
+			filtered = append(filtered, list[i])
+			if i < len(answers) {
+				keptAnswers = append(keptAnswers, answers[i])
+			}
+		}
+		list, answers = filtered, keptAnswers
+	}
 	specs := formChecklistSpecsFor(typ)
 	if len(specs) == 0 || len(list) != len(specs) {
 		return "", false, errors.New("排查题目与当前类型不一致")
@@ -164,7 +183,15 @@ func (s *IssueService) normalizeIssueFormExt(ctx context.Context, typ string, ra
 			return "", false, err
 		}
 		ext.PanoramaPhotos = nil
-		needs = needs || *ext.OutletDamaged > 0 || *ext.CasingDamaged > 0
+		var indicates bool
+		ext.Checklist, indicates = appendWellOutletCasing(ext.Checklist, preservedOutlet, ext.OutletDamaged, ext.CasingDamaged)
+		if preservedOutlet != nil {
+			ext.Checklist[len(ext.Checklist)-1].Files, err = s.formFiles(ctx, preservedOutlet.Files, 0, outletCasingQuizSpec.Label)
+			if err != nil {
+				return "", false, err
+			}
+		}
+		needs = needs || indicates || *ext.OutletDamaged > 0 || *ext.CasingDamaged > 0
 		canon, err := marshalExt(ext)
 		return canon, needs, err
 	case model.IssueTypeRoad:

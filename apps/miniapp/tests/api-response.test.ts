@@ -50,6 +50,12 @@ describe("miniapp business response normalization", () => {
     expect(issueChecklistPhotos(issue)).toEqual([{ file_id: "panorama", url: "/panorama.png" }]);
     expect(issue.rectify_records).toHaveLength(1);
     expect(quizLabel("transformer_ok")).toBe("变压器是否完好");
+    row.type_ext.checklist.push({ type: "outlet_casing_damaged", value: true, desc: "出水口损坏 1 个", mustImg: false, files: [], photos: [] });
+    row.rectify_records = [{ id: 2, quiz_type: "outlet_casing_damaged", round: 1, photos: [] }];
+    const repaired = parseIssue(row);
+    expect(repaired.type_ext.checklist).toHaveLength(6);
+    expect(issueAbnormalQuizzes(repaired).map((quiz) => quiz.type)).toEqual(["outlet_casing_damaged"]);
+    expect(repaired.rectify_records[0]?.quiz_type).toBe("outlet_casing_damaged");
   });
   it("fills optional display fields but never invents coordinates or facility measurements", () => {
     const result = parseIssue(rawIssue());

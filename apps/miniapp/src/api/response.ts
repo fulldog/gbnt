@@ -120,7 +120,8 @@ export function parseIssue(value: unknown): MiniappIssue {
       photos: files(quiz.photos, "巡查照片"),
     };
   });
-  if (seen.size !== definitions.length) return invalid("巡查题目缺失");
+  const missing = definitions.filter((definition) => !seen.has(definition.type));
+  if (missing.some((definition) => definition.type !== "outlet_casing_damaged")) return invalid("巡查题目缺失");
   if (issue.rectify_round !== undefined) integer(issue.rectify_round, "整改轮次");
   const records = list(issue.rectify_records, "整改记录", true).map((raw) => {
     const record = object(raw, "整改记录");

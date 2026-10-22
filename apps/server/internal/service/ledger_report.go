@@ -315,6 +315,21 @@ func reportProblemState(issue model.Issue) (problem, known bool) {
 	} else if version != 0 && version != 1 {
 		return false, false
 	}
+	// 排查项 A 由服务端补齐，缺席或后补都不把历史机井算成清单未知。
+	specs = specsWithout(specs, model.QuizOutletCasingDamaged)
+	filtered := ext.Checklist[:0:0]
+	var outletCasing *bool
+	for _, quiz := range ext.Checklist {
+		if quiz.Type == model.QuizOutletCasingDamaged {
+			if quiz.Value != nil {
+				value := *quiz.Value
+				outletCasing = &value
+			}
+			continue
+		}
+		filtered = append(filtered, quiz)
+	}
+	ext.Checklist = filtered
 	if len(specs) == 0 || len(ext.Checklist) != len(specs) {
 		return false, false
 	}
@@ -348,6 +363,9 @@ func reportProblemState(issue model.Issue) (problem, known bool) {
 			return false, false
 		}
 		problem = problem || *ext.OutletDamaged > 0 || *ext.CasingDamaged > 0
+	}
+	if outletCasing != nil && *outletCasing {
+		problem = true
 	}
 	return problem, true
 }

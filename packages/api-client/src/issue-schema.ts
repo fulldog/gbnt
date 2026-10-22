@@ -37,11 +37,24 @@ export const ISSUE_FORM_QUIZZES: Record<IssueType, readonly IssueQuizDefinition[
   ],
 };
 
+/** 机井排查项 A。由损坏数量生成，不进入填报表单。选「是」表示需要整改。 */
+export const WELL_OUTLET_CASING_QUIZ: IssueQuizDefinition = {
+  type: "outlet_casing_damaged",
+  label: "出水口或护筒是否损坏",
+  negative: true,
+  mustImg: false,
+};
+
 /** 读取旧记录时保留旧版题目和判定，不反向改写历史结论。 */
 export function issueQuizDefinitions(type: IssueType, version = 1): readonly IssueQuizDefinition[] {
   const definitions = ISSUE_FORM_QUIZZES[type];
+  if (type === "well") {
+    const current = version === 2
+      ? definitions
+      : [...definitions, { type: "transformer_ok" as const, label: "变压器是否完好", negative: false, mustImg: true }];
+    return [...current, WELL_OUTLET_CASING_QUIZ];
+  }
   if (version === 2) return definitions;
-  if (type === "well") return [...definitions, { type: "transformer_ok", label: "变压器是否完好", negative: false, mustImg: true }];
   if (type === "road") return definitions.filter((q) => q.type !== "has_road_damage").map((q) => ({ ...q, observationOnly: false }));
   if (type === "bridge") return definitions.map((q) => ({ ...q, label: "是否需要整改" }));
   return definitions;

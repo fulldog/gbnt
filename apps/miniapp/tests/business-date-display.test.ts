@@ -66,8 +66,39 @@ describe("safe issue summary and rectify round display", () => {
     expect(issueEditableRectifyQuizzes(current)).toEqual([]);
   });
 
+  it("starts rectification when the outlet or casing item is abnormal", () => {
+    const well = issue({
+      type: "well",
+      status: "pending",
+      rectify_round: 1,
+      type_ext: { schema_version: 2, checklist: [
+        { type: "water_out", value: true, desc: "", mustImg: true, files: [] },
+        { type: "outlet_casing_damaged", value: true, desc: "出水口损坏 1 个", mustImg: false, files: [] },
+      ] },
+      rectify_records: [],
+    });
+    expect(issueEditableRectifyQuizzes(well).map((quiz) => quiz.type)).toEqual(["outlet_casing_damaged"]);
+  });
+
   it("keeps the legacy reopen fallback only for old responses without round metadata", () => {
     const legacy = issue({ rectify_round: undefined, rectify_records: [{ quiz_type: "has_shoulder" }, { quiz_type: "has_ash" }] });
     expect(issueEditableRectifyQuizzes(legacy)).toHaveLength(2);
+  });
+
+  it("opens well rectification when outlet or casing damage is outstanding", () => {
+    const well = issue({
+      type: "well",
+      status: "pending",
+      rectify_round: 1,
+      type_ext: {
+        schema_version: 2,
+        checklist: [
+          { type: "water_out", value: true, desc: "", mustImg: true, files: [] },
+          { type: "outlet_casing_damaged", value: true, desc: "出水口损坏 1 个", mustImg: false, files: [] },
+        ],
+      },
+      rectify_records: [{ round: 1, quiz_type: "pipe_ok" }, { round: 1, quiz_type: "water_out" }],
+    });
+    expect(issueEditableRectifyQuizzes(well).map((quiz) => quiz.type)).toEqual(["outlet_casing_damaged"]);
   });
 });

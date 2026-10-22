@@ -152,15 +152,25 @@ function buildTypeInput(form: IssueFormDraft, issue: AdminIssue | null = null): 
   const draft = form.types[form.type];
   const version = draftSchemaVersion(form, issue);
   const definitions = issueQuizDefinitions(form.type, version);
-  const checklist: QuizBool[] = definitions.map((definition) => {
-    const q = draft.checklist.find((q) => q.type === definition.type);
+  const checklist: QuizBool[] = [];
+  for (const definition of definitions) {
+    // 排查项 A 不在填报表单里，缺省时交给服务端按损坏数量补齐。
+    if (definition.type === "outlet_casing_damaged") {
+      const original = issue?.type === form.type ? issue.type_ext.checklist.find((q) => q.type === definition.type) : undefined;
+      if (original) checklist.push({ ...original, files: [...original.files] });
+      continue;
+    }
+    const q = draft.checklist.find((item) => item.type === definition.type);
     if (!q && issue?.type === form.type) {
-      const original = issue.type_ext.checklist.find((q) => q.type === definition.type);
-      if (original) return { ...original, files: [...original.files] };
+      const original = issue.type_ext.checklist.find((item) => item.type === definition.type);
+      if (original) {
+        checklist.push({ ...original, files: [...original.files] });
+        continue;
+      }
     }
     if (!q || q.value === null) throw new Error(`请选择“${definition.label}”`);
-    return { type: q.type, value: q.value, desc: q.desc.trim(), files: [...q.files], mustImg: quizPhotoMinimum(q, version) > 0 };
-  });
+    checklist.push({ type: q.type, value: q.value, desc: q.desc.trim(), files: [...q.files], mustImg: quizPhotoMinimum(q, version) > 0 });
+  }
   const { type: _type, plan_date: _plan, checklist: _checklist, ...attributes } = draft;
   const { panorama_photos: _photos, ...fields } = attributes as typeof attributes & { panorama_photos?: FileItem[] };
   const previous = issue?.type === form.type ? issue.type_ext : {};

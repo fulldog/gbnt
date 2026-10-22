@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"gbnt/apps/server/internal/database"
+	"gbnt/apps/server/internal/model"
 )
 
 // MiniappIssueVO 小程序问题视图，仅补充该问题的关联名称；不暴露人员目录或扩展读取范围。
@@ -82,6 +83,19 @@ func (s *IssueService) GetMiniapp(ctx context.Context, id uint64) (*MiniappIssue
 	}
 	if !scope.Allows(item.OrgID) && item.ReportUserID != user.ID && item.AssigneeUser != user.ID {
 		return nil, ErrOrgScopeForbidden
+	}
+	if item.Type == string(model.IssueTypeWell) {
+		next, changed, err := ensureWellOutletCasingExt(item.TypeExt)
+		// 清单无法解析时仍返回原详情，避免坏数据把只读查询变成失败。
+		if err == nil && changed {
+			if err := s.db(ctx).Model(&model.Issue{}).Where("id = ?", id).Update("type_ext", next).Error; err != nil {
+				return nil, err
+			}
+			item, err = s.Get(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	out, err := s.MiniappIssueViews(ctx, []IssueVO{*item})
 	if err != nil {

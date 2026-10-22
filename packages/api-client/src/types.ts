@@ -90,7 +90,8 @@ export type QuizType =
   | "powered"
   | "device_ok"
   | "cabinet_ok"
-  | "illegal_wire";
+  | "illegal_wire"
+  | "outlet_casing_damaged";
 
 export type WellQuizType =
   | "water_out"
@@ -98,7 +99,8 @@ export type WellQuizType =
   | "wiring_ok"
   | "box_ok"
   | "cover_ok"
-  | "transformer_ok";
+  | "transformer_ok"
+  | "outlet_casing_damaged";
 export type RoadQuizType = "has_shoulder" | "has_ash" | "has_road_damage";
 export type BridgeQuizType = "needs_rectify";
 export type ForestQuizType = "broken_belt" | "dead_trees" | "pest";

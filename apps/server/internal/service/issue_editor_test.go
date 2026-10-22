@@ -106,7 +106,7 @@ func TestUpgradePreservesHistoricalQuestionAndAttributes(t *testing.T) {
 	}
 	var ext WellExt
 	_ = json.Unmarshal([]byte(canon), &ext)
-	if ext.KeeperName != "井长" || len(ext.LegacyChecklist) != 1 || ext.LegacyChecklist[0].Files[0] != "old-file" || len(ext.Checklist) != 5 {
+	if ext.KeeperName != "井长" || len(ext.LegacyChecklist) != 1 || ext.LegacyChecklist[0].Files[0] != "old-file" || len(ext.Checklist) != 6 || ext.Checklist[5].Type != model.QuizOutletCasingDamaged {
 		t.Fatalf("历史丢失：%s", canon)
 	}
 }

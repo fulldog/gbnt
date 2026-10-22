@@ -41,5 +41,7 @@ export function quizLabel(type: QuizType): string {
     const found = definitions.find((item) => item.type === type);
     if (found) return found.label;
   }
+  const derived = issueQuizDefinitions("well", 2).find((item) => item.type === type);
+  if (derived) return derived.label;
   return type === "transformer_ok" ? "变压器是否完好（历史项）" : type;
 }
