@@ -164,7 +164,7 @@ func TestIssueEnumsValid(t *testing.T) {
 	if !model.IssueStatusNew.Valid() || model.IssueStatus("inspected").Valid() {
 		t.Fatal("IssueStatus")
 	}
-	if !model.QuizWaterOut.Valid() || model.QuizType("other").Valid() {
+	if !model.QuizWaterOut.Valid() || model.QuizType("other").Valid() || model.QuizFeedback.Valid() {
 		t.Fatal("QuizType")
 	}
 }

@@ -96,9 +96,10 @@ const (
 	QuizDeviceOk      QuizType = "device_ok"       // 设备是否完好（正向）
 	QuizCabinetOk     QuizType = "cabinet_ok"      // 配电设施是否完好（正向）
 	QuizIllegalWire   QuizType = "illegal_wire"    // 是否私拉乱接（负向）
+	QuizFeedback      QuizType = "feedback"        // 一键整改；只写入整改记录，不参与排查题校验
 )
 
-// Valid 是否为已定义的排查项类型。
+// Valid 是否为已定义的排查项类型。一键整改 QuizFeedback 故意排除，避免分项整改把它当成可提交题型。
 func (t QuizType) Valid() bool {
 	switch t {
 	case QuizWaterOut, QuizPipeOk, QuizWiringOk, QuizBoxOk, QuizCoverOk, QuizTransformerOk,

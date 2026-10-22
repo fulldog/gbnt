@@ -90,7 +90,7 @@ func (d *Deps) AppDeleteIssue(c *gin.Context) {
 	response.OK(c, nil)
 }
 
-// AppSubmitFeedback 小程序整单整改；仅 assignee_user 为 0 或当前用户时可改；必传说明、照片和当前轮次。
+// AppSubmitFeedback 小程序一键整改：直接改为已整改并写入 Feedback 记录；仅 assignee_user 为 0 或当前用户时可改；必传说明、照片和当前轮次。
 func (d *Deps) AppSubmitFeedback(c *gin.Context) {
 	d.markOp(c, "小程序整改反馈", c.Param("id"))
 	id, ok := parseID(c)

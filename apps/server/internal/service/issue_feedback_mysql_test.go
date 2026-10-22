@@ -52,7 +52,7 @@ func TestFeedbackMySQLConcurrentCompletionAndReporterDeletion(t *testing.T) {
 	}
 	var records int64
 	db.Model(&model.IssueRectifyRecord{}).Where("issue_id = ?", 1).Count(&records)
-	if records != 3 {
+	if records != 2 {
 		t.Fatalf("历史被删除或并发重复写入: %d", records)
 	}
 	item, err := s.Get(ctx, 1)
@@ -70,7 +70,7 @@ func TestFeedbackMySQLConcurrentCompletionAndReporterDeletion(t *testing.T) {
 		t.Fatalf("未软删除: %+v %v", deleted, err)
 	}
 	db.Model(&model.IssueRectifyRecord{}).Where("issue_id = ?", 1).Count(&records)
-	if records != 3 {
+	if records != 2 {
 		t.Fatal("软删除破坏了历史反馈")
 	}
 	_, err = s.Create(ctx, IssueInput{Type: "road", ProjectYear: 2023, OrgID: 2, Code: "01", Address: "测试现场", PlanDate: "2026-10-01", ReportUserID: 7, AssigneeUser: 7, ReporterSignatureFileID: "photo-1", TypeExt: json.RawMessage(`{"length":1,"width":4,"thickness":0.2,"tree_survive":0,"checklist":[{"type":"has_shoulder","value":false,"desc":"缺少路肩","files":["photo-1"]},{"type":"has_ash","value":true}]}`)})

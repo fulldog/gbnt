@@ -34,6 +34,9 @@ describe("miniapp business response normalization", () => {
     const modern = parseIssue(row);
     expect(issueAbnormalQuizzes(modern).map((q) => q.type)).toEqual(["has_road_damage"]);
     expect(modern.rectify_records[0]?.quiz_type).toBe("has_shoulder");
+    const feedback = parseIssue({ ...row, rectify_records: [{ id: 2, quiz_type: "feedback", round: 1, note: "现场已处理", photos: [] }] });
+    expect(feedback.rectify_records[0]?.quiz_type).toBe("feedback");
+    expect(quizLabel("feedback")).toBe("一键整改");
     expect(issueReporter(modern)).toBe("现场上报人");
     expect(issueTypeInfoRows(modern).some((field) => field.label === "林网存活数量")).toBe(false);
   });

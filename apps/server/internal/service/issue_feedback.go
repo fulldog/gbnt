@@ -7,6 +7,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 	"gbnt/apps/server/internal/database"
 	"gbnt/apps/server/internal/model"
 )
@@ -14,7 +17,7 @@ import (
 // ErrIssueReporterOnly 禁止删除他人的上报；由接口映射为 403。
 var ErrIssueReporterOnly = errors.New("仅上报人本人可以删除该工单")
 
-// IssueFeedbackInput 小程序整单整改反馈；后端在行锁内确定本轮尚未完成的整改项。
+// IssueFeedbackInput 小程序一键整改；说明和照片写入一条 Feedback 整改记录。
 type IssueFeedbackInput struct {
 	Note          string   `json:"note"`           // 必填，去除首尾空白后 1–500 字的统一整改说明
 	FileUUIDs     []string `json:"file_uuids"`     // 必填，1–6 张已上传整改照片的 file_id
@@ -39,7 +42,8 @@ func (s *IssueService) DeleteReported(ctx context.Context, id uint64) error {
 	return s.deleteIssue(ctx, id, user.ID)
 }
 
-// SubmitFeedback 一份说明和照片原子完成本轮剩余整改项；仅未指派或当前用户为整改人时可提交，成功后认领为当前用户。
+// SubmitFeedback 一键整改：直接把当前工单改为已整改，并插入一条 quiz_type=feedback 的整改记录。
+// 仅未指派或当前用户为整改人时可提交，成功后认领为当前用户。不走分项整改的 rectifyPrepared。
 func (s *IssueService) SubmitFeedback(ctx context.Context, id uint64, in IssueFeedbackInput) (*IssueVO, error) {
 	if _, err := database.UserFromContext(ctx); err != nil {
 		return nil, err
@@ -65,7 +69,48 @@ func (s *IssueService) SubmitFeedback(ctx context.Context, id uint64, in IssueFe
 	if err != nil {
 		return nil, err
 	}
-	return s.rectifyPrepared(ctx, id, in.ExpectedRound, true, []preparedRectification{{note: note, photo: string(photos)}}, true)
+	return s.rectifyByFeedback(ctx, id, in.ExpectedRound, note, string(photos))
+}
+
+// rectifyByFeedback 一键整改落库。保留行锁、认领、组织范围和轮次校验，不改动分项整改的 rectifyPrepared。
+func (s *IssueService) rectifyByFeedback(ctx context.Context, id uint64, expectedRound *uint64, note, photo string) (*IssueVO, error) {
+	user, err := database.UserFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = s.db(ctx).Transaction(func(tx *gorm.DB) error {
+		var item model.Issue
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&item, id).Error; err != nil {
+			return err
+		}
+		if err := assertAppAssignee(&item, user.ID); err != nil {
+			return err
+		}
+		if err := requireOrgScopeIfAuthenticated(ctx, tx, item.OrgID); err != nil {
+			return err
+		}
+		// 旧页面不能把上一轮的一键整改写入已经重开的下一轮。
+		if expectedRound != nil && *expectedRound != item.RectifyRound {
+			return errors.New("整改轮次已更新，请刷新问题后重新提交")
+		}
+		if err := rectifyGate(item.Status, true); err != nil {
+			return err
+		}
+		rec := model.IssueRectifyRecord{
+			IssueID: id, Round: item.RectifyRound, QuizType: string(model.QuizFeedback), Note: note, PhotoFileIDs: photo,
+		}
+		if err := tx.Create(&rec).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.Issue{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"status":        model.IssueStatusDone,
+			"assignee_user": user.ID,
+		}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, id)
 }
 
 func remainingRectifications(needed []model.QuizType, covered map[model.QuizType]struct{}, feedback preparedRectification) []preparedRectification {

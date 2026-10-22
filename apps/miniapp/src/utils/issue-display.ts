@@ -1,4 +1,4 @@
-import { issueQuizDefinitions, issueQuizIsAbnormal, ISSUE_FORM_QUIZZES } from "@gbnt/api-client";
+import { feedbackQuizLabel, issueQuizDefinitions, issueQuizIsAbnormal, ISSUE_FORM_QUIZZES } from "@gbnt/api-client";
 import type {
   FileItem,
   Issue,
@@ -55,7 +55,7 @@ export function quizLabel(type: QuizType, issue?: Issue): string {
   const legacy = DOMAIN_ISSUE_TYPE_OPTIONS
     .flatMap(({ value }) => issueQuizDefinitions(value, 1))
     .find((quiz) => quiz.type === type);
-  return scoped?.label ?? Object.values(ISSUE_FORM_QUIZZES).flat().find((quiz) => quiz.type === type)?.label ?? legacy?.label ?? quizDefinition(type)?.label ?? type;
+  return feedbackQuizLabel(type) ?? scoped?.label ?? Object.values(ISSUE_FORM_QUIZZES).flat().find((quiz) => quiz.type === type)?.label ?? legacy?.label ?? quizDefinition(type)?.label ?? type;
 }
 
 export function quizIndicatesIssue(quiz: QuizBool, issue?: Issue): boolean {

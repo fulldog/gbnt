@@ -1,4 +1,5 @@
 import {
+  FEEDBACK_QUIZ_TYPE,
   ISSUE_STATUSES,
   issueQuizDefinitions,
   ISSUE_TYPES,
@@ -125,7 +126,7 @@ export function parseIssue(value: unknown): MiniappIssue {
   const records = list(issue.rectify_records, "整改记录", true).map((raw) => {
     const record = object(raw, "整改记录");
     integer(record.id, "整改记录 ID", 1);
-    if (!historicalTypes.has(record.quiz_type as never)) return invalid("整改题目类型");
+    if (record.quiz_type !== FEEDBACK_QUIZ_TYPE && !historicalTypes.has(record.quiz_type as never)) return invalid("整改题目类型");
     if (record.round !== undefined) integer(record.round, "整改记录轮次");
     return {
       ...record,

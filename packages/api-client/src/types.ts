@@ -90,7 +90,8 @@ export type QuizType =
   | "powered"
   | "device_ok"
   | "cabinet_ok"
-  | "illegal_wire";
+  | "illegal_wire"
+  | "feedback";
 
 export type WellQuizType =
   | "water_out"

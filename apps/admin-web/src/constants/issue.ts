@@ -1,4 +1,4 @@
-import { ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal } from "@gbnt/api-client";
+import { feedbackQuizLabel, ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal } from "@gbnt/api-client";
 import type { IssueStatus, IssueType, QuizType } from "@gbnt/api-client";
 
 export interface QuizDefinition {
@@ -41,5 +41,5 @@ export function quizLabel(type: QuizType): string {
     const found = definitions.find((item) => item.type === type);
     if (found) return found.label;
   }
-  return type === "transformer_ok" ? "变压器是否完好（历史项）" : type;
+  return feedbackQuizLabel(type) ?? (type === "transformer_ok" ? "变压器是否完好（历史项）" : type);
 }

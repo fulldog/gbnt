@@ -22,7 +22,6 @@ import {
   formatDate,
   formatDateTime,
   hasValidCoordinates,
-  issueAbnormalQuizzes,
   issueEditableRectifyQuizzes,
   issuePlanHint,
   issueStatusMeta,
@@ -54,25 +53,17 @@ const draftKey = computed(() => rectifyDraftKey(auth.user?.id, issueId.value, is
 const status = computed(() => (issue.value ? issueStatusMeta(issue.value.status) : null));
 const today = useBusinessToday();
 const plan = computed(() => (issue.value ? issuePlanHint(issue.value, today.value) : null));
-const abnormalQuizzes = computed(() => (issue.value ? issueAbnormalQuizzes(issue.value) : []));
 const editableQuizzes = computed(() =>
   issue.value ? issueEditableRectifyQuizzes(issue.value) : [],
 );
 const canRectify = computed(
   () =>
     Boolean(issue.value) &&
-    (issue.value?.status === "new" || issue.value?.status === "pending") &&
-    editableQuizzes.value.length > 0 &&
+    issue.value?.status === "new" &&
     issue.value?.within_org_scope === true &&
     Boolean(auth.user?.id && (issue.value?.assignee_user === 0 || issue.value?.assignee_user === auth.user.id)),
 );
 const isHistoricalReadOnly = computed(() => issue.value?.within_org_scope !== true);
-const hasUnsupportedRectification = computed(
-  () =>
-    Boolean(issue.value) &&
-    (issue.value?.status === "new" || issue.value?.status === "pending") &&
-    abnormalQuizzes.value.length === 0,
-);
 const currentRecords = computed(() => issue.value?.rectify_records.filter((record) => (record.round ?? 0) === (issue.value?.rectify_round ?? 0)) ?? []);
 const hasLocation = computed(() =>
   issue.value ? hasValidCoordinates(issue.value.lat, issue.value.lng) : false,
@@ -364,13 +355,6 @@ onUnload(() => {
         <text class="detail-page__warning-title">该记录仅可查看</text>
         <text class="detail-page__warning-text">
           该整改已不在当前账号所属组织范围内，不能再提交、整改或删除。
-        </text>
-      </view>
-
-      <view v-else-if="hasUnsupportedRectification" class="detail-page__warning">
-        <text class="detail-page__warning-title">当前记录暂时无法在线整改</text>
-        <text class="detail-page__warning-text">
-          记录缺少可处理的排查项，请联系管理员核对后再整改。
         </text>
       </view>
 

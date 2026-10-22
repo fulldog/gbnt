@@ -20,37 +20,25 @@ func feedbackAttachment() testutil.QueryStep {
 	return testutil.QueryStep{Contains: "FROM `attachments`", Columns: []string{"file_id", "status"}, Rows: [][]driver.Value{{"photo-1", "success"}}}
 }
 
-func TestFeedbackCompletesOnlyRemainingItemsInCurrentRound(t *testing.T) {
-	for _, partiallyDone := range []bool{false, true} {
-		t.Run(map[bool]string{false: "全部异常", true: "已有分项反馈"}[partiallyDone], func(t *testing.T) {
-			history := [][]driver.Value{{int64(4), "has_ash", int64(0)}} // 上一轮不能算本轮完成。
-			want := []string{"has_shoulder", "has_ash"}
-			if partiallyDone {
-				history = append(history, []driver.Value{int64(5), "has_shoulder", int64(1)})
-				want = []string{"has_ash"}
+func TestFeedbackMarksDoneWithSingleFeedbackRecord(t *testing.T) {
+	written := [][]driver.Value{{int64(9), "feedback", int64(1)}}
+	db := testutil.NewTransactionDB(t,
+		feedbackAttachment(), testutil.QueryStep{Kind: "begin"}, roundIssueQuery("pending", 1, 7, true),
+		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", InsertID: 9, Check: func(_ string, args []driver.NamedValue) {
+			if args[1].Value != int64(1) || args[2].Value != "feedback" || args[3].Value != "整单修复" || args[4].Value != `["photo-1"]` {
+				t.Fatalf("一键整改记录错误: %v", args)
 			}
-			steps := []testutil.QueryStep{feedbackAttachment(), {Kind: "begin"}, roundIssueQuery("pending", 1, 7, true),
-				{Contains: "issue_id = ? AND round = ?", Columns: []string{"id", "quiz_type", "round"}, Rows: history}}
-			for _, typ := range want {
-				steps = append(steps, testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", InsertID: 9, Check: func(_ string, args []driver.NamedValue) {
-					if args[1].Value != int64(1) || args[2].Value != typ || args[3].Value != "整单修复" || args[4].Value != `["photo-1"]` {
-						t.Fatalf("反馈落点或内容错误: %v", args)
-					}
-				}})
+		}},
+		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`", Check: func(_ string, args []driver.NamedValue) {
+			if args[0].Value != int64(7) || args[1].Value != "done" {
+				t.Fatalf("未直接改为已整改: %v", args)
 			}
-			steps = append(steps,
-				testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`", Check: func(_ string, args []driver.NamedValue) {
-					if args[0].Value != int64(7) || args[1].Value != "done" {
-						t.Fatalf("未整单完成: %v", args)
-					}
-				}}, testutil.QueryStep{Kind: "commit"}, roundIssueQuery("done", 1, 7, false),
-				testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id", "quiz_type", "round"}, Rows: history})
-			db := testutil.NewTransactionDB(t, steps...)
-			item, err := (&IssueService{DB: db, Attach: &AttachService{DB: db}}).SubmitFeedback(roundContext(), 1, feedbackInput())
-			if err != nil || item.Status != "done" || len(item.RectifyRecords) != len(history) {
-				t.Fatalf("历史或状态错误: %+v %v", item, err)
-			}
-		})
+		}}, testutil.QueryStep{Kind: "commit"}, roundIssueQuery("done", 1, 7, false),
+		testutil.QueryStep{Contains: "FROM `issue_rectify_records`", Columns: []string{"id", "quiz_type", "round"}, Rows: written},
+	)
+	item, err := (&IssueService{DB: db, Attach: &AttachService{DB: db}}).SubmitFeedback(roundContext(), 1, feedbackInput())
+	if err != nil || item.Status != "done" || len(item.RectifyRecords) != 1 || item.RectifyRecords[0].QuizType != "feedback" {
+		t.Fatalf("一键整改结果错误: %+v %v", item, err)
 	}
 }
 
@@ -58,9 +46,7 @@ func TestFeedbackClaimsUnassignedIssue(t *testing.T) {
 	history := [][]driver.Value{{int64(4), "has_ash", int64(0)}}
 	db := testutil.NewTransactionDB(t,
 		feedbackAttachment(), testutil.QueryStep{Kind: "begin"}, roundIssueQuery("pending", 1, 0, true),
-		testutil.QueryStep{Contains: "issue_id = ? AND round = ?", Columns: []string{"id", "quiz_type", "round"}, Rows: history},
 		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", InsertID: 9},
-		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", InsertID: 10},
 		testutil.QueryStep{Kind: "exec", Contains: "UPDATE `issues`", Check: func(_ string, args []driver.NamedValue) {
 			if args[0].Value != int64(7) || args[1].Value != "done" {
 				t.Fatalf("未指派反馈应认领当前用户并完成: %v", args)
@@ -92,10 +78,8 @@ func TestFeedbackRejectsChangedOwnershipRoundAndStatus(t *testing.T) {
 }
 
 func TestFeedbackFailureRollsBackEveryItem(t *testing.T) {
-	failure := errors.New("第二项保存失败")
+	failure := errors.New("整改记录保存失败")
 	db := testutil.NewTransactionDB(t, feedbackAttachment(), testutil.QueryStep{Kind: "begin"}, roundIssueQuery("pending", 1, 7, true),
-		testutil.QueryStep{Contains: "issue_id = ? AND round = ?", Columns: []string{"id"}},
-		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", InsertID: 8},
 		testutil.QueryStep{Kind: "exec", Contains: "INSERT INTO `issue_rectify_records`", Err: failure}, testutil.QueryStep{Kind: "rollback"})
 	if _, err := (&IssueService{DB: db, Attach: &AttachService{DB: db}}).SubmitFeedback(roundContext(), 1, feedbackInput()); !errors.Is(err, failure) {
 		t.Fatalf("未保留事务失败: %v", err)

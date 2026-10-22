@@ -50,3 +50,11 @@ export function issueQuizDefinitions(type: IssueType, version = 1): readonly Iss
 export function issueQuizIsAbnormal(definition: IssueQuizDefinition, value: boolean): boolean {
   return !definition.observationOnly && (definition.negative ? value : !value);
 }
+
+/** 一键整改记录类型。只出现在整改记录，不进入排查表单。 */
+export const FEEDBACK_QUIZ_TYPE = "feedback" as const;
+
+/** 整改记录展示名。排查题返回空，由各端题目定义继续解析。 */
+export function feedbackQuizLabel(type: QuizType): string | undefined {
+  return type === FEEDBACK_QUIZ_TYPE ? "一键整改" : undefined;
+}
