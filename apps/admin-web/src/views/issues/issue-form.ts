@@ -1,6 +1,6 @@
 import { ISSUE_FORM_QUIZZES, issueQuizDefinitions, issueQuizIsAbnormal, resolveFacilityCodeMode } from "@gbnt/api-client";
 import type { FacilityCodeMode } from "@gbnt/api-client";
-import type { AdminCreateIssueInput, FileItem, Issue, IssueQuizDefinition, IssueType, IssueTypeExt, ProjectYear, QuizBool, UpdateIssueInput } from "@gbnt/api-client";
+import type { AdminCreateIssueInput, FileItem, Issue, IssueQuizDefinition, IssueType, IssueTypeExt, ProjectYear, QuizBool, QuizType, UpdateIssueInput } from "@gbnt/api-client";
 import type { AdminIssue } from "@/api/types";
 
 export interface ChecklistDraft extends IssueQuizDefinition {
@@ -62,7 +62,7 @@ export function hydrateIssueDraft(issue: AdminIssue): IssueFormDraft {
   });
   const active = draft.types[issue.type];
   const ext = issue.type_ext;
-  const byType = new Map((ext.checklist ?? []).map((q) => [q.type, q]));
+  const byType = new Map<QuizType, QuizBool>((ext.checklist ?? []).map((q) => [q.type, q]));
   active.plan_date = issue.plan_date ?? "";
   active.checklist = active.checklist.map((q) => {
     const stored = byType.get(q.type);

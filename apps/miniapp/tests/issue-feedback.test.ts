@@ -78,7 +78,7 @@ describe("整单整改反馈", () => {
   it("待整改且没有剩余异常项时仍可提交，整改中不可提交", async () => {
     const { state } = detail();
     await state.loadDetail();
-    state.issue.value = { ...state.issue.value, status: "new", type_ext: { checklist: [{ type: "has_shoulder", value: true, mustImg: false, files: [], desc: "", photos: [] }, { type: "has_ash", value: true, mustImg: false, files: [], desc: "", photos: [] }] } } as MiniappIssue;
+    state.issue.value = { ...state.issue.value, status: "new", type_ext: { checklist: [{ type: "has_shoulder", value: true, mustImg: false, files: [], desc: "", photos: [] }, { type: "has_ash", value: true, mustImg: false, files: [], desc: "", photos: [] }] } } as unknown as MiniappIssue;
     expect(state.canRectify.value).toBe(true);
     state.issue.value = { ...state.issue.value, status: "pending" };
     expect(state.canRectify.value).toBe(false);
