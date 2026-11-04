@@ -18,10 +18,10 @@ const api = useAdminApi();
 const streetOrgId = shallowRef<number>();
 const dateRange = shallowRef<[string, string]>();
 const exporting = shallowRef(false);
-const { data: streets, loading: optionsLoading, loadError: optionsError, run: loadOrgs } = useLatestQuery<OrgOption[]>({
+const { data: orgs, loading: optionsLoading, loadError: optionsError, run: loadOrgs } = useLatestQuery<OrgOption[]>({
   initial: () => [],
   load: () => api.ledger.listStreetOrgOptions(),
-  errorMessage: "街道选项加载失败，请重试后选择街道",
+  errorMessage: "行政区划加载失败，请重试后再选择",
 });
 const { data: report, loading, loadError, hasLoaded, run: load } = useLedgerReport({
   readQuery: () => ({ street_org_id: streetOrgId.value, date_from: dateRange.value?.[0], date_to: dateRange.value?.[1] }),
@@ -36,7 +36,7 @@ const title = computed(() => {
   const selectedId = report.value?.query.street_org_id;
   const selectedName = selectedId
     ? rows.value.find((row) => row.street_org_id === selectedId)?.street_name
-      || streets.value.find((org) => org.id === selectedId)?.name
+      || orgs.value.find((org) => org.id === selectedId)?.name
     : "";
   return `聊城经济技术开发区高标准农田建设项目${selectedName || "街道"}台账`;
 });
@@ -59,7 +59,7 @@ onMounted(() => { void Promise.all([loadOrgs(), load()]); });
 
 <template>
   <LedgerReportFrame title="街道台账" :loading="loading" :export-disabled="!canExport" :exporting="exporting" @refresh="load" @export="exportReport">
-    <template #filters><LedgerFilters v-model:street-org-id="streetOrgId" v-model:date-range="dateRange" :streets="streets" :loading="optionsLoading" :unavailable="Boolean(optionsError)" @search="load" @reset="reset" /></template>
+    <template #filters><LedgerFilters v-model:street-org-id="streetOrgId" v-model:date-range="dateRange" :orgs="orgs" :loading="optionsLoading" :unavailable="Boolean(optionsError)" @search="load" @reset="reset" /></template>
     <template #errors>
       <AsyncError v-if="optionsError" :message="optionsError" @retry="loadOrgs" />
       <AsyncError v-if="loadError" :message="loadError" @retry="load" />

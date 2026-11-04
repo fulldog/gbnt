@@ -7,5 +7,5 @@ var apisLedgerStreet = []Entry{
 	{Method: "GET", Path: "/api/ledger/street/statistics", Name: "街道台账统计", Module: "web.ledger-street", Action: "view", Sort: 11},
 	{Method: "GET", Path: "/api/ledger/street", Name: "街道台账", Module: "web.ledger-street", Action: "view", Sort: 11},
 	{Method: "GET", Path: "/api/ledger/street/report", Name: "街道台账建设项目报表", Module: "web.ledger-street", Action: "view", Sort: 11},
-	{Method: "GET", Path: "/api/ledger/street/options/orgs", Name: "街道台账街道候选", Module: "web.ledger-street", Action: "view", Sort: 11},
+	{Method: "GET", Path: "/api/ledger/street/options/orgs", Name: "街道台账行政区划候选", Module: "web.ledger-street", Action: "view", Sort: 11},
 }

@@ -17,7 +17,7 @@ var ledgerDecimalID = regexp.MustCompile(`^[0-9]+$`)
 
 // LedgerAppliedQuery 是服务端已校验且实际应用的筛选条件，三键始终出现。
 type LedgerAppliedQuery struct {
-	StreetOrgID uint64 `json:"street_org_id"` // 街道 ID；0 表示全部，不超过 JS 安全整数上限
+	StreetOrgID uint64 `json:"street_org_id"` // 行政区划组织 ID；0 表示全部，不超过 JS 安全整数上限
 	DateFrom    string `json:"date_from"`     // 北京时间起日，包含当日；空串表示不限
 	DateTo      string `json:"date_to"`       // 北京时间终日，包含当日；空串表示不限
 }

@@ -59,6 +59,6 @@ onBeforeUnmount(() => {
 .ledger-toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .ledger-toolbar-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .ledger-scroll-shell { display: flex; flex: 1; min-width: 0; min-height: 260px; overflow: hidden; margin: 0 8px 8px; border-radius: 8px 8px 0 0; border: 1px solid #e8e8e8; }
-.ledger-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.ledger-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; container-type: inline-size; }
 @media (max-width: 640px) { .ledger-report-frame { height: auto; min-height: 0; } .ledger-scroll-shell { height: 60dvh; min-height: 320px; flex: auto; } .ledger-toolbar { align-items: flex-start; flex-wrap: wrap; } }
 </style>

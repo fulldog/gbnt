@@ -20,14 +20,14 @@ func (d *Deps) IssueOrgOptions(c *gin.Context) {
 	response.OK(c, list)
 }
 
-// LedgerStreetOrgOptions GET /api/ledger/street/options/orgs — 当前账号可见范围内的街道台账候选。
+// LedgerStreetOrgOptions GET /api/ledger/street/options/orgs — 当前账号可见范围内的行政区划候选。
 func (d *Deps) LedgerStreetOrgOptions(c *gin.Context) {
-	d.businessOrgOptions(c, true)
+	d.businessOrgOptions(c, false)
 }
 
-// LedgerSurveyOrgOptions GET /api/ledger/survey/options/orgs — 当前账号可见范围内的排查汇总街道候选。
+// LedgerSurveyOrgOptions GET /api/ledger/survey/options/orgs — 当前账号可见范围内的行政区划候选。
 func (d *Deps) LedgerSurveyOrgOptions(c *gin.Context) {
-	d.businessOrgOptions(c, true)
+	d.businessOrgOptions(c, false)
 }
 
 func (d *Deps) businessOrgOptions(c *gin.Context, streetsOnly bool) {

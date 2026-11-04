@@ -66,10 +66,12 @@ func main() {
 		)
 	} else {
 		// 关闭 AutoMigrate 时仍同步 sys_apis，否则新路由不在目录里，RBAC 对所有人 403。
-		if err := migrate.SyncSysAPIs(db); err != nil {
-			logs.Error.Fatal("sync sys_apis", zap.Error(err))
-		}
-		logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"), zap.String("sys_apis", "synced"))
+		go func() {
+			if err := migrate.SyncSysAPIs(db); err != nil {
+				logs.Error.Fatal("sync sys_apis", zap.Error(err))
+			}
+			logs.Info.Info("migrate skipped", zap.String("reason", "migrate.enabled=false"), zap.String("sys_apis", "synced"))
+		}()
 	}
 	// 编号比较键及约束未完成迁移时禁止启动写入服务。
 	//if report, err := migrate.AuditFacilityCodes(context.Background(), db); err != nil || !report.Ready {

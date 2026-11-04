@@ -291,13 +291,10 @@ describe("汇总表真实状态", () => {
     const sheet = workbook.getWorksheet(1)!;
     const values: string[] = [];
     sheet.eachRow((row) => row.eachCell((cell) => values.push(cell.text)));
-    if (kind === "street") {
-      expect(wrapper.find(".ledger-report-notice").exists()).toBe(false);
-      expect(wrapper.text()).not.toContain("按上报日期筛选");
-      expect(wrapper.find('[title*="口径"]').exists()).toBe(false);
-    } else {
-      expect(wrapper.text()).toContain("按上报日期筛选");
-    }
+    expect(wrapper.find(".ledger-report-notice").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("按上报日期筛选");
+    expect(wrapper.text()).not.toContain("不是设施总量");
+    if (kind === "street") expect(wrapper.find('[title*="口径"]').exists()).toBe(false);
     for (const note of ["统计口径", "数据口径", "上报日期范围", ...notes]) expect(wrapper.text()).not.toContain(note);
     for (const text of [wrapper.get("table").text(), values.join("\n")]) {
       expect(text).toContain("北城街道");

@@ -84,12 +84,12 @@ export function createLedgerApi(client: ApiClient) {
       };
     },
 
-    /** 街道台账 view 权限，仅返回当前组织范围内具有包含关系的街道选项。 */
+    /** 街道台账 view 权限，返回当前可见范围内的行政区划树，含区、街道和村。 */
     async listStreetOrgOptions(): Promise<OrgOption[]> {
       return normalizeOrgOptions(await client.request<unknown>("/api/ledger/street/options/orgs"));
     },
 
-    /** 排查汇总 view 权限，仅返回当前组织范围内具有包含关系的街道选项。 */
+    /** 排查汇总 view 权限，返回当前可见范围内的行政区划树，含区、街道和村。 */
     async listSurveyOrgOptions(): Promise<OrgOption[]> {
       return normalizeOrgOptions(await client.request<unknown>("/api/ledger/survey/options/orgs"));
     },

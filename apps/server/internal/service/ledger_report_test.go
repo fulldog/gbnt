@@ -189,9 +189,13 @@ func TestLedgerReportFiltersAndErrors(t *testing.T) {
 			t.Errorf("应拒绝非法日期：%v", err)
 		}
 	}
-	badStreet := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep())}
-	if _, err := badStreet.LedgerSurveyReport(context.Background(), LedgerReportQuery{StreetOrgID: 4}); !errors.Is(err, ErrLedgerReportArgument) {
-		t.Fatal("村 ID 不可伪装街道")
+	missingOrg := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep())}
+	if _, err := missingOrg.LedgerSurveyReport(context.Background(), LedgerReportQuery{StreetOrgID: 99}); !errors.Is(err, ErrLedgerReportArgument) {
+		t.Fatal("不存在的组织不可作为行政区划筛选")
+	}
+	village := &IssueService{DB: testutil.NewQueryDB(t, reportOrgStep(), reportIssueStep())}
+	if result, err := village.LedgerSurveyReport(context.Background(), LedgerReportQuery{StreetOrgID: 4}); err != nil || result.StreetOrgID != 4 {
+		t.Fatalf("村级行政区划应可筛选：%v %+v", err, result)
 	}
 	failed := reportIssueStep()
 	failed.Err = errors.New("query unavailable")

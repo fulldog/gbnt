@@ -132,6 +132,7 @@ describe("Excel 式台账结构", () => {
     const wrapper = mount(SurveyLedgerSheet, { props: { rows: [surveyReportRow()], title: "排查汇总台账" } });
     expect(wrapper.findAll("col")).toHaveLength(22);
     expect(wrapper.findAll("thead tr")).toHaveLength(5);
+    expect(wrapper.get(".ledger-title-pin").text()).toBe("排查汇总台账");
     const sticky = wrapper.findAll("tbody .ledger-sticky-col");
     expect(sticky).toHaveLength(4);
     expect(sticky.map((cell) => (cell.element as HTMLElement).style.left)).toEqual(["0px", "140px", "280px", "380px"]);

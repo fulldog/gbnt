@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { OrgOption } from "@/api/types";
 import { Search } from "@element-plus/icons-vue";
+import OrgTreeSelect from "@/components/OrgTreeSelect.vue";
 
-defineProps<{ streets: OrgOption[]; loading: boolean; unavailable: boolean }>();
+defineProps<{ orgs: OrgOption[]; loading: boolean; unavailable: boolean }>();
 const streetOrgId = defineModel<number | undefined>("streetOrgId");
 const dateRange = defineModel<[string, string] | undefined>("dateRange");
 const emit = defineEmits<{ search: []; reset: [] }>();
@@ -11,10 +12,8 @@ function onSubmit(event: Event): void { event.preventDefault(); emit("search"); 
 
 <template>
   <ElForm label-width="90px" class="ledger-filters" v-bind="{ onSubmit }">
-    <ElFormItem label="街道" class="!mb-0">
-      <ElSelect v-model="streetOrgId" clearable filterable :loading="loading" :disabled="loading || unavailable" class="w-full" placeholder="全部街道">
-        <ElOption v-for="org in streets" :key="org.id" :label="org.name" :value="org.id" />
-      </ElSelect>
+    <ElFormItem label="行政区划" class="!mb-0">
+      <OrgTreeSelect v-model="streetOrgId" :orgs="orgs" :disabled="loading || unavailable" placeholder="全部行政区划" />
     </ElFormItem>
     <ElFormItem label="起止日期" class="!mb-0">
       <ElDatePicker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" class="!w-full" />

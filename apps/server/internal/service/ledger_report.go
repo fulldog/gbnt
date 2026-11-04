@@ -21,7 +21,7 @@ var ledgerReportTimezone = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 // LedgerReportQuery 街道台账和排查汇总的只读筛选。
 type LedgerReportQuery struct {
-	StreetOrgID uint64 `form:"street_org_id"` // 街道组织 ID；0 或省略表示全部街道，非街道组织不允许
+	StreetOrgID uint64 `form:"street_org_id"` // 行政区划组织 ID；0 或省略表示当前可见范围全部，须为已存在组织
 	DateFrom    string `form:"date_from"`     // 北京时间上报日期起点，选填 YYYY-MM-DD，包含当日
 	DateTo      string `form:"date_to"`       // 北京时间上报日期终点，选填 YYYY-MM-DD，包含当日
 }
@@ -65,7 +65,7 @@ type StreetLedgerReportRow struct {
 
 // StreetLedgerReportResult 保留报表行和统计口径，无数据时 rows 为 []。
 type StreetLedgerReportResult struct {
-	StreetOrgID uint64                  `json:"street_org_id"` // 实际应用的街道筛选，0 表示全部
+	StreetOrgID uint64                  `json:"street_org_id"` // 实际应用的行政区划筛选，0 表示全部
 	Rows        []StreetLedgerReportRow `json:"rows"`          // 按年度、街道及落点组织稳定排序的只读报表行
 	Notes       []string                `json:"notes"`         // 必须展示的统计口径及尚未采集字段说明
 }
@@ -91,7 +91,7 @@ type SurveyLedgerReportRow struct {
 
 // SurveyLedgerReportResult 排查汇总报表及不可省略的统计口径说明。
 type SurveyLedgerReportResult struct {
-	StreetOrgID uint64                  `json:"street_org_id"` // 实际街道筛选，0 表示全部
+	StreetOrgID uint64                  `json:"street_org_id"` // 实际行政区划筛选，0 表示全部
 	Rows        []SurveyLedgerReportRow `json:"rows"`          // 按街道、落点组织排序的汇总行，空时为 []
 	Notes       []string                `json:"notes"`         // 记录口径、未知值和未采集字段说明
 }
@@ -125,9 +125,10 @@ func (s *IssueService) ledgerReportSource(ctx context.Context, q LedgerReportQue
 		byID[org.ID] = org
 	}
 	db := s.db(ctx).Model(&model.Issue{})
+	// 与专项整改的行政区划筛选一致：任意已存在组织及其下级都可筛选，不再限定街道。
 	if q.StreetOrgID != 0 {
-		if org, exists := byID[q.StreetOrgID]; !exists || org.Type != model.OrgTypeStreet {
-			return nil, nil, fmt.Errorf("%w：请选择有效街道", ErrLedgerReportArgument)
+		if _, exists := byID[q.StreetOrgID]; !exists {
+			return nil, nil, fmt.Errorf("%w：请选择有效行政区划", ErrLedgerReportArgument)
 		}
 	}
 	db, err := applyVisibleOrgFilterWithOrgs(ctx, db, "org_id", q.StreetOrgID, orgs)

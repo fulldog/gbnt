@@ -13,7 +13,7 @@ const quantityFields = ["well_inspected", "well_normal", "well_problem_count", "
   <table class="ledger-sheet ledger-sheet--survey" aria-label="街道排查汇总">
     <colgroup><col v-for="(width, index) in SURVEY_COLUMN_WIDTHS" :key="index" :style="{ width: `${width}px` }"></colgroup>
     <thead>
-      <tr class="ledger-title-row"><th colspan="22">{{ title }}</th></tr>
+      <tr class="ledger-title-row"><th colspan="22"><div class="ledger-title-pin">{{ title }}</div></th></tr>
       <tr>
         <th rowspan="4" class="ledger-sticky-col" style="left: 0" scope="col">街道</th>
         <th rowspan="4" class="ledger-sticky-col" style="left: 140px" scope="col">新村/社区</th>
