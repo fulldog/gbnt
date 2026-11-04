@@ -77,7 +77,7 @@ func TestLedgerPartsHTTPEmptyFailureAndAppliedQuery(t *testing.T) {
 				}
 			})
 		}
-		for _, stage := range []string{"组织", "统计", "非街道"} {
+		for _, stage := range []string{"组织", "统计", "无效组织"} {
 			t.Run(path+stage, func(t *testing.T) {
 				org := testutil.QueryStep{Contains: "FROM `sys_orgs`", Columns: []string{"id", "type"}}
 				steps := []testutil.QueryStep{org}
@@ -88,8 +88,9 @@ func TestLedgerPartsHTTPEmptyFailureAndAppliedQuery(t *testing.T) {
 					steps[0].Err = errors.New("private SQL failure")
 				case "统计":
 					steps = append(steps, testutil.QueryStep{Contains: "FROM `issues`", Err: errors.New("private SQL failure")})
-				case "非街道":
-					steps[0].Rows = [][]driver.Value{{int64(4), "village"}}
+				case "无效组织":
+					// 区、街道、村都可以筛选；只有目录中不存在的组织才在查问题上报前拒绝。
+					steps[0].Rows = [][]driver.Value{{int64(3), "street"}}
 					query = "?street_org_id=4"
 					want = 400
 				}
